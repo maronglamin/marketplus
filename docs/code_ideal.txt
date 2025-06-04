@@ -1,0 +1,1328 @@
+```index.tsx
+import './index.css'
+import React from "react";
+import { render } from "react-dom";
+import { App } from "./App";
+
+render(<App />, document.getElementById("root"));
+
+```
+```App.tsx
+import React, { useState } from 'react'
+import { Onboarding } from './screens/Onboarding'
+import { Home } from './screens/Home'
+import { ProductDetail } from './screens/ProductDetail'
+import { SellerDashboard } from './screens/SellerDashboard'
+import { ProductManagement } from './screens/ProductManagement'
+import { InterestManagement } from './screens/InterestManagement'
+import { NavigationBar } from './components/NavigationBar'
+import { Header } from './components/Header'
+export function App() {
+  const [currentScreen, setCurrentScreen] = useState('onboarding')
+  const renderScreen = () => {
+    switch (currentScreen) {
+      case 'onboarding':
+        return <Onboarding onComplete={() => setCurrentScreen('home')} />
+      case 'home':
+        return (
+          <Home onProductSelect={() => setCurrentScreen('productDetail')} />
+        )
+      case 'productDetail':
+        return <ProductDetail onBack={() => setCurrentScreen('home')} />
+      case 'sellerDashboard':
+        return (
+          <SellerDashboard
+            onProductManage={() => setCurrentScreen('productManagement')}
+          />
+        )
+      case 'productManagement':
+        return (
+          <ProductManagement
+            onBack={() => setCurrentScreen('sellerDashboard')}
+          />
+        )
+      case 'interestManagement':
+        return (
+          <InterestManagement
+            onBack={() => setCurrentScreen('sellerDashboard')}
+          />
+        )
+      default:
+        return <Home />
+    }
+  }
+  const showNavigation = currentScreen !== 'onboarding'
+  const showHeader = currentScreen !== 'onboarding'
+  return (
+    <div className="flex flex-col h-screen w-full bg-gray-50">
+      {showHeader && (
+        <Header
+          currentScreen={currentScreen}
+          setCurrentScreen={setCurrentScreen}
+        />
+      )}
+      <div className="flex-1 overflow-y-auto">{renderScreen()}</div>
+      {showNavigation && (
+        <NavigationBar
+          currentScreen={currentScreen}
+          setCurrentScreen={setCurrentScreen}
+        />
+      )}
+    </div>
+  )
+}
+
+```
+```tailwind.config.js
+export default {}
+```
+```index.css
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+```
+```components/Header.tsx
+import React from 'react'
+import { ArrowLeftIcon, BellIcon, SearchIcon } from 'lucide-react'
+interface HeaderProps {
+  currentScreen: string
+  setCurrentScreen: (screen: string) => void
+}
+export function Header({ currentScreen, setCurrentScreen }: HeaderProps) {
+  const renderTitle = () => {
+    switch (currentScreen) {
+      case 'home':
+        return 'Marketplace'
+      case 'productDetail':
+        return 'Product Details'
+      case 'sellerDashboard':
+        return 'Seller Dashboard'
+      case 'productManagement':
+        return 'Manage Products'
+      case 'interestManagement':
+        return 'Manage Interests'
+      default:
+        return 'Marketplace'
+    }
+  }
+  const showBackButton = [
+    'productDetail',
+    'productManagement',
+    'interestManagement',
+  ].includes(currentScreen)
+  const handleBack = () => {
+    if (currentScreen === 'productDetail') {
+      setCurrentScreen('home')
+    } else if (
+      currentScreen === 'productManagement' ||
+      currentScreen === 'interestManagement'
+    ) {
+      setCurrentScreen('sellerDashboard')
+    }
+  }
+  return (
+    <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+      <div className="flex items-center">
+        {showBackButton && (
+          <button onClick={handleBack} className="mr-3">
+            <ArrowLeftIcon className="w-6 h-6 text-gray-700" />
+          </button>
+        )}
+        <h1 className="font-bold text-lg text-gray-800">{renderTitle()}</h1>
+      </div>
+      <div className="flex items-center space-x-4">
+        {currentScreen === 'home' && (
+          <button className="p-1">
+            <SearchIcon className="w-6 h-6 text-gray-700" />
+          </button>
+        )}
+        <button className="p-1 relative">
+          <BellIcon className="w-6 h-6 text-gray-700" />
+          <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+```
+```components/NavigationBar.tsx
+import React from 'react'
+import { HomeIcon, ShoppingBagIcon, HeartIcon, UserIcon } from 'lucide-react'
+interface NavigationBarProps {
+  currentScreen: string
+  setCurrentScreen: (screen: string) => void
+}
+export function NavigationBar({
+  currentScreen,
+  setCurrentScreen,
+}: NavigationBarProps) {
+  return (
+    <div className="bg-white border-t border-gray-200 flex justify-around py-2">
+      <button
+        className={`flex flex-col items-center px-3 py-1 ${currentScreen === 'home' ? 'text-blue-500' : 'text-gray-600'}`}
+        onClick={() => setCurrentScreen('home')}
+      >
+        <HomeIcon className="w-6 h-6" />
+        <span className="text-xs mt-1">Home</span>
+      </button>
+      <button
+        className={`flex flex-col items-center px-3 py-1 ${currentScreen === 'orders' ? 'text-blue-500' : 'text-gray-600'}`}
+        onClick={() => setCurrentScreen('orders')}
+      >
+        <ShoppingBagIcon className="w-6 h-6" />
+        <span className="text-xs mt-1">Orders</span>
+      </button>
+      <button
+        className={`flex flex-col items-center px-3 py-1 ${currentScreen === 'interests' ? 'text-blue-500' : 'text-gray-600'}`}
+        onClick={() => setCurrentScreen('interests')}
+      >
+        <HeartIcon className="w-6 h-6" />
+        <span className="text-xs mt-1">Interests</span>
+      </button>
+      <button
+        className={`flex flex-col items-center px-3 py-1 ${currentScreen === 'sellerDashboard' ? 'text-blue-500' : 'text-gray-600'}`}
+        onClick={() => setCurrentScreen('sellerDashboard')}
+      >
+        <UserIcon className="w-6 h-6" />
+        <span className="text-xs mt-1">Account</span>
+      </button>
+    </div>
+  )
+}
+
+```
+```components/Button.tsx
+import React from 'react'
+interface ButtonProps {
+  label: string
+  onClick?: () => void
+  variant?: 'primary' | 'secondary' | 'outline'
+  fullWidth?: boolean
+  icon?: React.ReactNode
+}
+export function Button({
+  label,
+  onClick,
+  variant = 'primary',
+  fullWidth = false,
+  icon,
+}: ButtonProps) {
+  const baseStyles =
+    'flex items-center justify-center px-4 py-3 rounded-lg font-medium'
+  const variantStyles = {
+    primary: 'bg-blue-500 text-white',
+    secondary: 'bg-blue-100 text-blue-700',
+    outline: 'bg-white border border-gray-300 text-gray-700',
+  }
+  const widthStyles = fullWidth ? 'w-full' : ''
+  return (
+    <button
+      className={`${baseStyles} ${variantStyles[variant]} ${widthStyles}`}
+      onClick={onClick}
+    >
+      {icon && <span className="mr-2">{icon}</span>}
+      {label}
+    </button>
+  )
+}
+
+```
+```components/ProductCard.tsx
+import React from 'react'
+import { HeartIcon } from 'lucide-react'
+interface ProductCardProps {
+  id: string
+  name: string
+  price: number
+  image: string
+  seller: string
+  stock: number
+  onClick: () => void
+}
+export function ProductCard({
+  name,
+  price,
+  image,
+  seller,
+  stock,
+  onClick,
+}: ProductCardProps) {
+  return (
+    <div
+      className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-200"
+      onClick={onClick}
+    >
+      <div className="relative">
+        <img src={image} alt={name} className="w-full h-40 object-cover" />
+        <button className="absolute top-2 right-2 bg-white p-1 rounded-full shadow">
+          <HeartIcon className="w-5 h-5 text-gray-500" />
+        </button>
+      </div>
+      <div className="p-3">
+        <h3 className="font-medium text-gray-900 text-sm">{name}</h3>
+        <div className="flex items-center justify-between mt-1">
+          <p className="font-bold text-blue-600">${price.toFixed(2)}</p>
+          <p className="text-xs text-gray-500">{seller}</p>
+        </div>
+        <div className="mt-2 flex items-center justify-between">
+          <span
+            className={`text-xs px-2 py-1 rounded-full ${stock > 10 ? 'bg-green-100 text-green-800' : stock > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}
+          >
+            {stock > 10
+              ? 'In Stock'
+              : stock > 0
+                ? `Only ${stock} left`
+                : 'Out of Stock'}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+```
+```components/SellerCard.tsx
+import React from 'react'
+import { StarIcon } from 'lucide-react'
+interface SellerCardProps {
+  name: string
+  rating: number
+  products: number
+  image: string
+  onClick: () => void
+}
+export function SellerCard({
+  name,
+  rating,
+  products,
+  image,
+  onClick,
+}: SellerCardProps) {
+  return (
+    <div
+      className="flex items-center p-3 bg-white rounded-lg border border-gray-200 shadow-sm"
+      onClick={onClick}
+    >
+      <img
+        src={image}
+        alt={name}
+        className="w-12 h-12 rounded-full object-cover"
+      />
+      <div className="ml-3 flex-1">
+        <h3 className="font-medium text-gray-900">{name}</h3>
+        <div className="flex items-center mt-1">
+          <StarIcon className="w-4 h-4 text-yellow-400 fill-current" />
+          <span className="text-xs text-gray-600 ml-1">
+            {rating.toFixed(1)}
+          </span>
+          <span className="mx-1 text-gray-400">•</span>
+          <span className="text-xs text-gray-600">{products} products</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+```
+```screens/Onboarding.tsx
+import React from 'react'
+import { Button } from '../components/Button'
+interface OnboardingProps {
+  onComplete: () => void
+}
+export function Onboarding({ onComplete }: OnboardingProps) {
+  return (
+    <div className="flex flex-col h-full bg-white">
+      <div className="flex-1 flex flex-col items-center justify-center p-6">
+        <div className="w-full max-w-md">
+          <div className="mb-8 flex justify-center">
+            <div className="bg-blue-500 h-20 w-20 rounded-full flex items-center justify-center">
+              <ShoppingBagIcon size={40} color="white" />
+            </div>
+          </div>
+          <h1 className="text-3xl font-bold text-center text-gray-800 mb-4">
+            Welcome to MarketPlace
+          </h1>
+          <p className="text-center text-gray-600 mb-8">
+            Connect with local businesses and find products you love.
+          </p>
+          <div className="space-y-6">
+            <div className="flex items-center">
+              <div className="bg-blue-100 p-2 rounded-full">
+                <ShoppingCartIcon className="w-6 h-6 text-blue-500" />
+              </div>
+              <div className="ml-4">
+                <h3 className="font-medium text-gray-800">Browse Products</h3>
+                <p className="text-sm text-gray-600">
+                  Find products from local businesses
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <div className="bg-blue-100 p-2 rounded-full">
+                <HeartIcon className="w-6 h-6 text-blue-500" />
+              </div>
+              <div className="ml-4">
+                <h3 className="font-medium text-gray-800">Reserve Products</h3>
+                <p className="text-sm text-gray-600">
+                  Show interest and reserve items
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center">
+              <div className="bg-blue-100 p-2 rounded-full">
+                <CreditCardIcon className="w-6 h-6 text-blue-500" />
+              </div>
+              <div className="ml-4">
+                <h3 className="font-medium text-gray-800">Flexible Payments</h3>
+                <p className="text-sm text-gray-600">
+                  Pay with wallet, card, or cash
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="p-6">
+        <Button label="Get Started" onClick={onComplete} fullWidth />
+        <p className="text-center mt-4 text-sm text-gray-600">
+          Are you a business owner?{' '}
+          <button className="text-blue-500 font-medium">
+            Sign up as seller
+          </button>
+        </p>
+      </div>
+    </div>
+  )
+}
+// Icons
+function ShoppingBagIcon({ size = 24, color = 'currentColor' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <path d="M16 10a4 4 0 0 1-8 0"></path>
+    </svg>
+  )
+}
+function ShoppingCartIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="9" cy="21" r="1"></circle>
+      <circle cx="20" cy="21" r="1"></circle>
+      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+    </svg>
+  )
+}
+function HeartIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+    </svg>
+  )
+}
+function CreditCardIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+      <line x1="1" y1="10" x2="23" y2="10"></line>
+    </svg>
+  )
+}
+
+```
+```screens/Home.tsx
+import React from 'react'
+import { ProductCard } from '../components/ProductCard'
+import { SellerCard } from '../components/SellerCard'
+interface HomeProps {
+  onProductSelect?: () => void
+}
+export function Home({ onProductSelect = () => {} }: HomeProps) {
+  const categories = [
+    {
+      id: '1',
+      name: 'Electronics',
+      icon: '📱',
+    },
+    {
+      id: '2',
+      name: 'Fashion',
+      icon: '👕',
+    },
+    {
+      id: '3',
+      name: 'Home',
+      icon: '🏠',
+    },
+    {
+      id: '4',
+      name: 'Beauty',
+      icon: '💄',
+    },
+    {
+      id: '5',
+      name: 'Sports',
+      icon: '⚽',
+    },
+    {
+      id: '6',
+      name: 'Groceries',
+      icon: '🛒',
+    },
+  ]
+  const featuredProducts = [
+    {
+      id: '1',
+      name: 'Wireless Headphones',
+      price: 59.99,
+      image:
+        'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      seller: 'AudioTech',
+      stock: 15,
+    },
+    {
+      id: '2',
+      name: 'Smart Watch',
+      price: 129.99,
+      image:
+        'https://images.unsplash.com/photo-1523275335684-37898b6baf30?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      seller: 'TechGadgets',
+      stock: 8,
+    },
+    {
+      id: '3',
+      name: 'Leather Wallet',
+      price: 39.99,
+      image:
+        'https://images.unsplash.com/photo-1627123424574-724758594e93?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      seller: 'LeatherCrafts',
+      stock: 22,
+    },
+    {
+      id: '4',
+      name: 'Stainless Steel Water Bottle',
+      price: 24.99,
+      image:
+        'https://images.unsplash.com/photo-1602143407151-7111542de6e8?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      seller: 'EcoFriendly',
+      stock: 3,
+    },
+  ]
+  const popularSellers = [
+    {
+      id: '1',
+      name: 'TechGadgets',
+      rating: 4.8,
+      products: 42,
+      image:
+        'https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&q=80',
+    },
+    {
+      id: '2',
+      name: 'LeatherCrafts',
+      rating: 4.5,
+      products: 28,
+      image:
+        'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&q=80',
+    },
+    {
+      id: '3',
+      name: 'EcoFriendly',
+      rating: 4.7,
+      products: 36,
+      image:
+        'https://images.unsplash.com/photo-1566492031773-4f4e44671857?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&q=80',
+    },
+  ]
+  return (
+    <div className="flex flex-col h-full bg-gray-50">
+      <div className="p-4 pb-2">
+        <div className="bg-blue-500 rounded-lg p-4">
+          <h2 className="text-white text-lg font-medium mb-1">Hello, Alex!</h2>
+          <p className="text-blue-100 text-sm">
+            Find amazing products from local businesses
+          </p>
+        </div>
+      </div>
+      <div className="px-4 py-2">
+        <div className="flex overflow-x-auto space-x-3 pb-2">
+          {categories.map((category) => (
+            <div key={category.id} className="flex flex-col items-center">
+              <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm border border-gray-100">
+                <span className="text-2xl">{category.icon}</span>
+              </div>
+              <span className="text-xs mt-1 text-gray-700">
+                {category.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="p-4">
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-medium text-gray-800">
+            Featured Products
+          </h2>
+          <button className="text-blue-500 text-sm font-medium">See All</button>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {featuredProducts.map((product) => (
+            <ProductCard
+              key={product.id}
+              {...product}
+              onClick={onProductSelect}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="p-4">
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-medium text-gray-800">Popular Sellers</h2>
+          <button className="text-blue-500 text-sm font-medium">See All</button>
+        </div>
+        <div className="space-y-3">
+          {popularSellers.map((seller) => (
+            <SellerCard key={seller.id} {...seller} onClick={() => {}} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+```
+```screens/ProductDetail.tsx
+import React, { useState } from 'react'
+import { Button } from '../components/Button'
+import {
+  HeartIcon,
+  ShoppingBagIcon,
+  StarIcon,
+  TruckIcon,
+  ShieldIcon,
+} from 'lucide-react'
+interface ProductDetailProps {
+  onBack: () => void
+}
+export function ProductDetail({ onBack }: ProductDetailProps) {
+  const [selectedImage, setSelectedImage] = useState(0)
+  const [quantity, setQuantity] = useState(1)
+  const product = {
+    id: '1',
+    name: 'Wireless Noise Cancelling Headphones',
+    price: 59.99,
+    rating: 4.8,
+    reviewCount: 124,
+    description:
+      'Experience premium sound quality with these wireless noise cancelling headphones. Perfect for music lovers and professionals alike.',
+    features: [
+      'Active Noise Cancellation',
+      'Bluetooth 5.0 Connectivity',
+      '30-hour Battery Life',
+      'Comfortable Over-ear Design',
+    ],
+    images: [
+      'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1546435770-a3e426bf472b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+    ],
+    seller: {
+      name: 'AudioTech',
+      rating: 4.7,
+      products: 42,
+      image:
+        'https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&q=80',
+    },
+    stock: 15,
+  }
+  const incrementQuantity = () => {
+    if (quantity < product.stock) {
+      setQuantity(quantity + 1)
+    }
+  }
+  const decrementQuantity = () => {
+    if (quantity > 1) {
+      setQuantity(quantity - 1)
+    }
+  }
+  return (
+    <div className="flex flex-col h-full bg-white">
+      <div className="relative">
+        <img
+          src={product.images[selectedImage]}
+          alt={product.name}
+          className="w-full h-64 object-cover"
+        />
+        <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+          <div className="flex space-x-2 bg-black bg-opacity-30 rounded-full px-3 py-1.5">
+            {product.images.map((_, index) => (
+              <button
+                key={index}
+                className={`w-2 h-2 rounded-full ${selectedImage === index ? 'bg-white' : 'bg-gray-400'}`}
+                onClick={() => setSelectedImage(index)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <StarIcon className="w-4 h-4 text-yellow-400 fill-current" />
+            <span className="ml-1 text-sm text-gray-700">{product.rating}</span>
+            <span className="mx-1 text-gray-500">•</span>
+            <span className="text-sm text-gray-500">
+              {product.reviewCount} reviews
+            </span>
+          </div>
+          <button className="p-1.5 bg-gray-100 rounded-full">
+            <HeartIcon className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        <h1 className="text-xl font-bold text-gray-900 mt-2">{product.name}</h1>
+        <p className="text-2xl font-bold text-blue-600 mt-1">
+          ${product.price.toFixed(2)}
+        </p>
+        <div className="flex items-center mt-4 bg-gray-50 p-3 rounded-lg">
+          <img
+            src={product.seller.image}
+            alt={product.seller.name}
+            className="w-10 h-10 rounded-full object-cover"
+          />
+          <div className="ml-3">
+            <p className="text-sm font-medium text-gray-900">
+              {product.seller.name}
+            </p>
+            <div className="flex items-center mt-0.5">
+              <StarIcon className="w-3 h-3 text-yellow-400 fill-current" />
+              <span className="text-xs text-gray-600 ml-1">
+                {product.seller.rating}
+              </span>
+              <span className="mx-1 text-gray-400">•</span>
+              <span className="text-xs text-gray-600">
+                {product.seller.products} products
+              </span>
+            </div>
+          </div>
+          <button className="ml-auto text-sm text-blue-500 font-medium">
+            View
+          </button>
+        </div>
+        <div className="mt-4">
+          <h2 className="text-lg font-medium text-gray-900">Description</h2>
+          <p className="mt-1 text-gray-600 text-sm">{product.description}</p>
+        </div>
+        <div className="mt-4">
+          <h2 className="text-lg font-medium text-gray-900">Features</h2>
+          <ul className="mt-1 space-y-1">
+            {product.features.map((feature, index) => (
+              <li
+                key={index}
+                className="flex items-center text-sm text-gray-600"
+              >
+                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mr-2"></div>
+                {feature}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="flex items-center justify-between mt-6 bg-gray-50 p-3 rounded-lg">
+          <div className="flex items-center">
+            <TruckIcon className="w-5 h-5 text-blue-500" />
+            <span className="ml-2 text-sm text-gray-700">Free Delivery</span>
+          </div>
+          <div className="flex items-center">
+            <ShieldIcon className="w-5 h-5 text-blue-500" />
+            <span className="ml-2 text-sm text-gray-700">Secure Payment</span>
+          </div>
+        </div>
+        <div className="mt-6 flex items-center justify-between">
+          <div className="flex items-center border border-gray-300 rounded-lg">
+            <button
+              className="px-3 py-2 text-gray-500"
+              onClick={decrementQuantity}
+              disabled={quantity <= 1}
+            >
+              -
+            </button>
+            <span className="px-3 py-2 text-gray-700">{quantity}</span>
+            <button
+              className="px-3 py-2 text-gray-500"
+              onClick={incrementQuantity}
+              disabled={quantity >= product.stock}
+            >
+              +
+            </button>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-gray-500">Total Price</p>
+            <p className="text-lg font-bold text-gray-900">
+              ${(product.price * quantity).toFixed(2)}
+            </p>
+          </div>
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <Button
+            label="Show Interest"
+            variant="outline"
+            icon={<HeartIcon className="w-5 h-5" />}
+          />
+          <Button
+            label="Buy Now"
+            icon={<ShoppingBagIcon className="w-5 h-5" />}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+```
+```screens/SellerDashboard.tsx
+import React from 'react'
+import { Button } from '../components/Button'
+import {
+  PackageIcon,
+  UsersIcon,
+  DollarSignIcon,
+  PlusIcon,
+  TrendingUpIcon,
+  AlertCircleIcon,
+} from 'lucide-react'
+interface SellerDashboardProps {
+  onProductManage: () => void
+}
+export function SellerDashboard({ onProductManage }: SellerDashboardProps) {
+  const stats = [
+    {
+      id: '1',
+      title: 'Products',
+      value: '24',
+      icon: <PackageIcon className="w-5 h-5 text-blue-500" />,
+      change: '+3',
+    },
+    {
+      id: '2',
+      title: 'Interests',
+      value: '42',
+      icon: <UsersIcon className="w-5 h-5 text-green-500" />,
+      change: '+12',
+    },
+    {
+      id: '3',
+      title: 'Sales',
+      value: '$1,240',
+      icon: <DollarSignIcon className="w-5 h-5 text-purple-500" />,
+      change: '+15%',
+    },
+  ]
+  const recentInterests = [
+    {
+      id: '1',
+      product: 'Wireless Headphones',
+      user: 'John D.',
+      time: '10 mins ago',
+      quantity: 2,
+    },
+    {
+      id: '2',
+      product: 'Smart Watch',
+      user: 'Sarah M.',
+      time: '1 hour ago',
+      quantity: 1,
+    },
+    {
+      id: '3',
+      product: 'Bluetooth Speaker',
+      user: 'Mike T.',
+      time: '3 hours ago',
+      quantity: 1,
+    },
+  ]
+  const lowStockProducts = [
+    {
+      id: '1',
+      name: 'Wireless Headphones',
+      stock: 3,
+      image:
+        'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+    },
+    {
+      id: '2',
+      name: 'Smart Watch',
+      stock: 2,
+      image:
+        'https://images.unsplash.com/photo-1523275335684-37898b6baf30?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+    },
+  ]
+  return (
+    <div className="flex flex-col h-full bg-gray-50">
+      <div className="p-4 bg-blue-500">
+        <div className="flex items-center">
+          <img
+            src="https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&q=80"
+            alt="Seller"
+            className="w-14 h-14 rounded-full object-cover border-2 border-white"
+          />
+          <div className="ml-3">
+            <h2 className="text-white font-medium">TechGadgets</h2>
+            <p className="text-blue-100 text-sm">Premium Electronics Store</p>
+          </div>
+        </div>
+      </div>
+      <div className="p-4">
+        <div className="grid grid-cols-3 gap-3">
+          {stats.map((stat) => (
+            <div key={stat.id} className="bg-white p-3 rounded-lg shadow-sm">
+              <div className="flex items-center justify-between">
+                {stat.icon}
+                <span className="text-xs font-medium text-green-600">
+                  {stat.change}
+                </span>
+              </div>
+              <p className="mt-2 text-xl font-bold text-gray-900">
+                {stat.value}
+              </p>
+              <p className="text-xs text-gray-500">{stat.title}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-6">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-lg font-medium text-gray-800">Quick Actions</h2>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              label="Add Product"
+              onClick={onProductManage}
+              icon={<PlusIcon className="w-5 h-5" />}
+              variant="primary"
+            />
+            <Button
+              label="View Analytics"
+              icon={<TrendingUpIcon className="w-5 h-5" />}
+              variant="outline"
+            />
+          </div>
+        </div>
+        <div className="mt-6">
+          <div className="flex justify-between items-center mb-3">
+            <h2 className="text-lg font-medium text-gray-800">
+              Recent Interests
+            </h2>
+            <button className="text-blue-500 text-sm font-medium">
+              See All
+            </button>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            {recentInterests.map((interest, index) => (
+              <div
+                key={interest.id}
+                className={`p-3 flex items-center justify-between ${index !== recentInterests.length - 1 ? 'border-b border-gray-100' : ''}`}
+              >
+                <div>
+                  <p className="font-medium text-gray-800">
+                    {interest.product}
+                  </p>
+                  <div className="flex items-center mt-1">
+                    <span className="text-xs text-gray-500">
+                      {interest.user}
+                    </span>
+                    <span className="mx-1 text-gray-300">•</span>
+                    <span className="text-xs text-gray-500">
+                      {interest.time}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center">
+                  <span className="text-sm font-medium text-gray-700">
+                    Qty: {interest.quantity}
+                  </span>
+                  <button className="ml-4 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                    Respond
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="mt-6">
+          <div className="flex items-center mb-3">
+            <AlertCircleIcon className="w-5 h-5 text-orange-500 mr-2" />
+            <h2 className="text-lg font-medium text-gray-800">
+              Low Stock Alert
+            </h2>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            {lowStockProducts.map((product, index) => (
+              <div
+                key={product.id}
+                className={`p-3 flex items-center justify-between ${index !== lowStockProducts.length - 1 ? 'border-b border-gray-100' : ''}`}
+              >
+                <div className="flex items-center">
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="w-10 h-10 rounded object-cover"
+                  />
+                  <p className="ml-3 font-medium text-gray-800">
+                    {product.name}
+                  </p>
+                </div>
+                <div className="flex items-center">
+                  <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                    {product.stock} left
+                  </span>
+                  <button className="ml-3 text-blue-500">
+                    <PlusIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+```
+```screens/ProductManagement.tsx
+import React, { useState } from 'react'
+import { Button } from '../components/Button'
+import { CameraIcon, ImageIcon, XIcon } from 'lucide-react'
+interface ProductManagementProps {
+  onBack: () => void
+}
+export function ProductManagement({ onBack }: ProductManagementProps) {
+  const [images, setImages] = useState<string[]>([])
+  const [category, setCategory] = useState('')
+  const categories = [
+    'Electronics',
+    'Fashion',
+    'Home',
+    'Beauty',
+    'Sports',
+    'Groceries',
+  ]
+  const addImage = () => {
+    // In a real app, this would open the camera or file picker
+    const demoImages = [
+      'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80',
+      'https://images.unsplash.com/photo-1546435770-a3e426bf472b?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80',
+      'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80',
+    ]
+    if (images.length < demoImages.length) {
+      setImages([...images, demoImages[images.length]])
+    }
+  }
+  const removeImage = (index: number) => {
+    setImages(images.filter((_, i) => i !== index))
+  }
+  return (
+    <div className="flex flex-col h-full bg-gray-50">
+      <div className="p-4 flex-1">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">
+          Add New Product
+        </h2>
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Product Name
+          </label>
+          <input
+            type="text"
+            placeholder="Enter product name"
+            className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Product Images
+          </label>
+          <div className="flex flex-wrap gap-3 mt-2">
+            {images.map((image, index) => (
+              <div key={index} className="relative w-20 h-20">
+                <img
+                  src={image}
+                  alt="Product"
+                  className="w-full h-full object-cover rounded-lg"
+                />
+                <button
+                  className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1"
+                  onClick={() => removeImage(index)}
+                >
+                  <XIcon className="w-3 h-3 text-white" />
+                </button>
+              </div>
+            ))}
+            {images.length < 5 && (
+              <button
+                className="w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center"
+                onClick={addImage}
+              >
+                <CameraIcon className="w-8 h-8 text-gray-400" />
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 mt-2">Add up to 5 images</p>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Category
+          </label>
+          <div className="relative">
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select a category</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
+              <svg
+                className="w-4 h-4 text-gray-500"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Price ($)
+            </label>
+            <input
+              type="number"
+              placeholder="0.00"
+              className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Stock
+            </label>
+            <input
+              type="number"
+              placeholder="0"
+              className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm p-4 mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Description
+          </label>
+          <textarea
+            placeholder="Enter product description"
+            rows={4}
+            className="w-full p-3 border border-gray-300 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          ></textarea>
+        </div>
+      </div>
+      <div className="p-4 bg-white border-t">
+        <Button label="Save Product" fullWidth />
+      </div>
+    </div>
+  )
+}
+
+```
+```screens/InterestManagement.tsx
+import React from 'react'
+import { Button } from '../components/Button'
+import { CheckIcon, XIcon } from 'lucide-react'
+interface InterestManagementProps {
+  onBack: () => void
+}
+export function InterestManagement({ onBack }: InterestManagementProps) {
+  const interests = [
+    {
+      id: '1',
+      product: 'Wireless Headphones',
+      image:
+        'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+      user: {
+        name: 'John Doe',
+        image:
+          'https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+      },
+      quantity: 1,
+      time: '10 minutes ago',
+      status: 'pending',
+    },
+    {
+      id: '2',
+      product: 'Smart Watch',
+      image:
+        'https://images.unsplash.com/photo-1523275335684-37898b6baf30?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+      user: {
+        name: 'Sarah Miller',
+        image:
+          'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+      },
+      quantity: 2,
+      time: '1 hour ago',
+      status: 'pending',
+    },
+    {
+      id: '3',
+      product: 'Bluetooth Speaker',
+      image:
+        'https://images.unsplash.com/photo-1589003077984-894e133dabab?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+      user: {
+        name: 'Mike Thompson',
+        image:
+          'https://images.unsplash.com/photo-1552374196-c4e7ffc6e126?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+      },
+      quantity: 1,
+      time: '3 hours ago',
+      status: 'accepted',
+    },
+    {
+      id: '4',
+      product: 'Wireless Earbuds',
+      image:
+        'https://images.unsplash.com/photo-1606400082777-ef05f3c5d854?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+      user: {
+        name: 'Lisa Johnson',
+        image:
+          'https://images.unsplash.com/photo-1544005313-94ddf0286df2?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&q=80',
+      },
+      quantity: 1,
+      time: '1 day ago',
+      status: 'rejected',
+    },
+  ]
+  return (
+    <div className="flex flex-col h-full bg-gray-50">
+      <div className="p-4">
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">
+              Product Interests
+            </h2>
+            <p className="text-sm text-gray-500">
+              Manage customer interest requests
+            </p>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          {interests.map((interest) => (
+            <div
+              key={interest.id}
+              className="border-b border-gray-100 last:border-b-0"
+            >
+              <div className="p-4">
+                <div className="flex items-center">
+                  <img
+                    src={interest.image}
+                    alt={interest.product}
+                    className="w-14 h-14 rounded object-cover"
+                  />
+                  <div className="ml-3 flex-1">
+                    <h3 className="font-medium text-gray-800">
+                      {interest.product}
+                    </h3>
+                    <div className="flex items-center mt-1">
+                      <span className="text-xs text-gray-500">
+                        Quantity: {interest.quantity}
+                      </span>
+                      <span className="mx-1 text-gray-300">•</span>
+                      <span className="text-xs text-gray-500">
+                        {interest.time}
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    className={`px-2 py-1 rounded-full text-xs font-medium ${interest.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : interest.status === 'accepted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+                  >
+                    {interest.status.charAt(0).toUpperCase() +
+                      interest.status.slice(1)}
+                  </div>
+                </div>
+                <div className="flex items-center mt-3 pt-3 border-t border-gray-100">
+                  <img
+                    src={interest.user.image}
+                    alt={interest.user.name}
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">
+                    {interest.user.name}
+                  </span>
+                  {interest.status === 'pending' && (
+                    <div className="ml-auto flex space-x-2">
+                      <button className="p-2 bg-red-100 rounded-full">
+                        <XIcon className="w-5 h-5 text-red-600" />
+                      </button>
+                      <button className="p-2 bg-green-100 rounded-full">
+                        <CheckIcon className="w-5 h-5 text-green-600" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-auto p-4">
+        <Button label="View All Interests" variant="outline" fullWidth />
+      </div>
+    </div>
+  )
+}
+
+```

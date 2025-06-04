@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  firstName     String
+  middleName    String?
+  lastName      String
+  phoneNumber   String    @unique
+  pin           String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  devices       Device[]
+  sessions      Session[]
+
+  @@index([phoneNumber])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model Device {
+  id            String    @id @default(uuid())
+  deviceId      String
+  deviceName    String
+  deviceType    String
+  brand         String
+  modelName     String
+  osVersion     String
+  phoneNumber   String
+  isVerified    Boolean   @default(false)
+  lastLoginAt   DateTime  @default(now())
+  lastLogoutAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  sessions      Session[]
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@index([deviceId])
+  @@index([phoneNumber])
+  @@index([isVerified])
+  @@index([lastLoginAt])
+  @@index([lastLogoutAt])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model Session {
+  id            String    @id @default(uuid())
+  token         String    @unique
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  userId        String
+  deviceId      String
+  user          User      @relation(fields: [userId], references: [id])
+  device        Device    @relation(fields: [deviceId], references: [id])
+
+  @@index([userId])
+  @@index([deviceId])
+  @@index([token])
+  @@index([expiresAt])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model OTP {
+  id            String    @id @default(uuid())
+  phoneNumber   String
+  code          String
+  type          String    // "VERIFICATION" | "PIN_RESET"
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  isUsed        Boolean   @default(false)
+  attempts      Int       @default(0)
+
+  @@index([phoneNumber])
+  @@index([code])
+  @@index([type])
+  @@index([expiresAt])
+  @@index([isUsed])
+  @@index([createdAt])
+} 
