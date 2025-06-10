@@ -1,19 +1,20 @@
+// Learn more https://docs.expo.io/guides/customizing-metro
 const { getDefaultConfig } = require('expo/metro-config');
 
 /** @type {import('expo/metro-config').MetroConfig} */
-const config = getDefaultConfig(__dirname);
+const config = getDefaultConfig(__dirname, {
+  // [Web-only]: Enables CSS support in Metro.
+  isCSSEnabled: true,
+});
 
-// Add any custom config here
+// Add any custom configuration here
 config.resolver.sourceExts = ['jsx', 'js', 'ts', 'tsx', 'json'];
 config.resolver.assetExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'ttf', 'otf'];
 
-// Optimize for development
+// Enable Hermes
 config.transformer.minifierConfig = {
-  keep_classnames: true,
-  keep_fnames: true,
-  mangle: {
-    keep_classnames: true,
-    keep_fnames: true,
+  compress: {
+    drop_console: false,
   },
 };
 

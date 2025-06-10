@@ -12,6 +12,6 @@ module.exports = function (api) {
       '@babel/plugin-transform-optional-catch-binding',
       '@babel/plugin-transform-object-rest-spread',
       '@babel/plugin-transform-async-generator-functions',
-    ],
+      ],
   };
 }; 
