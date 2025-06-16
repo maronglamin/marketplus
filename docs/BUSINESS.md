@@ -255,4 +255,185 @@ To provide a reliable platform where users can safely buy and sell products, wit
 - Resolution rate
 - User satisfaction
 - Platform performance
-- Support quality 
+- Support quality
+
+## Seller KYC Requirements
+
+### Business Types
+1. **Individual**
+   - Personal identification required
+   - Proof of address required
+   - Tax identification (if applicable)
+
+2. **Sole Proprietorship**
+   - Business registration document
+   - Owner's identification
+   - Tax registration
+   - Business address proof
+
+3. **Partnership**
+   - Partnership agreement
+   - Registration certificate
+   - Partners' identification
+   - Tax registration
+   - Business address proof
+
+4. **Corporation**
+   - Certificate of incorporation
+   - Articles of association
+   - Directors' identification
+   - Tax registration
+   - Business address proof
+
+5. **LLC**
+   - LLC formation documents
+   - Operating agreement
+   - Members' identification
+   - Tax registration
+   - Business address proof
+
+### Document Requirements
+
+#### Identification Documents
+- **National ID**
+  - Must be government-issued
+  - Must be current and valid
+  - Must include photo
+  - Must include signature
+  - Must be in supported languages
+
+- **Passport**
+  - Must be current and valid
+  - Must include photo
+  - Must include signature
+  - Must be machine-readable
+
+- **Driver's License**
+  - Must be government-issued
+  - Must be current and valid
+  - Must include photo
+  - Must include signature
+
+#### Business Documents
+- **Business Registration**
+  - Must be officially registered
+  - Must include business name
+  - Must include registration number
+  - Must include registration date
+  - Must be current and valid
+
+- **Tax Certificate**
+  - Must be current and valid
+  - Must include tax ID
+  - Must include business name
+  - Must include registration date
+
+### Bank Account Requirements
+
+#### Bank Transfer
+- Valid bank account
+- Account holder name must match business name
+- Bank must be in supported countries
+- Currency must be supported
+
+#### Mobile Money
+- Valid mobile money account
+- Account holder name must match business name
+- Provider must be supported
+- Currency must be supported
+
+#### Digital Wallet
+- Valid digital wallet
+- Wallet address must be valid
+- Provider must be supported
+- Currency must be supported
+
+#### Crypto Wallet
+- Valid blockchain address
+- Supported cryptocurrency
+- Valid wallet format
+- Network must be supported
+
+### Settlement Rules
+
+#### Processing Times
+- Bank Transfer: 1-3 business days
+- Mobile Money: Instant to 24 hours
+- Digital Wallet: Instant to 24 hours
+- Crypto: 10-30 minutes
+
+#### Limits
+- Minimum settlement: $10
+- Maximum settlement: $10,000 per transaction
+- Daily limit: $50,000
+- Monthly limit: $500,000
+
+#### Fees
+- Bank Transfer: 1% of amount
+- Mobile Money: 0.5% of amount
+- Digital Wallet: 0.5% of amount
+- Crypto: 0.1% of amount
+
+### Compliance Requirements
+
+#### Anti-Money Laundering (AML)
+- Customer identification
+- Transaction monitoring
+- Suspicious activity reporting
+- Record keeping
+- Risk assessment
+
+#### Know Your Customer (KYC)
+- Identity verification
+- Business verification
+- Address verification
+- Document verification
+- Risk assessment
+
+#### Data Protection
+- Secure storage
+- Access control
+- Data encryption
+- Privacy compliance
+- Data retention
+
+### Risk Management
+
+#### Verification Levels
+1. **Basic Verification**
+   - Phone verification
+   - Email verification
+   - Basic identification
+
+2. **Standard Verification**
+   - Document verification
+   - Address verification
+   - Business verification
+
+3. **Enhanced Verification**
+   - Additional documents
+   - Source of funds
+   - Business relationship
+
+#### Risk Factors
+- Transaction volume
+- Transaction frequency
+- Geographic location
+- Business type
+- Customer history
+
+### Support and Resolution
+
+#### Verification Support
+- Document submission help
+- Verification status updates
+- Rejection resolution
+- Appeal process
+- Support channels
+
+#### Settlement Support
+- Transaction tracking
+- Issue resolution
+- Refund process
+- Dispute handling
+- Support channels 

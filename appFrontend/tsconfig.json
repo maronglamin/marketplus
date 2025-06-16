@@ -4,7 +4,18 @@
     "strict": true,
     "typeRoots": [
       "./types"
-    ]
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@components/*": ["src/components/*"],
+      "@screens/*": ["src/screens/*"],
+      "@navigation/*": ["src/navigation/*"],
+      "@services/*": ["src/services/*"],
+      "@contexts/*": ["src/contexts/*"],
+      "@utils/*": ["src/utils/*"],
+      "@api/*": ["src/api/*"],
+      "@theme/*": ["src/theme/*"]
+    }
   },
   "include": [
     "**/*.ts",

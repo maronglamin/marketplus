@@ -22,13 +22,15 @@ const getApiUrl = async (): Promise<string> => {
     // Development environment
     if (Platform.OS === 'android') {
       // Android emulator uses 10.0.2.2 to access host machine
-      defaultUrl = 'http://192.168.137.222:3000/api';
+      // defaultUrl = 'http://192.168.137.222:3000/api';
+      defaultUrl = 'http://192.168.137.56:3000/api';
+
     } else if (Platform.OS === 'ios') {
       // For Expo on iOS device, use the local IP address
-      defaultUrl = 'http://192.168.137.222:3000/api';
+      defaultUrl = 'http://192.168.137.56:3000/api';
     } else {
       // Fallback for other platforms
-      defaultUrl = 'http://192.168.137.222:3000/api';
+      defaultUrl = 'http://192.168.137.56:3000/api';
     }
   } else {
     // Production environment

@@ -32,6 +32,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - RootNavigator for auth state management
   - AuthNavigator for authentication flows
   - AppNavigator for main application screens
+- Initial database schema with User, Device, Session, and OTP models
+- Performance-optimizing indexes for all tables:
+  - User table: phoneNumber, createdAt, updatedAt
+  - Device table: deviceId, userId, isVerified, lastLoginAt, createdAt, updatedAt
+  - Session table: token, userId, deviceId, expiresAt, createdAt, updatedAt
+  - OTP table: phoneNumber, code, type, expiresAt, isUsed, createdAt
+- Unique constraints for:
+  - User phoneNumber
+  - Device deviceId
+  - Session token
+  - Device userId + deviceId combination
+- Seller KYC system implementation:
+  - Business information management
+  - Document verification system
+  - Bank account management
+  - Wallet integration
+  - Settlement processing
+  - KYC status tracking
+  - Document upload and validation
+  - Multi-level verification process
 
 ### Changed
 - Updated navigation flow
@@ -46,6 +66,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Changed Account tab to navigate to SellerDashboard
   - Improved active state handling
   - Enhanced visual feedback
+- Enhanced OTP verification system:
+  - Increased OTP expiry time from 10 to 15 minutes
+  - Extended rate limiting window from 15 to 30 minutes
+  - Increased maximum attempts from 3 to 5
+  - Increased maximum active OTPs per phone from 3 to 5
+  - Improved error handling for invalid codes
+  - Added attempt tracking per phone number
+  - Implemented both original and hashed code storage for better security
+  - Added proper validation flow for new vs existing users
+- Enhanced KYC verification process:
+  - Improved document validation
+  - Enhanced bank account verification
+  - Updated wallet address validation
+  - Streamlined settlement processing
+  - Enhanced status management
+  - Improved error handling
+  - Added support for multiple business types
+  - Enhanced compliance checks
 
 ### Fixed
 - Status bar and safe area issues
@@ -56,6 +94,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed active tab indication
   - Corrected navigation routes
   - Improved state persistence
+- OTP verification issues:
+  - Fixed token generation after successful OTP verification
+  - Resolved issue with attempts counter not incrementing properly
+  - Fixed error handling to return false instead of throwing errors
+  - Corrected session creation after successful verification
+  - Fixed PIN generation and sending for new users
+  - Resolved device verification status tracking
+- KYC verification issues:
+  - Fixed document upload validation
+  - Resolved bank account verification
+  - Fixed wallet address validation
+  - Corrected settlement processing
+  - Fixed status update notifications
+  - Resolved compliance check issues
+  - Fixed multi-level verification flow
+  - Corrected business type validation
 
 ### Security
 - Enhanced PIN-based authentication
@@ -66,6 +120,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added input validation
   - Enhanced data sanitization
   - Implemented secure storage
+- Enhanced OTP security:
+  - Added rate limiting per phone number
+  - Implemented attempt tracking
+  - Added expiration checks
+  - Improved code validation logic
+  - Added proper error messages for security-related issues
+- Enhanced KYC security:
+  - Added document encryption
+  - Implemented secure storage for sensitive data
+  - Enhanced access control
+  - Added audit logging
+  - Improved compliance checks
+  - Enhanced verification process security
+  - Added fraud detection
+  - Implemented risk assessment
 
 ### Technical Debt
 - Need to implement Orders screen
@@ -73,6 +142,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Need to implement proper loading states
 - Need to add proper form validation
 - Need to implement proper API error handling
+
+### Technical Details
+- Database: PostgreSQL
+- ORM: Prisma
+- Indexes optimized for:
+  - Authentication flows
+  - Device verification
+  - Session management
+  - OTP verification
+  - Analytics queries
+  - KYC verification
+  - Document management
+  - Settlement processing
+
+### Database Schema Details
+- User Model:
+  - Basic user information (firstName, middleName, lastName)
+  - Phone number authentication
+  - PIN-based security
+  - Timestamps for creation and updates
+  - Relations to devices and sessions
+
+- Device Model:
+  - Device identification and metadata
+  - Verification status tracking
+  - Last login tracking
+  - User association
+  - Session management
+
+- Session Model:
+  - Token-based authentication
+  - Expiration management
+  - User and device associations
+  - Timestamps for creation and updates
+
+- OTP Model:
+  - Phone number verification
+  - PIN reset functionality
+  - Expiration management
+  - Usage tracking
+  - Type differentiation (VERIFICATION/PIN_RESET)
+  - Attempt tracking
+  - Original and hashed code storage
+
+- SellerKyc Model:
+  - Business information
+  - Document verification
+  - Bank account details
+  - Wallet information
+  - Settlement processing
+  - Status tracking
+  - Compliance checks
+  - Risk assessment
+
+- BankAccount Model:
+  - Account details
+  - Verification status
+  - Settlement processing
+  - Transaction history
+  - Currency management
+
+- Wallet Model:
+  - Wallet details
+  - Verification status
+  - Settlement processing
+  - Transaction history
+  - Currency management
+
+- Settlement Model:
+  - Transaction details
+  - Processing status
+  - Payment information
+  - Settlement history
+  - Fee management
 
 ## [0.1.0] - 2024-03-20
 

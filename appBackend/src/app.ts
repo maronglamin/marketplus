@@ -6,6 +6,10 @@ import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 import { config } from './config';
 import os from 'os';
+import routes from './routes';
+import morgan from 'morgan';
+import uploadRouter from './routes/upload';
+import path from 'path';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -26,7 +30,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "https:", "file:"],
       connectSrc: ["'self'", "https://api.twilio.com"],
     },
   },
@@ -63,6 +67,9 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // Request logging middleware
 app.use((req, _res, next) => {
   logger.info('Incoming request:', {
@@ -85,10 +92,12 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // API routes
+app.use('/api', routes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/upload', uploadRouter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
