@@ -5,6 +5,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   View,
+  ViewStyle,
+  TextStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -17,6 +19,10 @@ interface ButtonProps {
   loading?: boolean;
   icon?: React.ReactNode;
   fullWidth?: boolean;
+  title?: string;
+  children?: React.ReactNode;
+  style?: ViewStyle;
+  textStyle?: TextStyle;
 }
 
 export function Button({
@@ -28,6 +34,10 @@ export function Button({
   loading = false,
   icon,
   fullWidth = false,
+  title,
+  children,
+  style,
+  textStyle,
 }: ButtonProps) {
   const getBackgroundColor = () => {
     if (disabled) return '#E5E7EB';
@@ -102,6 +112,8 @@ export function Button({
           paddingHorizontal: getPadding().horizontal,
           width: fullWidth ? '100%' : 'auto',
         },
+        disabled && styles.disabled,
+        style,
       ]}
     >
       {loading ? (
@@ -109,17 +121,10 @@ export function Button({
       ) : (
         <View style={styles.content}>
           {icon && <View style={styles.iconContainer}>{icon}</View>}
-          <Text
-            style={[
-              styles.label,
-              {
-                color: getTextColor(),
-                fontSize: getFontSize(),
-              },
-            ]}
-          >
+          <Text style={[styles.label, { color: getTextColor(), fontSize: getFontSize() }, textStyle]}>
             {label}
           </Text>
+          {children}
         </View>
       )}
     </TouchableOpacity>
@@ -143,5 +148,8 @@ const styles = StyleSheet.create({
   },
   label: {
     fontWeight: '600',
+  },
+  disabled: {
+    opacity: 0.5,
   },
 }); 

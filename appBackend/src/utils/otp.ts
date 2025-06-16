@@ -6,10 +6,10 @@ import { z } from 'zod';
 const prisma = new PrismaClient();
 
 // Rate limiting configuration
-const MAX_ATTEMPTS = 3;
-const ATTEMPT_WINDOW = 15 * 60 * 1000; // 15 minutes
-const OTP_EXPIRY = 10 * 60 * 1000; // 10 minutes
-const MAX_OTP_PER_PHONE = 3; // Maximum number of active OTPs per phone number
+const MAX_ATTEMPTS = 5;
+const ATTEMPT_WINDOW = 30 * 60 * 1000; // 30 minutes
+const OTP_EXPIRY = 15 * 60 * 1000; // 15 minutes
+const MAX_OTP_PER_PHONE = 5; // Maximum number of active OTPs per phone number
 
 // Validate environment variables
 const envSchema = z.object({
@@ -67,7 +67,8 @@ export const createOTP = async (
 
   if (existingOTP) {
     console.log(`Existing unused ${type} found for ${phoneNumber}`);
-    return existingOTP.code;
+    // Return the original code if available, otherwise return the hashed code
+    return existingOTP.originalCode || existingOTP.code;
   }
 
   const code = type === 'VERIFICATION' ? generateOTP() : generatePIN();
@@ -84,6 +85,7 @@ export const createOTP = async (
     data: {
       phoneNumber,
       code: hashedCode,
+      originalCode: code, // Store the original code
       type,
       expiresAt,
       attempts: 0,
@@ -135,7 +137,7 @@ export const verifyOTP = async (
   
   if (failedAttempts >= MAX_ATTEMPTS) {
     console.log(`Too many failed attempts for ${phoneNumber}`);
-    throw new Error('Too many failed attempts. Please try again later.');
+    throw new Error('Too many failed attempts. Please wait 30 minutes before trying again.');
   }
 
   // Find the most recent unused OTP
@@ -165,13 +167,25 @@ export const verifyOTP = async (
     return false;
   }
 
-  // Hash the provided code
+  // First try to compare with original code if available
+  if (otp.originalCode && otp.originalCode === code) {
+    console.log(`Valid ${type} found for ${phoneNumber} (original code match)`);
+    await prisma.oTP.update({
+      where: { id: otp.id },
+      data: { 
+        isUsed: true,
+        attempts: 0,
+      },
+    });
+    return true;
+  }
+
+  // If no original code match, hash the provided code and compare
   const hashedCode = crypto
     .createHash('sha256')
     .update(code)
     .digest('hex');
 
-  // Compare the hashed codes
   if (otp.code !== hashedCode) {
     console.log(`Invalid ${type} for ${phoneNumber}`);
     await prisma.oTP.update({
@@ -181,7 +195,7 @@ export const verifyOTP = async (
     return false;
   }
 
-  console.log(`Valid ${type} found for ${phoneNumber}`);
+  console.log(`Valid ${type} found for ${phoneNumber} (hashed code match)`);
   await prisma.oTP.update({
     where: { id: otp.id },
     data: { 
@@ -189,6 +203,5 @@ export const verifyOTP = async (
       attempts: 0,
     },
   });
-
   return true;
 }; 

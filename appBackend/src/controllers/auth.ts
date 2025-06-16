@@ -233,36 +233,28 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
       },
     });
 
-    // Generate PIN for first-time login
-    const pin = await createOTP(phoneNumber, 'PIN_RESET');
-    const hashedPin = await bcrypt.hash(pin, 10);
+    // Generate token for the verified device
+    const token = await generateToken(user.id, device.id);
 
-    // Update user's PIN
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { pin: hashedPin }
-    });
+    // Check if user needs to set PIN
+    const needsPin = !user.pin || user.pin.trim() === '';
 
-    // Send PIN via SMS
-    try {
+    if (needsPin) {
+      // Generate PIN for first-time login
+      const pin = await createOTP(phoneNumber, 'PIN_RESET');
       await sendPIN(phoneNumber, pin);
-      console.log('PIN sent successfully to:', phoneNumber);
-    } catch (smsError) {
-      console.error('Failed to send PIN:', smsError);
-      // In development, log the PIN
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[DEV] Login PIN for ${phoneNumber}: ${pin}`);
-      }
     }
 
     return res.status(200).json({
-      message: 'Device verified successfully. Please use the PIN sent to your phone to login.',
-      requiresPin: true,
+      message: 'OTP verified successfully',
+      token,
+      isNewUser: false,
+      requiresPin: needsPin,
       user: {
         id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
-        phoneNumber: user.phoneNumber,
+        phoneNumber: user.phoneNumber
       }
     });
   } catch (error) {

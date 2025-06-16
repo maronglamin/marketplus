@@ -2,6 +2,29 @@
 
 ## User Authentication
 
+### OTP-based Authentication
+- **Phone Number Verification**
+  1. User enters phone number
+  2. System sends 6-digit OTP via SMS
+  3. User enters OTP
+  4. System validates OTP
+  5. If valid:
+     - For new users: Proceed to registration
+     - For existing users: Proceed to PIN login
+  6. If invalid:
+     - System increments attempt counter
+     - User can retry (max 5 attempts in 30 minutes)
+     - After max attempts: Wait 30 minutes before retrying
+
+- **OTP Security Features**
+  - 6-digit numeric code
+  - 15-minute expiration
+  - Maximum 5 active OTPs per phone number
+  - Rate limiting: 5 attempts per 30 minutes
+  - Original code stored for direct comparison
+  - Hashed code stored for security
+  - Attempt tracking per phone number
+
 ### PIN-based Authentication
 - **First-time Login**
   1. User enters initial PIN
@@ -23,6 +46,105 @@
 - PIN cannot be repeated numbers
 - PIN change is mandatory on first login
 - PIN can be changed later through settings
+
+## Seller KYC Verification
+
+### KYC Process
+1. **Initial Registration**
+   - Basic user information
+   - Phone number verification
+   - Device verification
+
+2. **Business Information**
+   - Business name
+   - Business type (Individual, Sole Proprietorship, Partnership, Corporation, LLC)
+   - Registration number (optional)
+   - Tax ID (optional)
+
+3. **Address Information**
+   - Business address
+   - City
+   - State
+   - Country
+   - Postal code
+
+4. **Document Verification**
+   - Document type selection:
+     - National ID
+     - Passport
+     - Driver's License
+     - Business Registration
+     - Tax Certificate
+   - Document number
+   - Document upload
+   - Document expiry date (if applicable)
+
+5. **Bank Account Information**
+   - Account name
+   - Account number
+   - Bank name
+   - Bank code
+   - Branch code (optional)
+   - SWIFT code (optional)
+   - IBAN (optional)
+   - Currency
+
+6. **Wallet Information**
+   - Wallet type (Crypto, Mobile Money, Digital Wallet)
+   - Wallet address
+   - Currency
+   - Default status
+
+### KYC Status Management
+- **Status Types**
+  - PENDING: Initial submission
+  - APPROVED: Verification successful
+  - REJECTED: Verification failed
+  - SUSPENDED: Temporary suspension
+
+- **Status Updates**
+  - Automatic status updates
+  - Email notifications
+  - In-app notifications
+  - Status change history
+
+### Document Management
+- **Upload Requirements**
+  - Supported formats: JPG, PNG, PDF
+  - Maximum file size: 5MB
+  - Clear and legible images
+  - Valid document types
+
+- **Document Verification**
+  - Automated checks
+  - Manual review process
+  - Expiry date validation
+  - Document authenticity verification
+
+### Bank Account Management
+- **Account Types**
+  - Bank Transfer
+  - Mobile Money
+  - Digital Wallet
+  - Crypto Wallet
+
+- **Account Status**
+  - ACTIVE: Ready for transactions
+  - INACTIVE: Temporarily disabled
+  - SUSPENDED: Under review
+  - BLOCKED: Permanently disabled
+
+### Settlement Management
+- **Settlement Types**
+  - Bank Transfer
+  - Wallet Transfer
+
+- **Settlement Status**
+  - PENDING: Initial request
+  - PROCESSING: In progress
+  - COMPLETED: Successfully processed
+  - FAILED: Processing failed
+  - CANCELLED: Request cancelled
 
 ## Main Application Features
 
@@ -171,11 +293,24 @@
 ## Error Handling
 
 ### Authentication Errors
+- Invalid OTP
+- OTP expiration
+- Too many OTP attempts
 - Invalid PIN
 - PIN change requirements
 - Session expiration
 - Network issues
 - Server errors
+
+### KYC Errors
+- Invalid document format
+- Document size exceeded
+- Invalid document type
+- Expired document
+- Invalid bank details
+- Invalid wallet address
+- Duplicate submission
+- Verification failure
 
 ### Product Errors
 - Invalid image format
