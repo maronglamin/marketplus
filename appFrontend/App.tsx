@@ -8,7 +8,7 @@ import { ProductDetail } from './src/screens/ProductDetail';
 import { ShowInterest } from './src/screens/ShowInterest';
 import { Onboarding } from './src/screens/Onboarding';
 import { SellerDashboard } from './src/screens/SellerDashboard';
-import { AddProduct } from './src/screens/AddProduct';
+import { AddProduct } from './src/screens/add-product';
 import { Chat } from './src/screens/Chat';
 import { Notifications } from './src/screens/Notifications';
 import { Settings } from './src/screens/Settings';

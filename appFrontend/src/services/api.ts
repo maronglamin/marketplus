@@ -1,21 +1,21 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
+import { ENV_CONFIG } from '../config/env';
 
-// Use the local IP from app config or fallback to a default
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.110.48';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+console.log('Initializing API with URL:', ENV_CONFIG.API_BASE_URL);
 
 export const api = axios.create({
-  baseURL: API_URL,
+  baseURL: ENV_CONFIG.API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: ENV_CONFIG.API_TIMEOUT,
 });
 
 // Add a request interceptor to add the auth token to every request
 api.interceptors.request.use(
   async (config) => {
+    console.log('Making request to:', `${config.baseURL}${config.url}`);
     const token = await AsyncStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -23,19 +23,34 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    console.error('Request error:', error);
     return Promise.reject(error);
   }
 );
 
-// Add a response interceptor to handle 401 errors
+// Add a response interceptor to handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('Response received:', response.status, response.config.url);
+    return response;
+  },
   async (error) => {
-    if (error.response?.status === 401) {
-      // Clear the token and redirect to login
-      await AsyncStorage.removeItem('token');
-      // You might want to add navigation logic here to redirect to login
+    if (error.code === 'ECONNABORTED') {
+      console.error('Request timeout:', error.config.url);
+      throw new Error('Request timeout. Please check your connection and try again.');
     }
+    
+    if (!error.response) {
+      console.error('Network error:', error.config.url);
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+    
+    console.error('Response error:', {
+      url: error.config.url,
+      status: error.response.status,
+      data: error.response.data
+    });
+    
     return Promise.reject(error);
   }
 ); 

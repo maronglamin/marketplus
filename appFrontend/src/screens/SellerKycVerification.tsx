@@ -262,10 +262,10 @@ export function SellerKycVerification() {
         }
       }
 
-      // Navigate to confirmation screen with all collected data
+      // Navigate to confirmation screen with all the data
       navigation.navigate('SellerKycConfirmation', {
-        businessData,
-        addressData,
+        businessData: businessData,
+        addressData: addressData,
         verificationData: {
           idType: formData.idType,
           idNumber: formData.idNumber,

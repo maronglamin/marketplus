@@ -34,7 +34,7 @@ export function SellerKycConfirmation() {
     switch (section) {
       case 'business':
         navigation.navigate('SellerKycBusiness', {
-          businessData: businessData
+          existingData: undefined
         });
         break;
       case 'address':

@@ -8,7 +8,7 @@ import sharp from 'sharp';
 const router = Router();
 
 // Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../../uploads/kyc-documents');
+const uploadDir = path.join(__dirname, '../../uploads/products');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -19,7 +19,7 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit
   },
   fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
     // Accept only image files
@@ -45,19 +45,19 @@ router.post('/', upload.single('file'), async (req: Request & { file?: Express.M
 
     // Compress and resize image
     await sharp(req.file.buffer)
-      .resize(1200, 1200, { // Max dimensions
+      .resize(1600, 1600, { // Increased max dimensions for product images
         fit: 'inside',
         withoutEnlargement: true
       })
       .jpeg({ // Convert to JPEG for better compression
-        quality: 80,
+        quality: 85, // Slightly higher quality for product images
         progressive: true,
         chromaSubsampling: '4:4:4'
       })
       .toFile(outputPath);
 
     // Generate the URL for the uploaded file
-    const fileUrl = `/uploads/kyc-documents/${filename}`;
+    const fileUrl = `/uploads/products/${filename}`;
     
     res.json({ url: fileUrl });
   } catch (error) {

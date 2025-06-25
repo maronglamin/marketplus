@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import Constants from 'expo-constants';
+import { ENV_CONFIG } from '../config/env';
 
 // Cache for API instance
 let apiInstance: any = null;
@@ -19,19 +19,8 @@ const getApiUrl = async (): Promise<string> => {
   let defaultUrl: string;
   
   if (__DEV__) {
-    // Development environment
-    if (Platform.OS === 'android') {
-      // Android emulator uses 10.0.2.2 to access host machine
-      // defaultUrl = 'http://192.168.137.222:3000/api';
-      defaultUrl = 'http://192.168.137.56:3000/api';
-
-    } else if (Platform.OS === 'ios') {
-      // For Expo on iOS device, use the local IP address
-      defaultUrl = 'http://192.168.137.56:3000/api';
-    } else {
-      // Fallback for other platforms
-      defaultUrl = 'http://192.168.137.56:3000/api';
-    }
+    // Development environment - use centralized config
+    defaultUrl = `${ENV_CONFIG.API_BASE_URL}/api`;
   } else {
     // Production environment
     defaultUrl = 'https://api.marketplace.com/api';
@@ -54,7 +43,7 @@ const getApi = async () => {
     
     apiInstance = axios.create({
       baseURL: apiUrl,
-      timeout: 30000, // 30 second timeout
+      timeout: ENV_CONFIG.API_TIMEOUT,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',

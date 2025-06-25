@@ -31,6 +31,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png'
   },
   extra: {
-    localIp: '192.168.110.48'
-  }
+    localIp: '192.168.254.48'
+  },
+  plugins: [
+    "expo-localization"
+  ]
 }); 

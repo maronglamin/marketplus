@@ -22,6 +22,10 @@ model User {
   sellerKyc     SellerKyc?
   paymentMethods PaymentMethod[]
   settlements   Settlement[]
+  productViews  ProductView[]
+  productOrderInterests ProductOrderInterest[]
+  orders        Order[]   // Orders as customer
+  sellerOrders  Order[]   @relation("SellerOrders") // Orders as seller
 
   @@index([phoneNumber])
   @@index([createdAt])
@@ -99,11 +103,11 @@ model Product {
   id            String    @id @default(uuid())
   sellerId      String
   title         String
-  description   String
+  description   String?
   price         Decimal   @db.Decimal(10, 2)
   currencyCode  String    @db.VarChar(3)
   quantity      Int
-  categoryId    String
+  categoryId    String?
   condition     ProductCondition
   locationId    String
   status        ProductStatus
@@ -114,16 +118,20 @@ model Product {
   favorites     Int       @default(0)
   rating        Decimal?  @db.Decimal(3, 2)
   ratingCount   Int       @default(0)
-  isFeatured    Boolean   @default(false)
+  isFeatured    Boolean   @default(true)
   featuredUntil DateTime?
   metadata      Json?
 
   seller        User      @relation(fields: [sellerId], references: [id])
-  category      Category  @relation(fields: [categoryId], references: [id])
+  category      Category? @relation(fields: [categoryId], references: [id])
   location      Location  @relation(fields: [locationId], references: [id])
   images        ProductImage[]
   attributes    ProductAttribute[]
   translations  ProductTranslation[]
+  deliveryOptions ProductDeliveryOption[]
+  productViews  ProductView[]
+  productOrderInterests ProductOrderInterest[]
+  orderItems    OrderItem[]
 
   @@index([sellerId])
   @@index([categoryId])
@@ -228,6 +236,28 @@ model ProductTranslation {
   @@index([locale])
 }
 
+model ProductDeliveryOption {
+  id            String    @id @default(uuid())
+  productId     String
+  deliveryType  DeliveryType
+  name          String
+  description   String?
+  price         Decimal   @db.Decimal(10, 2)
+  currencyCode  String    @db.VarChar(3)
+  estimatedDays Int       // Estimated delivery time in days
+  isDefault     Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([deliveryType])
+  @@index([isActive])
+  @@index([isDefault])
+}
+
 model CategoryTranslation {
   id            String    @id @default(uuid())
   categoryId    String
@@ -245,7 +275,9 @@ model CategoryTranslation {
 
 enum ProductCondition {
   NEW
-  USED
+  EXCELLENT
+  VERY_GOOD
+  REFURBISHED
 }
 
 enum ProductStatus {
@@ -442,4 +474,208 @@ enum SettlementStatus {
 enum SettlementType {
   BANK_TRANSFER
   WALLET_TRANSFER
+}
+
+// Product view tracking for unique user views
+model ProductView {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String
+  deviceId  String?  // For anonymous users
+  ipAddress String?  // For additional tracking
+  viewedAt  DateTime @default(now())
+  
+  // Relations
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Composite unique constraint to prevent duplicate views
+  @@unique([productId, userId, deviceId])
+  @@index([productId])
+  @@index([userId])
+  @@index([viewedAt])
+  
+  @@map("product_views")
+}
+
+// Product Order Interest model for tracking user interest in products
+model ProductOrderInterest {
+  id                String    @id @default(uuid())
+  productId         String
+  userId            String
+  quantity          Int       @default(1)
+  originalPrice     Decimal   @db.Decimal(10, 2)
+  discountPrice     Decimal?  @db.Decimal(10, 2)  // Can be null if no discount
+  currencyCode      String    @db.VarChar(3)
+  totalAmount       Decimal   @db.Decimal(10, 2)  // Calculated total (with discount if applicable)
+  
+  // Order details
+  status            OrderInterestStatus @default(PENDING)
+  notes             String?   // User notes or special requests
+  preferredDeliveryDate DateTime?
+  deliveryAddress   String?
+  contactPhone      String?
+  
+  // Payment information
+  paymentMethod     String?   // Preferred payment method
+  paymentStatus     PaymentStatus @default(PENDING)
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  expiresAt         DateTime? // When the interest expires if not converted to order
+  
+  // Relations
+  product           Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([productId])
+  @@index([userId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
+  @@index([expiresAt])
+  
+  @@map("product_order_interests")
+}
+
+// Order model for actual purchases
+model Order {
+  id                String    @id @default(uuid())
+  orderNumber       String    @unique // Human-readable order number
+  userId            String
+  sellerId          String    // The seller of the products
+  status            OrderStatus @default(PENDING)
+  
+  // Order totals
+  subtotal          Decimal   @db.Decimal(10, 2)
+  taxAmount         Decimal   @db.Decimal(10, 2) @default(0)
+  shippingAmount    Decimal   @db.Decimal(10, 2) @default(0)
+  discountAmount    Decimal   @db.Decimal(10, 2) @default(0)
+  totalAmount       Decimal   @db.Decimal(10, 2)
+  currencyCode      String    @db.VarChar(3)
+  deliveryCurrency  String?   @db.VarChar(3) // Currency for delivery cost (can be different from product currency)
+  
+  // Customer information
+  customerName      String
+  customerEmail     String?
+  customerPhone     String
+  shippingAddress   String
+  billingAddress    String?
+  
+  // Payment information
+  paymentMethod     String
+  paymentStatus     PaymentStatus @default(PENDING)
+  paymentReference  String?   // External payment reference
+  paidAt            DateTime?
+  
+  // Shipping information
+  shippingMethod    String?
+  trackingNumber    String?
+  shippedAt         DateTime?
+  deliveredAt       DateTime?
+  
+  // Order metadata
+  notes             String?   // Customer notes
+  sellerNotes       String?   // Internal seller notes
+  metadata          Json?     // Additional order data
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  cancelledAt       DateTime?
+  
+  // Relations
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller            User      @relation("SellerOrders", fields: [sellerId], references: [id])
+  orderItems        OrderItem[]
+  
+  @@index([userId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([orderNumber])
+  @@index([createdAt])
+  
+  @@map("orders")
+}
+
+// Order Item model for individual products in an order
+model OrderItem {
+  id                String    @id @default(uuid())
+  orderId           String
+  productId         String
+  productSnapshot   Json      // Store product details at time of order
+  quantity          Int
+  unitPrice         Decimal   @db.Decimal(10, 2)
+  totalPrice        Decimal   @db.Decimal(10, 2)
+  
+  // Item status
+  status            OrderItemStatus @default(PENDING)
+  
+  // Timestamps
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  order             Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product           Product   @relation(fields: [productId], references: [id])
+  
+  @@index([orderId])
+  @@index([productId])
+  @@index([status])
+  
+  @@map("order_items")
+}
+
+// Enums for ProductOrderInterest
+enum OrderInterestStatus {
+  PENDING           // Initial interest expressed
+  CONFIRMED         // Seller has confirmed interest
+  NEGOTIATING       // Price or terms being negotiated
+  ACCEPTED          // Interest accepted, ready for order
+  REJECTED          // Interest rejected by seller
+  EXPIRED           // Interest expired
+  CANCELLED         // Interest cancelled by user
+  CONVERTED_TO_ORDER // Converted to actual order
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+// Enums for Order system
+enum OrderStatus {
+  PENDING           // Order created, waiting for payment
+  CONFIRMED         // Payment confirmed, order being processed
+  PROCESSING        // Order is being prepared
+  SHIPPED           // Order has been shipped
+  DELIVERED         // Order has been delivered
+  AUTHORIZED        // Order authorized by buyer for payment
+  CANCELLED         // Order cancelled
+  REFUNDED          // Order refunded
+  COMPLETED         // Order completed successfully
+}
+
+enum OrderItemStatus {
+  PENDING           // Item pending processing
+  PROCESSING        // Item being prepared
+  SHIPPED           // Item shipped
+  DELIVERED         // Item delivered
+  CANCELLED         // Item cancelled
+  REFUNDED          // Item refunded
+}
+
+enum DeliveryType {
+  STANDARD
+  EXPRESS
+  SAME_DAY
+  NEXT_DAY
+  PICKUP
+  INTERNATIONAL
 } 
