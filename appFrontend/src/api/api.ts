@@ -1,8 +1,13 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+
+// Get the API base URL
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.254.48';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 const api = axios.create({
-  baseURL: 'https://api.marketplace.com', // Replace with your actual API URL
+  baseURL: API_URL, // Use the correct local development URL
   headers: {
     'Content-Type': 'application/json',
   },
@@ -12,6 +17,13 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     const token = await AsyncStorage.getItem('token');
+    console.log('API Request:', {
+      url: config.url,
+      method: config.method,
+      hasToken: !!token,
+      tokenLength: token?.length
+    });
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

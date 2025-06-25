@@ -16,6 +16,7 @@ import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
 import productRoutes from './routes/products';
 import orderRoutes from './routes/orders';
+import paymentMethodRoutes from './routes/paymentMethods';
 
 const app = express();
 
@@ -55,7 +56,7 @@ app.use(helmet({
 
 // CORS configuration
 const corsOptions = {
-  origin: config.cors.origins,
+  origin: '*', // Temporarily allow all origins for development
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -64,8 +65,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Request size limits
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(express.json({ limit: '50mb' })); // Increased for image uploads
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -97,11 +98,17 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/payment-methods', paymentMethodRoutes);
 app.use('/api/upload', uploadRouter);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+// Health check endpoint under /api
+app.get('/api/health', (req, res) => {
+  logger.info('Health check requested');
+  res.status(200).json({ 
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 // Error handling

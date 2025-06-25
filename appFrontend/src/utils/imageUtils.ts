@@ -1,8 +1,4 @@
-import Constants from 'expo-constants';
-
-// Get the API base URL
-const API_URL = Constants.expoConfig?.extra?.localIp || '192.168.110.48';
-const BASE_URL = `http://${API_URL}:3000`;
+import { ENV_CONFIG } from '../config/env';
 
 // Cache for processed URLs to avoid repeated processing
 const urlCache = new Map<string, string>();
@@ -29,7 +25,7 @@ export const getImageUrl = (relativePath: string | null): string | null => {
   else {
     // Ensure the relative path starts with a forward slash
     const normalizedPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-    fullUrl = `${BASE_URL}${normalizedPath}`;
+    fullUrl = `${ENV_CONFIG.API_BASE_URL}${normalizedPath}`;
   }
   
   // Cache the result

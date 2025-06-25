@@ -194,42 +194,66 @@ export function SellerDashboard() {
           </View>
 
           <ScrollView style={styles.content}>
-            <View style={styles.statsContainer}>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{stats.totalProducts}</Text>
-                <Text style={styles.statLabel}>Total Products</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{stats.activeProducts}</Text>
-                <Text style={styles.statLabel}>Active Products</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{stats.totalSales}</Text>
-                <Text style={styles.statLabel}>Total Sales</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{stats.pendingOrders}</Text>
-                <Text style={styles.statLabel}>Pending Orders</Text>
-              </View>
-            </View>
 
-            <View style={styles.revenueCard}>
+          <View style={styles.revenueCard}>
+            <View style={styles.revenueHeader}>
               <Text style={styles.revenueTitle}>Total Revenue</Text>
-              <Text style={styles.revenueValue}>${stats.totalRevenue.toLocaleString()}</Text>
-              <View style={styles.ratingContainer}>
-                <Ionicons name="star" size={16} color="#F59E0B" />
-                <Text style={styles.rating}>{stats.averageRating}</Text>
-                <Text style={styles.ratingLabel}>Average Rating</Text>
+              <TouchableOpacity
+                style={styles.viewAllButton}
+                onPress={() => navigation.navigate('RevenueDetails' as any)}
+              >
+                <Text style={styles.viewAllText}>View All</Text>
+                <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.revenueValue}>${stats.totalRevenue.toLocaleString()}</Text>
+            <Text style={styles.revenueSubtitle}>USD (Default)</Text>
+            <View style={styles.ratingContainer}>
+              <Ionicons name="star" size={16} color="#F59E0B" />
+              <Text style={styles.rating}>{stats.averageRating}</Text>
+              <Text style={styles.ratingLabel}>Average Rating</Text>
+            </View>
+          </View>
+
+
+            <View style={styles.statsContainer}>
+              <View style={styles.statsRow}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>{stats.totalProducts}</Text>
+                  <Text style={styles.statLabel}>Total Products</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>{stats.activeProducts}</Text>
+                  <Text style={styles.statLabel}>Active Products</Text>
+                </View>
+              </View>
+              <View style={styles.statsRow}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>{stats.totalSales}</Text>
+                  <Text style={styles.statLabel}>Total Sales</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>{stats.pendingOrders}</Text>
+                  <Text style={styles.statLabel}>Pending Orders</Text>
+                </View>
               </View>
             </View>
 
             <View style={styles.actionsContainer}>
               <TouchableOpacity
                 style={styles.actionButton}
-                onPress={() => navigation.navigate('AddProduct')}
+                onPress={() => navigation.navigate('AddProduct' as any)}
               >
                 <Ionicons name="add-circle-outline" size={24} color="#2563EB" />
                 <Text style={styles.actionButtonText}>Add New Product</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => navigation.navigate('ProductListing')}
+              >
+                <Ionicons name="list-outline" size={24} color="#2563EB" />
+                <Text style={styles.actionButtonText}>Product Listing</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -321,17 +345,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statsContainer: {
+    flexDirection: 'column',
+    gap: 16,
+  },
+  statsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 16,
     gap: 16,
   },
   statCard: {
     flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     padding: 16,
-    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
     alignItems: 'center',
   },
   statValue: {
@@ -350,6 +383,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563EB',
     borderRadius: 12,
   },
+  revenueHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   revenueTitle: {
     fontSize: 16,
     color: '#FFFFFF',
@@ -360,6 +398,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginVertical: 8,
+  },
+  revenueSubtitle: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    opacity: 0.9,
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -376,6 +419,17 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     opacity: 0.9,
     marginLeft: 4,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginRight: 4,
   },
   actionsContainer: {
     padding: 16,
