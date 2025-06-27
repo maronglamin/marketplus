@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
-  SafeAreaView,
   StatusBar,
   Platform,
   Alert,
@@ -15,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Keyboard,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../navigation/AppNavigator';
@@ -24,6 +24,7 @@ import { getImageUrl } from '../config/env';
 import { api } from '../api/api';
 import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { notificationService } from '../services/notificationService';
 
 // Debounce utility
 const debounce = (func: Function, wait: number) => {
@@ -74,6 +75,28 @@ export function ShowInterest() {
       scrollToBottom();
     }
   }, [messages]);
+
+  // Add notification listeners
+  useEffect(() => {
+    const notificationListener = notificationService.addNotificationListener((notification) => {
+      console.log('ShowInterest: Received notification:', notification);
+      // Refresh messages when a new message notification is received
+      const data = notification.request.content.data as any;
+      if (data?.type === 'new_message' && data?.interestId) {
+        loadInterestMessages(data.interestId);
+      }
+    });
+
+    const notificationResponseListener = notificationService.addNotificationResponseListener((response) => {
+      console.log('ShowInterest: Notification tapped:', response);
+      // Handle notification tap if needed
+    });
+
+    return () => {
+      notificationService.removeNotificationListener(notificationListener);
+      notificationService.removeNotificationListener(notificationResponseListener);
+    };
+  }, []);
 
   // Single useEffect to handle all initial loading
   useEffect(() => {
@@ -149,6 +172,19 @@ export function ShowInterest() {
           setLoading(false);
         }
         return;
+      }
+
+      // Register for push notifications
+      try {
+        console.log('ShowInterest: Registering for push notifications');
+        const fcmToken = await notificationService.registerForPushNotifications();
+        if (fcmToken && user?.id) {
+          console.log('ShowInterest: Sending FCM token to backend');
+          await notificationService.sendTokenToBackend(user.id);
+        }
+      } catch (notificationError) {
+        console.error('ShowInterest: Error registering for notifications:', notificationError);
+        // Don't fail the request if notification registration fails
       }
 
       // Set a timeout to prevent infinite loading
@@ -550,7 +586,7 @@ export function ShowInterest() {
         <StatusBar
           barStyle="dark-content"
           backgroundColor="#FFFFFF"
-          translucent
+          translucent={Platform.OS === 'android'}
         />
         <View style={styles.container}>
           <View style={styles.header}>
@@ -586,7 +622,7 @@ export function ShowInterest() {
         <StatusBar
           barStyle="dark-content"
           backgroundColor="#FFFFFF"
-          translucent
+          translucent={Platform.OS === 'android'}
         />
         <View style={styles.container}>
           <View style={styles.header}>
@@ -659,7 +695,7 @@ export function ShowInterest() {
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
-        translucent
+        translucent={Platform.OS === 'android'}
       />
       <KeyboardAvoidingView 
         style={styles.container}
@@ -873,19 +909,22 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    height: 56,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 16,
+    paddingBottom: 16,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 64 : 64,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   backButton: {
-    padding: 8,
+    padding: 12,
   },
   title: {
     fontSize: 18,

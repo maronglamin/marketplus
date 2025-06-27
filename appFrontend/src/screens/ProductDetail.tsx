@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import type { ScrollView as ScrollViewType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Header } from '../components/Header';
 import { Button } from '../components/Button';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -225,7 +226,7 @@ export function ProductDetail() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <Header
           title="Product Details"
           showBack
@@ -235,13 +236,13 @@ export function ProductDetail() {
           <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>Loading product details...</Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (error || !product) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <Header
           title="Product Details"
           showBack
@@ -253,19 +254,22 @@ export function ProductDetail() {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Header
         title="Product Details"
         showBack
         onBack={() => navigation.goBack()}
       />
       
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+      >
         <View style={styles.imageContainer}>
           <ScrollView
             ref={scrollViewRef}
@@ -419,17 +423,12 @@ export function ProductDetail() {
           </View>
 
           <View style={styles.deliveryContainer}>
-            <TouchableOpacity 
-              style={styles.deliveryItem}
-              onPress={() => setShowDeliveryModal(true)}
-            >
+            <View style={styles.deliveryItem}>
               <Ionicons name="car" size={20} color="#2563EB" />
               <Text style={styles.deliveryText}>
-                {loadingDeliveryOptions ? 'Loading...' : 
-                 deliveryOptions.length > 0 ? 'Delivery' : 'No Delivery'}
+                Delivery options at checkout
               </Text>
-              <Ionicons name="chevron-forward" size={16} color="#6B7280" />
-            </TouchableOpacity>
+            </View>
             <View style={styles.deliveryItem}>
               <Ionicons name="shield-checkmark" size={20} color="#2563EB" />
               <Text style={styles.deliveryText}>Secure Payment</Text>
@@ -560,7 +559,7 @@ export function ProductDetail() {
           onPress={() => navigation.navigate('Order', { productId: product.id })}
         />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -571,6 +570,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 0,
   },
   imageContainer: {
     position: 'relative',
@@ -791,6 +793,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: 16,
+    paddingBottom: 32,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',

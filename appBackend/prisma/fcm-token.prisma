@@ -1,0 +1,20 @@
+// FCM Token model for push notifications
+model FCMToken {
+  id            String    @id @default(uuid())
+  userId        String
+  token         String    @unique
+  deviceType    String    // 'ios' | 'android' | 'web'
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([deviceType])
+  @@index([createdAt])
+  @@index([updatedAt])
+
+  @@map("fcm_tokens")
+} 

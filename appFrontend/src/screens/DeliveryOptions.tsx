@@ -179,6 +179,7 @@ export function DeliveryOptions() {
             style={styles.content}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.contentContainer}
           >
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Configure Delivery Options</Text>
@@ -310,13 +311,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    height: 56,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 16,
+    paddingBottom: 16,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 64 : 64,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
-  backButton: { padding: 8 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#111827' },
+  backButton: { 
+    padding: 12 
+  },
+  title: { 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    color: '#111827' 
+  },
   saveButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -407,6 +416,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: 12,
     marginTop: 8,
+    paddingBottom: 10,
   },
   addButtonText: { fontSize: 16, fontWeight: '600', color: '#2563EB', marginLeft: 8 },
   currencyScrollView: {
@@ -444,5 +454,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#FFFFFF',
     marginBottom: 8,
+  },
+  contentContainer: {
+    paddingBottom: 16,
   },
 }); 

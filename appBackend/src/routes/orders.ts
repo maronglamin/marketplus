@@ -267,6 +267,10 @@ router.get('/my-orders', authenticate, async (req: AuthenticatedRequest, res) =>
         status: order.status,
         shippingMethod: order.shippingMethod,
         createdAt: order.createdAt,
+        // Payment information
+        paymentStatus: order.paymentStatus,
+        paymentMethod: order.paymentMethod,
+        paidAt: order.paidAt,
         items: order.orderItems.map(item => ({
           id: item.id,
           quantity: item.quantity,
@@ -374,6 +378,10 @@ router.get('/customer-orders', authenticate, async (req: AuthenticatedRequest, r
         status: order.status,
         shippingMethod: order.shippingMethod,
         createdAt: order.createdAt,
+        // Payment information
+        paymentStatus: order.paymentStatus,
+        paymentMethod: order.paymentMethod,
+        paidAt: order.paidAt,
         customer: {
           id: order.user.id,
           name: `${order.user.firstName} ${order.user.lastName}`,
@@ -530,7 +538,12 @@ router.get('/:orderId', authenticate, async (req: AuthenticatedRequest, res) => 
           // If it's not valid JSON, return it as a simple string
           return { address: order.shippingAddress };
         }
-      })()
+      })(),
+      // Payment information
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      paymentReference: order.paymentReference,
+      paidAt: order.paidAt
     });
   } catch (error) {
     logger.error('Error fetching order details:', error);

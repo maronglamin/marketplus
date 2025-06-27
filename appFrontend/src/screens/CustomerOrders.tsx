@@ -6,12 +6,12 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  SafeAreaView,
   StatusBar,
   Platform,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +25,7 @@ import { kycService } from '../services/kycService';
 import Constants from 'expo-constants';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.254.48';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.40.48';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type CustomerOrdersNavigationProp = NativeStackNavigationProp<AppStackParamList, 'CustomerOrders'>;
@@ -201,6 +201,18 @@ export function CustomerOrders() {
     }
   };
 
+  const getPaymentStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'pending': return '#F59E0B';
+      case 'authorized': return '#3B82F6';
+      case 'paid': return '#10B981';
+      case 'failed': return '#EF4444';
+      case 'refunded': return '#6B7280';
+      case 'cancelled': return '#EF4444';
+      default: return '#6B7280';
+    }
+  };
+
   const formatPrice = (price: number, currencyCode: string) => {
     const currencySymbols: { [key: string]: string } = {
       USD: '$',
@@ -309,7 +321,11 @@ export function CustomerOrders() {
   if (loading || kycLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
+        <StatusBar 
+          barStyle="dark-content" 
+          backgroundColor="#FFFFFF" 
+          translucent={Platform.OS === 'android'}
+        />
         <View style={styles.container}>
           <View style={styles.header}>
             <TouchableOpacity
@@ -335,7 +351,7 @@ export function CustomerOrders() {
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
-        translucent
+        translucent={Platform.OS === 'android'}
       />
       <View style={styles.container}>
         <View style={styles.header}>
@@ -464,20 +480,23 @@ export function CustomerOrders() {
                           </Text>
                         )}
                       </View>
-                      <View
-                        style={[
-                          styles.statusBadge,
-                          { backgroundColor: `${getStatusColor(order.status)}20` },
-                        ]}
-                      >
-                        <Text
+                      <View style={styles.statusContainer}>
+                        {/* Order Status Badge */}
+                        <View
                           style={[
-                            styles.statusText,
-                            { color: getStatusColor(order.status) },
+                            styles.statusBadge,
+                            { backgroundColor: `${getStatusColor(order.status)}20` },
                           ]}
                         >
-                          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                        </Text>
+                          <Text
+                            style={[
+                              styles.statusText,
+                              { color: getStatusColor(order.status) },
+                            ]}
+                          >
+                            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          </Text>
+                        </View>
                       </View>
                     </View>
 
@@ -524,11 +543,34 @@ export function CustomerOrders() {
                           {formatPrice(order.totalAmount, order.currencyCode)}
                         </Text>
                       </View>
-                      {order.shippingMethod && (
-                        <Text style={styles.shippingMethod}>
-                          Shipping: {order.shippingMethod}
-                        </Text>
-                      )}
+                      <View style={styles.orderFooterDetails}>
+                        {order.shippingMethod && (
+                          <Text style={styles.shippingMethod}>
+                            Shipping: {order.shippingMethod}
+                          </Text>
+                        )}
+                        {/* Payment Status with Checkmark */}
+                        {(order as any).paymentStatus && (
+                          <View style={styles.paymentStatusRow}>
+                            <Text style={styles.paymentStatusLabel}>Payment status:</Text>
+                            <View style={styles.paymentStatusContent}>
+                              <Ionicons 
+                                name={(order as any).paymentStatus?.toLowerCase() === 'paid' ? 'checkmark-circle' : 
+                                      (order as any).paymentStatus?.toLowerCase() === 'pending' ? 'time' : 
+                                      (order as any).paymentStatus?.toLowerCase() === 'failed' ? 'close-circle' : 'card'} 
+                                size={16} 
+                                color={getPaymentStatusColor((order as any).paymentStatus)} 
+                              />
+                              <Text style={[
+                                styles.paymentStatusText,
+                                { color: getPaymentStatusColor((order as any).paymentStatus) }
+                              ]}>
+                                {(order as any).paymentStatus.charAt(0).toUpperCase() + (order as any).paymentStatus.slice(1)}
+                              </Text>
+                            </View>
+                          </View>
+                        )}
+                      </View>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -553,87 +595,89 @@ export function CustomerOrders() {
         </ScrollView>
 
         {/* Bottom Navigation */}
-        <View style={styles.bottomNav}>
-          <TouchableOpacity
-            style={[styles.navItem, isActiveTab('home') && styles.activeNavItem]}
-            onPress={() => handleTabPress('home')}
-          >
-            <Ionicons
-              name={isActiveTab('home') ? 'home' : 'home-outline'}
-              size={24}
-              color={isActiveTab('home') ? '#2563EB' : '#6B7280'}
-            />
-            <Text
-              style={[
-                styles.navText,
-                isActiveTab('home') && styles.activeNavText,
-              ]}
+        <SafeAreaView edges={['bottom']} style={styles.bottomNavContainer}>
+          <View style={styles.bottomNav}>
+            <TouchableOpacity
+              style={[styles.navItem, isActiveTab('home') && styles.activeNavItem]}
+              onPress={() => handleTabPress('home')}
             >
-              Home
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.navItem, isActiveTab('orders') && styles.activeNavItem]}
-            onPress={() => handleTabPress('orders')}
-          >
-            <Ionicons
-              name={isActiveTab('orders') ? 'bag' : 'bag-outline'}
-              size={24}
-              color={isActiveTab('orders') ? '#2563EB' : '#6B7280'}
-            />
-            <Text
-              style={[
-                styles.navText,
-                isActiveTab('orders') && styles.activeNavText,
-              ]}
+              <Ionicons
+                name={isActiveTab('home') ? 'home' : 'home-outline'}
+                size={24}
+                color={isActiveTab('home') ? '#2563EB' : '#6B7280'}
+              />
+              <Text
+                style={[
+                  styles.navText,
+                  isActiveTab('home') && styles.activeNavText,
+                ]}
+              >
+                Home
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, isActiveTab('orders') && styles.activeNavItem]}
+              onPress={() => handleTabPress('orders')}
             >
-              Orders
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.navItem,
-              isActiveTab('interestmanagement') && styles.activeNavItem,
-            ]}
-            onPress={() => handleTabPress('interests')}
-          >
-            <Ionicons
-              name={
-                isActiveTab('interestmanagement')
-                  ? 'heart'
-                  : 'heart-outline'
-              }
-              size={24}
-              color={isActiveTab('interestmanagement') ? '#2563EB' : '#6B7280'}
-            />
-            <Text
+              <Ionicons
+                name={isActiveTab('orders') ? 'bag' : 'bag-outline'}
+                size={24}
+                color={isActiveTab('orders') ? '#2563EB' : '#6B7280'}
+              />
+              <Text
+                style={[
+                  styles.navText,
+                  isActiveTab('orders') && styles.activeNavText,
+                ]}
+              >
+                Orders
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[
-                styles.navText,
-                isActiveTab('interestmanagement') && styles.activeNavText,
+                styles.navItem,
+                isActiveTab('interestmanagement') && styles.activeNavItem,
               ]}
+              onPress={() => handleTabPress('interests')}
             >
-              Interests
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.navItem, isActiveTab('sellerdashboard') && styles.activeNavItem]}
-            onPress={() => handleTabPress('account')}
-          >
-            <Ionicons
-              name={isActiveTab('sellerdashboard') ? 'person' : 'person-outline'}
-              size={24}
-              color={isActiveTab('sellerdashboard') ? '#2563EB' : '#6B7280'}
-            />
-            <Text
-              style={[
-                styles.navText,
-                isActiveTab('sellerdashboard') && styles.activeNavText,
-              ]}
+              <Ionicons
+                name={
+                  isActiveTab('interestmanagement')
+                    ? 'heart'
+                    : 'heart-outline'
+                }
+                size={24}
+                color={isActiveTab('interestmanagement') ? '#2563EB' : '#6B7280'}
+              />
+              <Text
+                style={[
+                  styles.navText,
+                  isActiveTab('interestmanagement') && styles.activeNavText,
+                ]}
+              >
+                Interests
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, isActiveTab('sellerdashboard') && styles.activeNavItem]}
+              onPress={() => handleTabPress('account')}
             >
-              Seller
-            </Text>
-          </TouchableOpacity>
-        </View>
+              <Ionicons
+                name={isActiveTab('sellerdashboard') ? 'person' : 'person-outline'}
+                size={24}
+                color={isActiveTab('sellerdashboard') ? '#2563EB' : '#6B7280'}
+              />
+              <Text
+                style={[
+                  styles.navText,
+                  isActiveTab('sellerdashboard') && styles.activeNavText,
+                ]}
+              >
+                Seller
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
 
         {/* Date Range Picker Modal */}
         <DateRangePicker
@@ -655,19 +699,22 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    height: 56,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 16,
+    paddingBottom: 16,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 64 : 64,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   backButton: {
-    padding: 8,
+    padding: 12,
   },
   title: {
     fontSize: 18,
@@ -677,15 +724,16 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
   exportButton: {
-    padding: 8,
+    padding: 12,
   },
   exportButtonDisabled: {
     opacity: 0.5,
   },
   refreshButton: {
-    padding: 8,
+    padding: 12,
   },
   content: {
     flex: 1,
@@ -865,13 +913,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 16,
-    paddingTop: 8,
+    paddingVertical: 0,
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 5,
   },
   activeNavItem: {
     // Active state styling
@@ -954,5 +1001,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     marginTop: 4,
+  },
+  statusContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  paymentStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  paymentStatusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  orderFooterDetails: {
+    flexDirection: 'column',
+    gap: 4,
+  },
+  paymentStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  paymentStatusLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginRight: 8,
+  },
+  paymentStatusContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  bottomNavContainer: {
+    backgroundColor: '#FFFFFF',
   },
 }); 

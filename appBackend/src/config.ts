@@ -11,6 +11,8 @@ logger.debug('Environment variables:', {
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN ? '[REDACTED]' : undefined,
   TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER,
   CORS_ORIGINS: process.env.CORS_ORIGINS,
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ? '[REDACTED]' : undefined,
+  STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY ? '[REDACTED]' : undefined,
 });
 
 // Define the schema for environment variables
@@ -30,6 +32,10 @@ const envSchema = z.object({
   TWILIO_ACCOUNT_SID: z.string(),
   TWILIO_AUTH_TOKEN: z.string(),
   TWILIO_PHONE_NUMBER: z.string(),
+  
+  // Stripe
+  STRIPE_SECRET_KEY: z.string(),
+  STRIPE_PUBLISHABLE_KEY: z.string(),
   
   // CORS
   CORS_ORIGINS: z.string().transform((val) => val.split(',')),
@@ -66,6 +72,11 @@ try {
       accountSid: env.TWILIO_ACCOUNT_SID,
       authToken: env.TWILIO_AUTH_TOKEN,
       phoneNumber: env.TWILIO_PHONE_NUMBER,
+    },
+    
+    stripe: {
+      secretKey: env.STRIPE_SECRET_KEY,
+      publishableKey: env.STRIPE_PUBLISHABLE_KEY,
     },
     
     cors: {

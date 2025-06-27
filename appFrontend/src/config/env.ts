@@ -3,11 +3,11 @@ import Constants from 'expo-constants';
 // Centralized environment configuration
 export const ENV_CONFIG = {
   // API Configuration
-  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || `http://192.168.254.48:3000`,
+  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || `http://192.168.40.48:3000`,
   API_TIMEOUT: 10000,
   
   // Local IP for development
-  LOCAL_IP: Constants.expoConfig?.extra?.localIp || '192.168.254.48',
+  LOCAL_IP: Constants.expoConfig?.extra?.localIp || '192.168.40.48',
   
   // App Configuration
   APP_NAME: 'Marketplace',

@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 interface AuthenticatedRequest extends express.Request {
   user?: {
     id: string;
-    phoneNumber: string;
+    deviceId: string;
   };
 }
 
@@ -28,10 +28,14 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
         userId: userId,
         status: 'ACTIVE'
       },
-      orderBy: {
-        isDefault: 'desc',
-        createdAt: 'desc'
-      }
+      orderBy: [
+        {
+          isDefault: 'desc'
+        },
+        {
+          createdAt: 'desc'
+        }
+      ]
     });
 
     logger.info('Payment methods fetched:', {
@@ -45,8 +49,11 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
         type: method.type,
         provider: method.provider,
         accountName: method.accountName,
+        accountId: method.accountId,
         isDefault: method.isDefault,
         status: method.status,
+        userId: method.userId,
+        metadata: method.metadata,
         createdAt: method.createdAt
       }))
     });
@@ -55,6 +62,89 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
     logger.error('Error fetching payment methods:', error);
     res.status(500).json({
       message: 'Failed to fetch payment methods',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Create a new payment method
+router.post('/', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const { type, provider, accountId, accountName, isDefault, metadata } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    // Validate required fields
+    if (!type || !provider || !accountId || !accountName) {
+      return res.status(400).json({
+        message: 'Missing required fields: type, provider, accountId, accountName'
+      });
+    }
+
+    // Validate payment type
+    const validTypes = ['BANK_TRANSFER', 'CREDIT_CARD', 'DEBIT_CARD', 'MOBILE_MONEY', 'CRYPTO', 'DIGITAL_WALLET'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({
+        message: 'Invalid payment type. Must be one of: ' + validTypes.join(', ')
+      });
+    }
+
+    // If this is set as default, unset other defaults for this user
+    if (isDefault) {
+      await prisma.paymentMethod.updateMany({
+        where: {
+          userId: userId,
+          isDefault: true
+        },
+        data: {
+          isDefault: false
+        }
+      });
+    }
+
+    // Create the payment method
+    const paymentMethod = await prisma.paymentMethod.create({
+      data: {
+        userId,
+        type,
+        provider,
+        accountId,
+        accountName,
+        isDefault: isDefault || false,
+        metadata: metadata || {}
+      }
+    });
+
+    logger.info('Payment method created successfully:', {
+      userId,
+      paymentMethodId: paymentMethod.id,
+      type,
+      provider
+    });
+
+    res.status(201).json({
+      message: 'Payment method created successfully',
+      paymentMethod: {
+        id: paymentMethod.id,
+        type: paymentMethod.type,
+        provider: paymentMethod.provider,
+        accountName: paymentMethod.accountName,
+        accountId: paymentMethod.accountId,
+        isDefault: paymentMethod.isDefault,
+        status: paymentMethod.status,
+        userId: paymentMethod.userId,
+        metadata: paymentMethod.metadata,
+        createdAt: paymentMethod.createdAt
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error creating payment method:', error);
+    res.status(500).json({
+      message: 'Failed to create payment method',
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }

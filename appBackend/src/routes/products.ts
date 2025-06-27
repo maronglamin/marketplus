@@ -2,6 +2,7 @@ import express from 'express';
 import { logger } from '../utils/logger';
 import { PrismaClient, ProductCondition, ProductStatus } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
+import { notificationService } from '../services/notificationService';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -711,7 +712,7 @@ router.get('/:productId', authenticate, async (req: AuthRequest, res) => {
       ratingCount: product.ratingCount,
       description: `Experience premium quality with this ${product.title}. Perfect for your needs.\n\n${product.description || ''}`,
       images: product.images.length > 0 
-        ? product.images.map(img => `http://192.168.254.48:3000${img.imageUrl}`)
+        ? product.images.map(img => `http://192.168.40.48:3000${img.imageUrl}`)
         : ['https://via.placeholder.com/400x300?text=No+Image'],
       seller: {
         name: product.seller.sellerKyc?.businessName || `${product.seller.firstName} ${product.seller.lastName}`,
@@ -1639,8 +1640,10 @@ router.patch('/interests/:interestId/status', authenticate, async (req: AuthRequ
       where: { id: interestId },
       include: {
         product: {
-          select: {
-            sellerId: true }
+          select: { 
+            sellerId: true,
+            title: true
+          }
         }
       }
     });
@@ -1687,7 +1690,10 @@ router.post('/interests/:interestId/messages', authenticate, async (req: AuthReq
       where: { id: interestId },
       include: {
         product: {
-          select: { sellerId: true }
+          select: { 
+            sellerId: true,
+            title: true
+          }
         },
         user: {
           select: {
@@ -1751,6 +1757,31 @@ router.post('/interests/:interestId/messages', authenticate, async (req: AuthReq
       senderName,
       createdAt: new Date().toISOString()
     };
+
+    // Send notification to the other party (seller if buyer sent message, buyer if seller sent message)
+    try {
+      if (req.user.id === interest.userId) {
+        // Buyer sent message, notify seller
+        await notificationService.sendMessageNotificationToSeller(
+          interest.product.sellerId,
+          senderName,
+          interest.product.title,
+          messageContent,
+          interestId
+        );
+      } else {
+        // Seller sent message, notify buyer
+        await notificationService.sendMessageNotificationToBuyer(
+          interest.userId,
+          interest.product.title,
+          messageContent,
+          interestId
+        );
+      }
+    } catch (notificationError) {
+      logger.error('Error sending notification:', notificationError);
+      // Don't fail the request if notification fails
+    }
 
     logger.info('Message added to interest:', { interestId, senderId: req.user.id });
     res.json(newMessage);

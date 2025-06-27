@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "04ad20e1-cff1-4422-a7b3-bdb123420968"
+      }
+    },
+    "android": {
+      "package": "com.afanglamin.marketplace"
+    },
+    "ios": {
+      "bundleIdentifier": "com.afanglamin.marketplace",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

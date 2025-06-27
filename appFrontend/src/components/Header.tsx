@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Platform,
 } from 'react-native';
@@ -30,13 +29,13 @@ export function Header({
   onNotificationPress,
 }: HeaderProps) {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.container}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor="#F9FAFB"
-        translucent
+        backgroundColor="#FFFFFF"
+        translucent={Platform.OS === 'android'}
       />
-      <View style={styles.container}>
+      <View style={styles.header}>
         <View style={styles.left}>
           {showBack && (
             <TouchableOpacity onPress={onBack} style={styles.iconButton}>
@@ -60,22 +59,25 @@ export function Header({
           )}
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    backgroundColor: '#F9FAFB',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-  },
   container: {
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F9FAFB',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 16,
+    paddingBottom: 16,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 64 : 64,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   left: {
     flexDirection: 'row',
@@ -91,7 +93,7 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   iconButton: {
-    padding: 8,
+    padding: 12,
     marginHorizontal: 4,
   },
 }); 

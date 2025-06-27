@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Alert,
@@ -16,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Header } from '../components/Header';
@@ -27,10 +27,14 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/api';
 import { deliveryOptionsService, type DeliveryOption } from '../services/deliveryOptionsService';
 import { WorldCurrencyPicker } from '../components/WorldCurrencyPicker';
+import { MobileWalletPicker } from '../components/MobileWalletPicker';
+import { mobileWalletService, type MobileWalletProvider } from '../services/mobileWalletService';
+import { StripePayment } from '../components/StripePayment';
+import { stripeService } from '../services/stripeService';
 import Constants from 'expo-constants';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.254.48';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.40.48';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -82,12 +86,19 @@ interface Order {
     name: string;
     phone: string;
   };
+  // Payment information
+  paymentStatus?: string;
+  paymentMethod?: string;
+  paymentReference?: string;
+  paidAt?: string;
 }
 
 export function OrderDetails() {
   const navigation = useNavigation<OrderDetailsNavigationProp>();
   const route = useRoute();
   const { orderId } = route.params as { orderId: string };
+  
+  const { user, token, refreshUser } = useAuth();
   
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,12 +115,511 @@ export function OrderDetails() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
+  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
+  const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<{[key: string]: boolean}>({
+    card: false,
+    mobileWallets: false,
+    cash: false,
+    bankTransfer: false,
+    crypto: false,
+  });
 
-  const { user, token, refreshUser } = useAuth();
+  // Selected payment method for checkout
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+
+  // Payment method form data
+  const [paymentMethodForms, setPaymentMethodForms] = useState<{[key: string]: any}>({
+    card: {
+      provider: '',
+      cardNumber: '',
+      cardholderName: '',
+      expiryDate: '',
+      cvv: '',
+      isDefault: false,
+    },
+    mobileWallets: {
+      provider: '',
+      phoneNumber: user?.phoneNumber || '',
+      walletType: '',
+      isDefault: false,
+    },
+    cash: {
+      provider: 'Cash on Delivery',
+      accountId: 'CASH',
+      accountName: 'Cash Payment',
+      isDefault: false,
+    },
+    bankTransfer: {
+      provider: '',
+      accountName: '',
+      accountNumber: '',
+      bankName: '',
+      swiftCode: '',
+      isDefault: false,
+    },
+    crypto: {
+      provider: '',
+      walletAddress: '',
+      walletType: '',
+      isDefault: false,
+    },
+  });
+
+  // Expanded payment method states
+  const [expandedPaymentMethods, setExpandedPaymentMethods] = useState<{[key: string]: boolean}>({
+    card: false,
+    mobileWallets: false,
+    cash: false,
+    bankTransfer: false,
+    crypto: false,
+  });
+
+  // Mobile wallet provider selection
+  const [selectedMobileWalletProvider, setSelectedMobileWalletProvider] = useState<string>('');
+
+  // Stripe payment state
+  const [showStripePayment, setShowStripePayment] = useState(false);
+  const [processingStripePayment, setProcessingStripePayment] = useState(false);
+
+  // Helper function to get payment method display name
+  const getPaymentMethodDisplayName = (method: any) => {
+    if (method.provider) {
+      return method.provider;
+    }
+    
+    switch (method.type) {
+      case 'CREDIT_CARD':
+        return 'Credit Card';
+      case 'MOBILE_MONEY':
+        return 'Mobile Money';
+      case 'BANK_TRANSFER':
+        return 'Bank Transfer';
+      case 'CRYPTO':
+        return 'Cryptocurrency';
+      case 'DIGITAL_WALLET':
+        return 'Digital Wallet';
+      default:
+        return method.type || 'Unknown Payment Method';
+    }
+  };
 
   // Get delivery type labels
   const deliveryTypeLabels = deliveryOptionsService.getDeliveryTypeLabels();
   
+  // Payment method options
+  const paymentMethodOptions = [
+    {
+      id: 'card',
+      name: 'Card',
+      description: 'Credit and debit cards',
+      icon: 'card-outline',
+      enabled: selectedPaymentMethods.card,
+    },
+    {
+      id: 'mobileWallets',
+      name: 'Mobile Wallets',
+      description: 'Apple Pay, Google Pay, etc.',
+      icon: 'phone-portrait-outline',
+      enabled: selectedPaymentMethods.mobileWallets,
+    },
+    {
+      id: 'cash',
+      name: 'Cash',
+      description: 'Cash on delivery',
+      icon: 'cash-outline',
+      enabled: selectedPaymentMethods.cash,
+    },
+    {
+      id: 'bankTransfer',
+      name: 'Bank Transfer',
+      description: 'Direct bank transfer',
+      icon: 'business-outline',
+      enabled: selectedPaymentMethods.bankTransfer,
+    },
+    {
+      id: 'crypto',
+      name: 'Cryptocurrency',
+      description: 'Bitcoin, Ethereum, etc.',
+      icon: 'logo-bitcoin',
+      enabled: selectedPaymentMethods.crypto,
+    },
+  ];
+
+  const handlePaymentMethodToggle = (methodId: string) => {
+    setSelectedPaymentMethods(prev => ({
+      ...prev,
+      [methodId]: !prev[methodId]
+    }));
+    
+    // If turning on, expand the form
+    if (!selectedPaymentMethods[methodId]) {
+      setExpandedPaymentMethods(prev => ({
+        ...prev,
+        [methodId]: true
+      }));
+    }
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handlePaymentMethodSelect = (methodId: string) => {
+    setSelectedPaymentMethod(methodId);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handlePaymentFormUpdate = (methodId: string, field: string, value: any) => {
+    setPaymentMethodForms(prev => ({
+      ...prev,
+      [methodId]: {
+        ...prev[methodId],
+        [field]: value
+      }
+    }));
+  };
+
+  const handleMobileWalletProviderSelect = (providerId: string) => {
+    setSelectedMobileWalletProvider(providerId);
+    const provider = mobileWalletService.getProviderById(providerId);
+    if (provider) {
+      handlePaymentFormUpdate('mobileWallets', 'provider', provider.name);
+    }
+  };
+
+  const togglePaymentMethodExpansion = (methodId: string) => {
+    setExpandedPaymentMethods(prev => ({
+      ...prev,
+      [methodId]: !prev[methodId]
+    }));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const createPaymentMethod = async (methodId: string, formData: any) => {
+    try {
+      // Ensure user is authenticated before creating payment method
+      if (!user?.id) {
+        throw new Error('User not authenticated');
+      }
+
+      let paymentData: any = {
+        userId: user.id, // Add current user ID to payment method
+        isDefault: formData.isDefault || false,
+        metadata: {}
+      };
+
+      // Map form data to database fields based on payment type
+      switch (methodId) {
+        case 'card':
+          paymentData = {
+            userId: user.id, // Add current user ID
+            type: 'CREDIT_CARD',
+            provider: formData.provider,
+            accountId: formData.cardNumber.replace(/\s/g, '').slice(-4), // Last 4 digits
+            accountName: formData.cardholderName,
+            isDefault: formData.isDefault,
+            metadata: {
+              cardNumber: formData.cardNumber,
+              expiryDate: formData.expiryDate,
+              cvv: formData.cvv
+            }
+          };
+          break;
+        case 'mobileWallets':
+          const selectedProvider = mobileWalletService.getProviderById(selectedMobileWalletProvider);
+          paymentData = {
+            userId: user.id, // Add current user ID
+            type: 'MOBILE_MONEY',
+            provider: selectedProvider?.name || formData.provider,
+            accountId: formData.phoneNumber,
+            accountName: `${formData.walletType} - ${formData.phoneNumber}`,
+            isDefault: formData.isDefault,
+            metadata: {
+              phoneNumber: formData.phoneNumber,
+              walletType: formData.walletType,
+              providerId: selectedMobileWalletProvider
+            }
+          };
+          break;
+        case 'cash':
+          paymentData = {
+            userId: user.id, // Add current user ID
+            type: 'DIGITAL_WALLET',
+            provider: formData.provider,
+            accountId: formData.accountId,
+            accountName: formData.accountName,
+            isDefault: formData.isDefault,
+            metadata: {
+              paymentType: 'cash_on_delivery'
+            }
+          };
+          break;
+        case 'bankTransfer':
+          paymentData = {
+            userId: user.id, // Add current user ID
+            type: 'BANK_TRANSFER',
+            provider: formData.bankName,
+            accountId: formData.accountNumber,
+            accountName: formData.accountName,
+            isDefault: formData.isDefault,
+            metadata: {
+              accountNumber: formData.accountNumber,
+              swiftCode: formData.swiftCode
+            }
+          };
+          break;
+        case 'crypto':
+          paymentData = {
+            userId: user.id, // Add current user ID
+            type: 'CRYPTO',
+            provider: formData.provider,
+            accountId: formData.walletAddress,
+            accountName: `${formData.walletType} Wallet`,
+            isDefault: formData.isDefault,
+            metadata: {
+              walletAddress: formData.walletAddress,
+              walletType: formData.walletType
+            }
+          };
+          break;
+      }
+
+      console.log('Creating payment method for current user:', user.id, paymentData);
+
+      const response = await api.post('/api/payment-methods', paymentData);
+      
+      console.log('Payment method created successfully:', {
+        methodId,
+        userId: user.id,
+        paymentMethodId: response.data.paymentMethod.id
+      });
+
+      return response.data.paymentMethod;
+    } catch (error) {
+      console.error('Error creating payment method:', error);
+      throw error;
+    }
+  };
+
+  const handleSavePaymentMethods = async () => {
+    try {
+      const enabledMethods = Object.entries(selectedPaymentMethods)
+        .filter(([_, enabled]) => enabled)
+        .map(([methodId, _]) => methodId);
+
+      if (enabledMethods.length === 0) {
+        Alert.alert('Error', 'Please select at least one payment method');
+        return;
+      }
+
+      // Validate forms for enabled methods
+      const validationErrors: string[] = [];
+      
+      for (const methodId of enabledMethods) {
+        const formData = paymentMethodForms[methodId];
+        
+        switch (methodId) {
+          case 'card':
+            if (!formData.provider || !formData.cardNumber || !formData.cardholderName || !formData.expiryDate || !formData.cvv) {
+              validationErrors.push('Please complete all card details');
+            }
+            break;
+          case 'mobileWallets':
+            if (!selectedMobileWalletProvider || !formData.phoneNumber || !formData.walletType) {
+              validationErrors.push('Please complete all mobile wallet details');
+            }
+            break;
+          case 'bankTransfer':
+            if (!formData.provider || !formData.accountName || !formData.accountNumber || !formData.bankName) {
+              validationErrors.push('Please complete all bank transfer details');
+            }
+            break;
+          case 'crypto':
+            if (!formData.provider || !formData.walletAddress || !formData.walletType) {
+              validationErrors.push('Please complete all cryptocurrency details');
+            }
+            break;
+        }
+      }
+
+      if (validationErrors.length > 0) {
+        Alert.alert('Validation Error', validationErrors.join('\n'));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+
+      // Create payment methods
+      const createdMethods = [];
+      for (const methodId of enabledMethods) {
+        const formData = paymentMethodForms[methodId];
+        const paymentMethod = await createPaymentMethod(methodId, formData);
+        createdMethods.push(paymentMethod);
+      }
+
+      setShowAddPaymentModal(false);
+      Alert.alert('Success', `${createdMethods.length} payment method(s) added successfully`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      // Refresh payment methods list and proceed to checkout
+      setTimeout(async () => {
+        try {
+          // Re-check payment methods to get the updated list
+          const hasPaymentMethods = await checkPaymentMethodsWithUserFeedback();
+          
+          if (hasPaymentMethods) {
+            Alert.alert(
+              'Ready to Checkout',
+              'Your payment methods have been added successfully. Would you like to proceed with the payment now?',
+              [
+                {
+                  text: 'Later',
+                  style: 'cancel',
+                },
+                {
+                  text: 'Proceed to Payment',
+                  onPress: () => {
+                    console.log('Proceeding to checkout after adding payment methods for order:', order?.id);
+                    console.log('Available payment methods:', paymentMethods);
+                    
+                    // TODO: Navigate to checkout/payment screen
+                    // navigation.navigate('Checkout', { 
+                    //   orderId: order?.id,
+                    //   paymentMethods: paymentMethods,
+                    //   totalAmount: order?.totalAmount,
+                    //   currencyCode: order?.currencyCode
+                    // });
+                    
+                    // For now, show success message
+                    Alert.alert(
+                      'Payment Processing',
+                      'Redirecting to payment gateway...',
+                      [{ text: 'OK' }]
+                    );
+                  },
+                },
+              ]
+            );
+          } else {
+            Alert.alert(
+              'Payment Method Issue',
+              'Payment methods were added but there was an issue retrieving them. Please try the checkout process again.',
+              [{ text: 'OK' }]
+            );
+          }
+        } catch (error) {
+          console.error('Error checking payment methods after save:', error);
+          Alert.alert(
+            'Payment Method Added',
+            'Your payment methods have been added successfully. You can now proceed to checkout.',
+            [{ text: 'OK' }]
+          );
+        }
+      }, 1000); // Small delay to ensure backend has processed the new payment methods
+    } catch (error) {
+      console.error('Error saving payment methods:', error);
+      Alert.alert('Error', 'Failed to save payment methods. Please try again.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  };
+
+  // Stripe payment handlers
+  const handleStripePaymentSuccess = async (paymentIntentId: string) => {
+    try {
+      setProcessingStripePayment(true);
+      
+      // Call the payment success endpoint to update order status
+      const response = await api.post('/api/payments/payment-success', {
+        paymentIntentId,
+        orderId: order?.id
+      });
+      
+      if (response.data.success) {
+        // Update local order state with new payment status
+        if (order) {
+          setOrder({
+            ...order,
+            paymentStatus: response.data.order.paymentStatus,
+            status: response.data.order.status,
+            paidAt: response.data.order.paidAt
+          });
+        }
+        
+        Alert.alert(
+          'Payment Successful!',
+          `Your payment of ${formatPrice(order?.totalAmount || 0, order?.currencyCode || 'USD')} has been processed successfully.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setShowStripePayment(false);
+                setShowPaymentModal(false);
+                // Optionally navigate back or refresh
+                navigation.goBack();
+              },
+            },
+          ]
+        );
+        
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        throw new Error('Failed to update order status');
+      }
+    } catch (error) {
+      console.error('Error updating order after payment:', error);
+      Alert.alert('Payment Successful', 'Your payment was processed, but there was an issue updating the order status.');
+    } finally {
+      setProcessingStripePayment(false);
+    }
+  };
+
+  const handleStripePaymentError = (error: string) => {
+    Alert.alert('Payment Failed', error);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    setShowStripePayment(false);
+  };
+
+  const handleProceedToStripePayment = () => {
+    if (!order || !user) {
+      Alert.alert('Error', 'Order or user information is missing.');
+      return;
+    }
+    
+    setShowPaymentModal(false);
+    setShowStripePayment(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  // Pre-check payment methods for authorized orders
+  useEffect(() => {
+    const preCheckPaymentMethods = async () => {
+      // Only check if we have all required data, user is authenticated, and order is fully loaded
+      if (user?.id && order && !loading && order.status.toLowerCase() === 'authorized' && order.sellerId !== user.id) {
+        // Add a shorter delay to ensure API is ready and authentication is properly set
+        setTimeout(async () => {
+          try {
+            await checkPaymentMethods();
+          } catch (error) {
+            console.log('Pre-check payment methods failed, will retry when user clicks checkout:', error);
+            // Don't show error alert for pre-check, just log it
+          }
+        }, 1000); // Reduced from 5 seconds to 1 second for better performance
+      }
+    };
+
+    preCheckPaymentMethods();
+  }, [user, order, loading]);
+
+  // Set default payment method when payment methods are loaded
+  useEffect(() => {
+    if (paymentMethods.length > 0 && !selectedPaymentMethod) {
+      const defaultMethod = paymentMethods.find(method => method.isDefault);
+      if (defaultMethod) {
+        setSelectedPaymentMethod(defaultMethod.id);
+      } else {
+        // If no default, select the first one
+        setSelectedPaymentMethod(paymentMethods[0].id);
+      }
+    }
+  }, [paymentMethods, selectedPaymentMethod]);
+
   useEffect(() => {
     loadOrderDetails();
   }, [orderId]);
@@ -158,6 +668,14 @@ export function OrderDetails() {
       const response = await api.get(`/api/orders/${orderId}`);
       const orderData = response.data;
       
+      console.log('Order details loaded:', {
+        orderId,
+        status: orderData.status,
+        paymentStatus: orderData.paymentStatus,
+        paidAt: orderData.paidAt,
+        paymentMethod: orderData.paymentMethod
+      });
+      
       setOrder(orderData);
       
       if (orderData.sellerId === user?.id && orderData.items.length > 0) {
@@ -183,11 +701,377 @@ export function OrderDetails() {
   const checkPaymentMethods = async () => {
     try {
       setLoadingPaymentMethods(true);
-      const response = await api.get('/api/payment-methods');
-      setPaymentMethods(response.data.paymentMethods || []);
-      return response.data.paymentMethods?.length > 0;
-    } catch (error) {
+      
+      // Ensure user is authenticated
+      if (!user?.id) {
+        console.log('User not authenticated, skipping payment method check');
+        return false;
+      }
+
+      // Ensure we have a valid token
+      if (!token) {
+        console.log('No authentication token available, skipping payment method check');
+        return false;
+      }
+
+      // Add a small check to ensure API is ready
+      if (!API_URL) {
+        console.log('API URL not configured, skipping payment method check');
+        return false;
+      }
+      
+      console.log('Checking payment methods for current user:', user.id);
+      
+      // Try to get payment methods with better error handling
+      let response;
+      try {
+        // Get all payment methods and filter by current user ID
+        response = await api.get('/api/payment-methods');
+      } catch (apiError: any) {
+        console.log('Payment methods API call failed:', apiError.response?.status, apiError.message);
+        
+        // If it's a 500 error, the endpoint might not be implemented yet
+        if (apiError.response?.status === 500) {
+          console.log('Payment methods endpoint returned 500 - endpoint may not be implemented');
+          
+          // For now, use mock data to test the UI flow
+          // TODO: Remove this when the backend endpoint is properly implemented
+          const mockPaymentMethods = [
+            {
+              id: 'mock-1',
+              type: 'CREDIT_CARD',
+              provider: 'Visa',
+              accountName: 'John Doe',
+              accountId: '1234',
+              isDefault: true,
+              status: 'ACTIVE',
+              userId: user.id, // Add user ID to mock data
+              metadata: {
+                cardNumber: '4242 4242 4242 4242',
+                expiryDate: '12/25',
+                cvv: '123'
+              }
+            },
+            {
+              id: 'mock-2',
+              type: 'MOBILE_MONEY',
+              provider: 'M-Pesa',
+              accountName: 'Mobile Money',
+              accountId: user?.phoneNumber || '',
+              isDefault: false,
+              status: 'ACTIVE',
+              userId: user.id, // Add user ID to mock data
+              metadata: {
+                phoneNumber: user?.phoneNumber || '',
+                walletType: 'Mobile Money',
+                providerId: 'mpesa'
+              }
+            }
+          ];
+          
+          console.log('Using mock payment methods for current user:', user.id, mockPaymentMethods);
+          setPaymentMethods(mockPaymentMethods);
+          return true; // Return true to show that payment methods exist
+        }
+        
+        // Re-throw other errors
+        throw apiError;
+      }
+      
+      const allPaymentMethods = response?.data?.paymentMethods || [];
+      
+      console.log('Raw API response for payment methods:', {
+        responseData: response?.data,
+        allPaymentMethods: allPaymentMethods,
+        firstPaymentMethod: allPaymentMethods[0] ? {
+          id: allPaymentMethods[0].id,
+          type: allPaymentMethods[0].type,
+          metadata: allPaymentMethods[0].metadata,
+          metadataType: typeof allPaymentMethods[0].metadata,
+          metadataStringified: JSON.stringify(allPaymentMethods[0].metadata)
+        } : null
+      });
+      
+      // Filter payment methods by current user ID (similar to seller delivery pricing logic)
+      const userPaymentMethods = allPaymentMethods.filter((pm: any) => pm.userId === user.id);
+      
+      // Parse metadata for each payment method if it's a string
+      const parsedUserPaymentMethods = userPaymentMethods.map((pm: any) => {
+        console.log('Processing payment method:', {
+          id: pm.id,
+          type: pm.type,
+          rawMetadata: pm.metadata,
+          metadataType: typeof pm.metadata,
+          metadataStringified: JSON.stringify(pm.metadata)
+        });
+        
+        let parsedMetadata = pm.metadata;
+        if (typeof pm.metadata === 'string') {
+          try {
+            parsedMetadata = JSON.parse(pm.metadata);
+            console.log('Successfully parsed metadata from string for payment method', pm.id, ':', parsedMetadata);
+          } catch (error) {
+            console.error('Failed to parse metadata for payment method', pm.id, ':', error);
+            parsedMetadata = {};
+          }
+        } else if (pm.metadata && typeof pm.metadata === 'object') {
+          console.log('Metadata is already an object for payment method', pm.id, ':', pm.metadata);
+          parsedMetadata = pm.metadata;
+        } else {
+          console.log('Metadata is neither string nor object for payment method', pm.id, ':', pm.metadata);
+          parsedMetadata = {};
+        }
+        
+        return {
+          ...pm,
+          metadata: parsedMetadata
+        };
+      });
+      
+      console.log('Payment methods filtering results:', {
+        currentUserId: user.id,
+        totalPaymentMethods: allPaymentMethods.length,
+        userPaymentMethodsCount: userPaymentMethods.length,
+        userPaymentMethods: parsedUserPaymentMethods.map((pm: any) => ({
+          id: pm.id,
+          type: pm.type,
+          provider: pm.provider,
+          isDefault: pm.isDefault,
+          userId: pm.userId,
+          metadata: pm.metadata,
+          metadataType: typeof pm.metadata
+        }))
+      });
+      
+      setPaymentMethods(parsedUserPaymentMethods);
+      
+      if (parsedUserPaymentMethods.length === 0) {
+        console.log('No payment methods found for current user:', user.id);
+        return false;
+      }
+      
+      // Check if any payment methods are active
+      const activeMethods = parsedUserPaymentMethods.filter((pm: any) => pm.status === 'ACTIVE');
+      
+      if (activeMethods.length === 0) {
+        console.log('No active payment methods found for current user:', user.id);
+        // Don't show alert for pre-check, only for user-initiated actions
+        return false;
+      }
+      
+      console.log('Active payment methods found for current user:', activeMethods.length);
+      return true;
+      
+    } catch (error: any) {
       console.error('Error checking payment methods:', error);
+      
+      // Handle specific error cases
+      if (error.response?.status === 401) {
+        console.log('Authentication error when checking payment methods');
+        // Don't show alert for pre-check, only for user-initiated actions
+      } else if (error.response?.status === 403) {
+        console.log('Access denied when checking payment methods');
+        // Don't show alert for pre-check, only for user-initiated actions
+      } else if (error.response?.status >= 500) {
+        console.log('Server error when checking payment methods:', error.response?.status);
+        // Don't show alert for pre-check, only for user-initiated actions
+      } else {
+        console.log('Other error when checking payment methods:', error.message);
+        // Don't show alert for pre-check, only for user-initiated actions
+      }
+      
+      setPaymentMethods([]);
+      return false;
+    } finally {
+      setLoadingPaymentMethods(false);
+    }
+  };
+
+  const checkPaymentMethodsWithUserFeedback = async () => {
+    try {
+      setLoadingPaymentMethods(true);
+      
+      // Ensure user is authenticated
+      if (!user?.id) {
+        console.error('User not authenticated');
+        Alert.alert('Authentication Error', 'Please log in to continue.');
+        return false;
+      }
+
+      // Ensure we have a valid token
+      if (!token) {
+        console.error('No authentication token available');
+        Alert.alert('Authentication Error', 'Please log in again to continue.');
+        return false;
+      }
+
+      // Add a small check to ensure API is ready
+      if (!API_URL) {
+        console.error('API URL not configured');
+        Alert.alert('Configuration Error', 'API is not properly configured. Please try again later.');
+        return false;
+      }
+      
+      console.log('Checking payment methods for current user:', user.id);
+      
+      // Try to get payment methods with better error handling
+      let response;
+      try {
+        // Get all payment methods and filter by current user ID
+        response = await api.get('/api/payment-methods');
+      } catch (apiError: any) {
+        console.log('Payment methods API call failed:', apiError.response?.status, apiError.message);
+        
+        // If it's a 500 error, the endpoint might not be implemented yet
+        if (apiError.response?.status === 500) {
+          console.log('Payment methods endpoint returned 500 - endpoint may not be implemented');
+          
+          // For now, use mock data to test the UI flow
+          // TODO: Remove this when the backend endpoint is properly implemented
+          const mockPaymentMethods = [
+            {
+              id: 'mock-1',
+              type: 'CREDIT_CARD',
+              provider: 'Visa',
+              accountName: 'John Doe',
+              accountId: '1234',
+              isDefault: true,
+              status: 'ACTIVE',
+              userId: user.id, // Add user ID to mock data
+              metadata: {
+                cardNumber: '4242 4242 4242 4242',
+                expiryDate: '12/25',
+                cvv: '123'
+              }
+            },
+            {
+              id: 'mock-2',
+              type: 'MOBILE_MONEY',
+              provider: 'M-Pesa',
+              accountName: 'Mobile Money',
+              accountId: user?.phoneNumber || '',
+              isDefault: false,
+              status: 'ACTIVE',
+              userId: user.id, // Add user ID to mock data
+              metadata: {
+                phoneNumber: user?.phoneNumber || '',
+                walletType: 'Mobile Money',
+                providerId: 'mpesa'
+              }
+            }
+          ];
+          
+          console.log('Using mock payment methods for current user:', user.id, mockPaymentMethods);
+          setPaymentMethods(mockPaymentMethods);
+          return true; // Return true to show that payment methods exist
+        }
+        
+        // Re-throw other errors
+        throw apiError;
+      }
+      
+      const allPaymentMethods = response?.data?.paymentMethods || [];
+      
+      console.log('Raw API response for payment methods:', {
+        responseData: response?.data,
+        allPaymentMethods: allPaymentMethods,
+        firstPaymentMethod: allPaymentMethods[0] ? {
+          id: allPaymentMethods[0].id,
+          type: allPaymentMethods[0].type,
+          metadata: allPaymentMethods[0].metadata,
+          metadataType: typeof allPaymentMethods[0].metadata,
+          metadataStringified: JSON.stringify(allPaymentMethods[0].metadata)
+        } : null
+      });
+      
+      // Filter payment methods by current user ID (similar to seller delivery pricing logic)
+      const userPaymentMethods = allPaymentMethods.filter((pm: any) => pm.userId === user.id);
+      
+      // Parse metadata for each payment method if it's a string
+      const parsedUserPaymentMethods = userPaymentMethods.map((pm: any) => {
+        console.log('Processing payment method:', {
+          id: pm.id,
+          type: pm.type,
+          rawMetadata: pm.metadata,
+          metadataType: typeof pm.metadata,
+          metadataStringified: JSON.stringify(pm.metadata)
+        });
+        
+        let parsedMetadata = pm.metadata;
+        if (typeof pm.metadata === 'string') {
+          try {
+            parsedMetadata = JSON.parse(pm.metadata);
+            console.log('Successfully parsed metadata from string for payment method', pm.id, ':', parsedMetadata);
+          } catch (error) {
+            console.error('Failed to parse metadata for payment method', pm.id, ':', error);
+            parsedMetadata = {};
+          }
+        } else if (pm.metadata && typeof pm.metadata === 'object') {
+          console.log('Metadata is already an object for payment method', pm.id, ':', pm.metadata);
+          parsedMetadata = pm.metadata;
+        } else {
+          console.log('Metadata is neither string nor object for payment method', pm.id, ':', pm.metadata);
+          parsedMetadata = {};
+        }
+        
+        return {
+          ...pm,
+          metadata: parsedMetadata
+        };
+      });
+      
+      console.log('Payment methods filtering results:', {
+        currentUserId: user.id,
+        totalPaymentMethods: allPaymentMethods.length,
+        userPaymentMethodsCount: userPaymentMethods.length,
+        userPaymentMethods: parsedUserPaymentMethods.map((pm: any) => ({
+          id: pm.id,
+          type: pm.type,
+          provider: pm.provider,
+          isDefault: pm.isDefault,
+          userId: pm.userId,
+          metadata: pm.metadata,
+          metadataType: typeof pm.metadata
+        }))
+      });
+      
+      setPaymentMethods(parsedUserPaymentMethods);
+      
+      if (parsedUserPaymentMethods.length === 0) {
+        console.log('No payment methods found for current user:', user.id);
+        return false;
+      }
+      
+      // Check if any payment methods are active
+      const activeMethods = parsedUserPaymentMethods.filter((pm: any) => pm.status === 'ACTIVE');
+      
+      if (activeMethods.length === 0) {
+        console.log('No active payment methods found for current user:', user.id);
+        Alert.alert(
+          'Payment Methods Inactive',
+          'Your payment methods are currently inactive. Please contact support or add new payment methods.',
+          [{ text: 'OK' }]
+        );
+        return false;
+      }
+      
+      console.log('Active payment methods found for current user:', activeMethods.length);
+      return true;
+      
+    } catch (error: any) {
+      console.error('Error checking payment methods:', error);
+      
+      // Handle specific error cases with user feedback
+      if (error.response?.status === 401) {
+        Alert.alert('Authentication Error', 'Please log in again to continue.');
+      } else if (error.response?.status === 403) {
+        Alert.alert('Access Denied', 'You do not have permission to access payment methods.');
+      } else if (error.response?.status >= 500) {
+        Alert.alert('Server Error', 'Unable to check payment methods. Please try again later.');
+      } else {
+        Alert.alert('Error', 'Unable to check payment methods. Please try again.');
+      }
+      
       setPaymentMethods([]);
       return false;
     } finally {
@@ -326,6 +1210,18 @@ export function OrderDetails() {
     }
   };
 
+  const getPaymentStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'pending': return '#F59E0B';
+      case 'authorized': return '#3B82F6';
+      case 'paid': return '#10B981';
+      case 'failed': return '#EF4444';
+      case 'refunded': return '#6B7280';
+      case 'cancelled': return '#EF4444';
+      default: return '#6B7280';
+    }
+  };
+
   const formatPrice = (price: number, currencyCode: string) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -358,16 +1254,16 @@ export function OrderDetails() {
   };
 
   const getBuyerAvailableStatuses = (currentStatus: string) => {
-    // Buyers can only change status to authorized or cancelled
+    // Updated buyer status flow based on new requirements
     const buyerStatusFlow = {
-      'pending': ['authorized', 'cancelled'],
-      'confirmed': ['authorized', 'cancelled'],
-      'processing': ['authorized', 'cancelled'],
-      'shipped': ['authorized'],
-      'delivered': ['authorized'],
-      'authorized': ['cancelled'],
-      'cancelled': [],
-      'refunded': [],
+      'pending': ['authorized', 'cancelled'],      // Show both Authorize and Cancel
+      'authorized': ['cancelled'],                 // Show only Cancel
+      'confirmed': [],                             // Hide all buttons, show payment status
+      'processing': [],                            // No buyer actions
+      'shipped': [],                               // No buyer actions
+      'delivered': [],                             // No buyer actions
+      'cancelled': [],                             // No buyer actions
+      'refunded': [],                              // No buyer actions
     };
     
     return buyerStatusFlow[currentStatus.toLowerCase() as keyof typeof buyerStatusFlow] || [];
@@ -376,7 +1272,11 @@ export function OrderDetails() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+        <StatusBar 
+          barStyle="dark-content" 
+          backgroundColor="#FFFFFF" 
+          translucent={Platform.OS === 'android'}
+        />
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#1F2937" />
@@ -395,7 +1295,11 @@ export function OrderDetails() {
   if (error || !order) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+        <StatusBar 
+          barStyle="dark-content" 
+          backgroundColor="#FFFFFF" 
+          translucent={Platform.OS === 'android'}
+        />
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#1F2937" />
@@ -419,7 +1323,11 @@ export function OrderDetails() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+      <StatusBar 
+        barStyle="dark-content" 
+        backgroundColor="#FFFFFF" 
+        translucent={Platform.OS === 'android'}
+      />
       
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -440,6 +1348,65 @@ export function OrderDetails() {
             </View>
           </View>
 
+          {/* Professional Payment Status Display */}
+          {order.paymentStatus && (
+            <View style={styles.paymentStatusSection}>
+              <View style={styles.paymentStatusHeader}>
+                <View style={styles.paymentStatusIconContainer}>
+                  <Ionicons 
+                    name={order.paymentStatus.toLowerCase() === 'paid' ? 'checkmark-circle' : 
+                          order.paymentStatus.toLowerCase() === 'pending' ? 'time' : 
+                          order.paymentStatus.toLowerCase() === 'failed' ? 'close-circle' : 'card'} 
+                    size={20} 
+                    color={getPaymentStatusColor(order.paymentStatus)} 
+                  />
+                </View>
+                <Text style={styles.paymentStatusTitle}>Payment Status</Text>
+                <View style={[styles.paymentStatusBadge, { backgroundColor: `${getPaymentStatusColor(order.paymentStatus)}15` }]}>
+                  <Text style={[styles.paymentStatusText, { color: getPaymentStatusColor(order.paymentStatus) }]}>
+                    {order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Payment Method Information */}
+              {order.paymentMethod && (
+                <View style={styles.paymentMethodInfoRow}>
+                  <View style={styles.paymentMethodIconContainer}>
+                    <Ionicons name="card-outline" size={16} color="#6B7280" />
+                  </View>
+                  <Text style={styles.paymentMethodText}>
+                    Method: {order.paymentMethod}
+                  </Text>
+                </View>
+              )}
+
+              {/* Payment Date Information */}
+              {order.paidAt && (
+                <View style={styles.paymentDateInfo}>
+                  <View style={styles.paymentDateIconContainer}>
+                    <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                  </View>
+                  <Text style={styles.paymentDateText}>
+                    Paid on {formatDate(order.paidAt)}
+                  </Text>
+                </View>
+              )}
+
+              {/* Payment Reference */}
+              {order.paymentReference && (
+                <View style={styles.paymentReferenceInfo}>
+                  <View style={styles.paymentReferenceIconContainer}>
+                    <Ionicons name="receipt-outline" size={16} color="#6B7280" />
+                  </View>
+                  <Text style={styles.paymentReferenceText}>
+                    Reference: {order.paymentReference}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           <Text style={styles.customerName}>Order #{order.orderNumber}</Text>
 
           {/* Buyer Status Actions - Only show to buyers */}
@@ -448,33 +1415,80 @@ export function OrderDetails() {
             const orderSellerId = order?.sellerId;
             const isBuyer = currentUserId !== orderSellerId;
             
-            return isBuyer && buyerAvailableStatuses.length > 0 ? (
-              <View style={styles.statusActions}>
-                <Text style={styles.statusActionsTitle}>Buyer Actions:</Text>
-                <View style={styles.statusButtons}>
-                  {buyerAvailableStatuses.map((status) => (
+            if (!isBuyer) return null;
+            
+            // Show different actions based on order status
+            if (order.status.toLowerCase() === 'pending') {
+              // Pending: Show both Authorize and Cancel buttons
+              return (
+                <View style={styles.statusActions}>
+                  <Text style={styles.statusActionsTitle}>Buyer Actions:</Text>
+                  <View style={styles.statusButtons}>
                     <TouchableOpacity
-                      key={status}
-                      style={[
-                        styles.statusButton,
-                        status === 'authorized' && styles.authorizeButton,
-                        status === 'cancelled' && styles.buyerCancelButton
-                      ]}
-                      onPress={() => updateOrderStatus(status)}
+                      style={[styles.statusButton, styles.authorizeButton]}
+                      onPress={() => updateOrderStatus('authorized')}
                       disabled={updatingStatus}
                     >
-                      <Text style={[
-                        styles.statusButtonText,
-                        status === 'authorized' && styles.authorizeButtonText,
-                        status === 'cancelled' && styles.buyerCancelButtonText
-                      ]}>
-                        {status === 'authorized' ? 'Authorize Order' : status.charAt(0).toUpperCase() + status.slice(1)}
+                      <Text style={[styles.statusButtonText, styles.authorizeButtonText]}>
+                        Authorize Order
                       </Text>
                     </TouchableOpacity>
-                  ))}
+                    <TouchableOpacity
+                      style={[styles.statusButton, styles.buyerCancelButton]}
+                      onPress={() => updateOrderStatus('cancelled')}
+                      disabled={updatingStatus}
+                    >
+                      <Text style={[styles.statusButtonText, styles.buyerCancelButtonText]}>
+                        Cancel Order
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            ) : null;
+              );
+            } else if (order.status.toLowerCase() === 'authorized') {
+              // Authorized: Show only Cancel button
+              return (
+                <View style={styles.statusActions}>
+                  <Text style={styles.statusActionsTitle}>Buyer Actions:</Text>
+                  <View style={styles.statusButtons}>
+                    <TouchableOpacity
+                      style={[styles.statusButton, styles.buyerCancelButton]}
+                      onPress={() => updateOrderStatus('cancelled')}
+                      disabled={updatingStatus}
+                    >
+                      <Text style={[styles.statusButtonText, styles.buyerCancelButtonText]}>
+                        Cancel Order
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            } else if (order.status.toLowerCase() === 'confirmed') {
+              // Confirmed: Hide buttons and show payment status prominently
+              return (
+                <View style={styles.statusActions}>
+                  <Text style={styles.statusActionsTitle}>Payment Information:</Text>
+                  {order.paymentStatus ? (
+                    <View style={styles.paymentStatusDisplay}>
+                      <View style={[styles.paymentStatusBadge, { backgroundColor: `${getPaymentStatusColor(order.paymentStatus)}15` }]}>
+                        <Text style={[styles.paymentStatusText, { color: getPaymentStatusColor(order.paymentStatus) }]}>
+                          {order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}
+                        </Text>
+                      </View>
+                      {order.paidAt && (
+                        <Text style={styles.paymentDateText}>
+                          Paid on {formatDate(order.paidAt)}
+                        </Text>
+                      )}
+                    </View>
+                  ) : (
+                    <Text style={styles.noPaymentStatusText}>Payment status not available</Text>
+                  )}
+                </View>
+              );
+            }
+            
+            return null;
           })()}
         </View>
 
@@ -649,54 +1663,92 @@ export function OrderDetails() {
           )}
         </View>
 
-        {/* Checkout Button - Only show to buyers when order is authorized */}
+        {/* Checkout Button - Only show to buyers when order is authorized and not paid */}
         {(() => {
           const currentUserId = user?.id;
           const orderSellerId = order?.sellerId;
           const isBuyer = currentUserId !== orderSellerId;
+          const isAuthorized = order.status.toLowerCase() === 'authorized';
+          const isNotPaid = !order.paymentStatus || order.paymentStatus.toLowerCase() !== 'paid';
           
-          return order.status.toLowerCase() === 'authorized' && isBuyer ? (
+          return isAuthorized && isNotPaid && isBuyer ? (
             <View style={styles.checkoutSection}>
               <TouchableOpacity
-                style={styles.checkoutButton}
+                style={[
+                  styles.checkoutButton,
+                  loadingPaymentMethods && styles.disabledButton
+                ]}
                 onPress={async () => {
-                  // Check for payment methods first
-                  const hasPaymentMethods = await checkPaymentMethods();
-                  
-                  if (hasPaymentMethods) {
-                    // Proceed to checkout with existing payment methods
+                  try {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    
+                    // Check for payment methods first
+                    const hasPaymentMethods = await checkPaymentMethodsWithUserFeedback();
+                    
+                    if (hasPaymentMethods) {
+                      // User has payment methods - show payment method modal with checkout option
+                      setShowPaymentModal(true);
+                    } else {
+                      // No payment methods found - show add payment method modal
+                      setShowAddPaymentModal(true);
+                    }
+                  } catch (error) {
+                    console.error('Error during checkout process:', error);
                     Alert.alert(
-                      'Checkout',
-                      'Proceed to payment?',
-                      [
-                        {
-                          text: 'Cancel',
-                          style: 'cancel',
-                        },
-                        {
-                          text: 'Proceed',
-                          onPress: () => {
-                            // Navigate to checkout/payment screen
-                            console.log('Proceeding to checkout for order:', order.id);
-                            // You can add navigation to checkout screen here
-                            // navigation.navigate('Checkout', { orderId: order.id });
-                          },
-                        },
-                      ]
+                      'Error',
+                      'Unable to process checkout. Please try again.',
+                      [{ text: 'OK' }]
                     );
-                  } else {
-                    // Show payment method modal
-                    setShowPaymentModal(true);
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                   }
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 }}
+                disabled={loadingPaymentMethods}
               >
-                <Ionicons name="card-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
+                {loadingPaymentMethods ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="card-outline" size={20} color="#FFFFFF" />
+                )}
+                <Text style={styles.checkoutButtonText}>
+                  {loadingPaymentMethods 
+                    ? 'Checking Payment Methods...' 
+                    : paymentMethods.length > 0 
+                      ? `Proceed to Checkout (${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''})`
+                      : 'Proceed to Checkout'
+                  }
+                </Text>
               </TouchableOpacity>
               <Text style={styles.checkoutNote}>
-                Your order has been authorized. Click to complete payment and finalize your purchase.
+                {paymentMethods.length > 0 
+                  ? `You have ${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''} available. Click to complete payment.`
+                  : 'Your order has been authorized. Click to complete payment and finalize your purchase.'
+                }
               </Text>
+            </View>
+          ) : null;
+        })()}
+
+        {/* Payment Completed Section - Show when payment is completed */}
+        {(() => {
+          const currentUserId = user?.id;
+          const orderSellerId = order?.sellerId;
+          const isBuyer = currentUserId !== orderSellerId;
+          const isPaid = order.paymentStatus?.toLowerCase() === 'paid';
+          
+          return isPaid && isBuyer ? (
+            <View style={styles.paymentCompletedSection}>
+              <View style={styles.paymentCompletedHeader}>
+                <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                <Text style={styles.paymentCompletedTitle}>Payment Completed</Text>
+              </View>
+              <Text style={styles.paymentCompletedText}>
+                Your payment of {formatPrice(order.totalAmount, order.currencyCode)} has been processed successfully.
+              </Text>
+              {order.paidAt && (
+                <Text style={styles.paymentCompletedDate}>
+                  Paid on {formatDate(order.paidAt)}
+                </Text>
+              )}
             </View>
           ) : null;
         })()}
@@ -714,7 +1766,7 @@ export function OrderDetails() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalOverlay}
           >
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, { maxHeight: screenHeight * 0.95, minHeight: screenHeight * 0.7 }]}>
               {/* Handle Bar */}
               <View style={styles.handleBar} />
               
@@ -942,7 +1994,326 @@ export function OrderDetails() {
         </Modal>
       )}
 
-      {/* Payment Method Modal - Show when no payment methods exist */}
+      {/* Add Payment Method Modal - Bottom Sheet */}
+      <Modal
+        visible={showAddPaymentModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddPaymentModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { maxHeight: screenHeight * 0.75, minHeight: screenHeight * 0.75 }]}>
+            {/* Handle Bar */}
+            <View style={styles.handleBar} />
+            
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Payment Methods</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowAddPaymentModal(false);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Payment Methods List */}
+            <ScrollView style={styles.paymentMethodsList} showsVerticalScrollIndicator={false}>
+              <Text style={styles.paymentMethodsSubtitle}>
+                Select the payment methods you'd like to accept for this order
+              </Text>
+              
+              {paymentMethodOptions.map((method) => (
+                <View key={method.id} style={styles.paymentMethodCard}>
+                  <View style={styles.paymentMethodCardContent}>
+                    <View style={styles.paymentMethodInfo}>
+                      <View style={styles.paymentMethodIcon}>
+                        <Ionicons name={method.icon as any} size={24} color="#2563EB" />
+                      </View>
+                      <View style={styles.paymentMethodDetails}>
+                        <Text style={styles.paymentMethodName}>{method.name}</Text>
+                        <Text style={styles.paymentMethodDescription}>{method.description}</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.toggleSwitch,
+                        selectedPaymentMethods[method.id] && styles.toggleSwitchActive
+                      ]}
+                      onPress={() => handlePaymentMethodToggle(method.id)}
+                    >
+                      <View style={[
+                        styles.toggleKnob,
+                        selectedPaymentMethods[method.id] && styles.toggleKnobActive
+                      ]} />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {/* Expandable Form */}
+                  {selectedPaymentMethods[method.id] && expandedPaymentMethods[method.id] && (
+                    <View style={styles.paymentMethodForm}>
+                      <View style={styles.formHeader}>
+                        <Text style={styles.formTitle}>Enter {method.name} Details</Text>
+                        <TouchableOpacity
+                          onPress={() => togglePaymentMethodExpansion(method.id)}
+                          style={styles.collapseButton}
+                        >
+                          <Ionicons name="chevron-up" size={20} color="#6B7280" />
+                        </TouchableOpacity>
+                      </View>
+                      
+                      {/* Card Form */}
+                      {method.id === 'card' && (
+                        <View style={styles.formFields}>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Card Provider</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.card.provider}
+                              onChangeText={(text) => handlePaymentFormUpdate('card', 'provider', text)}
+                              placeholder="e.g., Visa, Mastercard, American Express"
+                              placeholderTextColor="#9CA3AF"
+                            />
+                          </View>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Card Number</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.card.cardNumber}
+                              onChangeText={(text) => handlePaymentFormUpdate('card', 'cardNumber', text)}
+                              placeholder="1234 5678 9012 3456"
+                              placeholderTextColor="#9CA3AF"
+                              keyboardType="numeric"
+                              maxLength={19}
+                            />
+                          </View>
+                          <View style={styles.inputRow}>
+                            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                              <Text style={styles.inputLabel}>Cardholder Name</Text>
+                              <TextInput
+                                style={styles.textInput}
+                                value={paymentMethodForms.card.cardholderName}
+                                onChangeText={(text) => handlePaymentFormUpdate('card', 'cardholderName', text)}
+                                placeholder="John Doe"
+                                placeholderTextColor="#9CA3AF"
+                              />
+                            </View>
+                            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                              <Text style={styles.inputLabel}>Expiry Date</Text>
+                              <TextInput
+                                style={styles.textInput}
+                                value={paymentMethodForms.card.expiryDate}
+                                onChangeText={(text) => handlePaymentFormUpdate('card', 'expiryDate', text)}
+                                placeholder="MM/YY"
+                                placeholderTextColor="#9CA3AF"
+                                maxLength={5}
+                              />
+                            </View>
+                          </View>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>CVV</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.card.cvv}
+                              onChangeText={(text) => handlePaymentFormUpdate('card', 'cvv', text)}
+                              placeholder="123"
+                              placeholderTextColor="#9CA3AF"
+                              keyboardType="numeric"
+                              maxLength={4}
+                              secureTextEntry
+                            />
+                          </View>
+                        </View>
+                      )}
+                      
+                      {/* Mobile Wallets Form */}
+                      {method.id === 'mobileWallets' && (
+                        <View style={styles.formFields}>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Wallet Provider</Text>
+                            <MobileWalletPicker
+                              value={selectedMobileWalletProvider}
+                              onChange={(providerId: string) => handleMobileWalletProviderSelect(providerId)}
+                            />
+                          </View>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Phone Number</Text>
+                            <TextInput
+                              style={[styles.textInput, styles.disabledInput]}
+                              value={paymentMethodForms.mobileWallets.phoneNumber}
+                              onChangeText={(text) => handlePaymentFormUpdate('mobileWallets', 'phoneNumber', text)}
+                              placeholder="Phone number from registration"
+                              placeholderTextColor="#9CA3AF"
+                              keyboardType="phone-pad"
+                              editable={false}
+                            />
+                            <Text style={styles.inputHelperText}>
+                              Using your registered phone number: {user?.phoneNumber}
+                            </Text>
+                          </View>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Wallet Type</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.mobileWallets.walletType}
+                              onChangeText={(text) => handlePaymentFormUpdate('mobileWallets', 'walletType', text)}
+                              placeholder="e.g., Mobile Money, Digital Wallet"
+                              placeholderTextColor="#9CA3AF"
+                            />
+                          </View>
+                        </View>
+                      )}
+                      
+                      {/* Bank Transfer Form */}
+                      {method.id === 'bankTransfer' && (
+                        <View style={styles.formFields}>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Bank Name</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.bankTransfer.bankName}
+                              onChangeText={(text) => handlePaymentFormUpdate('bankTransfer', 'bankName', text)}
+                              placeholder="e.g., Chase Bank, Bank of America"
+                              placeholderTextColor="#9CA3AF"
+                            />
+                          </View>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Account Name</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.bankTransfer.accountName}
+                              onChangeText={(text) => handlePaymentFormUpdate('bankTransfer', 'accountName', text)}
+                              placeholder="Account holder name"
+                              placeholderTextColor="#9CA3AF"
+                            />
+                          </View>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Account Number</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.bankTransfer.accountNumber}
+                              onChangeText={(text) => handlePaymentFormUpdate('bankTransfer', 'accountNumber', text)}
+                              placeholder="1234567890"
+                              placeholderTextColor="#9CA3AF"
+                              keyboardType="numeric"
+                            />
+                          </View>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>SWIFT Code (Optional)</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.bankTransfer.swiftCode}
+                              onChangeText={(text) => handlePaymentFormUpdate('bankTransfer', 'swiftCode', text)}
+                              placeholder="CHASUS33"
+                              placeholderTextColor="#9CA3AF"
+                            />
+                          </View>
+                        </View>
+                      )}
+                      
+                      {/* Crypto Form */}
+                      {method.id === 'crypto' && (
+                        <View style={styles.formFields}>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Cryptocurrency</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.crypto.provider}
+                              onChangeText={(text) => handlePaymentFormUpdate('crypto', 'provider', text)}
+                              placeholder="e.g., Bitcoin, Ethereum, USDT"
+                              placeholderTextColor="#9CA3AF"
+                            />
+                          </View>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Wallet Type</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.crypto.walletType}
+                              onChangeText={(text) => handlePaymentFormUpdate('crypto', 'walletType', text)}
+                              placeholder="e.g., MetaMask, Trust Wallet, Hardware Wallet"
+                              placeholderTextColor="#9CA3AF"
+                            />
+                          </View>
+                          <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Wallet Address</Text>
+                            <TextInput
+                              style={styles.textInput}
+                              value={paymentMethodForms.crypto.walletAddress}
+                              onChangeText={(text) => handlePaymentFormUpdate('crypto', 'walletAddress', text)}
+                              placeholder="0x1234...5678"
+                              placeholderTextColor="#9CA3AF"
+                              multiline
+                            />
+                          </View>
+                        </View>
+                      )}
+                      
+                      {/* Default Payment Method Toggle */}
+                      <View style={styles.defaultToggleContainer}>
+                        <TouchableOpacity
+                          style={styles.defaultToggle}
+                          onPress={() => handlePaymentFormUpdate(method.id, 'isDefault', !paymentMethodForms[method.id].isDefault)}
+                        >
+                          <View style={[
+                            styles.defaultToggleSwitch,
+                            paymentMethodForms[method.id].isDefault && styles.defaultToggleSwitchActive
+                          ]}>
+                            <View style={[
+                              styles.defaultToggleKnob,
+                              paymentMethodForms[method.id].isDefault && styles.defaultToggleKnobActive
+                            ]} />
+                          </View>
+                          <Text style={styles.defaultToggleText}>Set as default payment method</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                  
+                  {/* Collapsed Form Indicator */}
+                  {selectedPaymentMethods[method.id] && !expandedPaymentMethods[method.id] && (
+                    <View style={styles.collapsedFormIndicator}>
+                      <Text style={styles.collapsedFormText}>Form details hidden</Text>
+                      <TouchableOpacity
+                        onPress={() => togglePaymentMethodExpansion(method.id)}
+                        style={styles.expandButton}
+                      >
+                        <Ionicons name="chevron-down" size={16} color="#2563EB" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  setShowAddPaymentModal(false);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSavePaymentMethods}
+              >
+                <Text style={styles.saveButtonText}>Save & Continue</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Payment Selection Modal - Show when user has payment methods */}
       <Modal
         visible={showPaymentModal}
         animationType="slide"
@@ -953,13 +2324,13 @@ export function OrderDetails() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { maxHeight: screenHeight * 0.95, minHeight: screenHeight * 0.7 }]}>
             {/* Handle Bar */}
             <View style={styles.handleBar} />
             
             {/* Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Payment Method Required</Text>
+              <Text style={styles.modalTitle}>Select Payment Method</Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowPaymentModal(false);
@@ -971,96 +2342,196 @@ export function OrderDetails() {
               </TouchableOpacity>
             </View>
 
-            {/* Payment Method Content */}
-            <ScrollView style={styles.paymentMethodContent} showsVerticalScrollIndicator={false}>
-              {loadingPaymentMethods ? (
-                <View style={styles.loadingPaymentContainer}>
-                  <ActivityIndicator size="large" color="#2563EB" />
-                  <Text style={styles.loadingPaymentText}>Checking payment methods...</Text>
-                </View>
-              ) : (
-                <View style={styles.paymentContentWrapper}>
-                  {/* Icon */}
-                  <View style={styles.paymentIconContainer}>
-                    <View style={styles.paymentIconBackground}>
-                      <Ionicons name="card-outline" size={48} color="#2563EB" />
-                    </View>
+            {/* Scrollable Content */}
+            <ScrollView 
+              style={styles.modalBody} 
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
+              {/* Info Banner */}
+              <View style={styles.paymentInfoBanner}>
+                <View style={styles.paymentInfoHeader}>
+                  <View style={styles.paymentInfoIconContainer}>
+                    <Ionicons name="information-circle" size={20} color="#2563EB" />
                   </View>
+                  <Text style={styles.paymentInfoTitle}>Select Your Payment Method</Text>
+                </View>
+                <Text style={styles.paymentInfoDescription}>
+                  Please select a payment method below. If you have a default method, it will be pre-selected. You can also add more payment methods if needed.
+                </Text>
+              </View>
 
-                  {/* Title */}
-                  <Text style={styles.paymentTitle}>No Payment Methods Found</Text>
-                  
-                  {/* Description */}
-                  <Text style={styles.paymentDescription}>
-                    You need to add a payment method before you can complete your purchase. 
-                    This ensures a smooth checkout experience.
-                  </Text>
-
-                  {/* Order Summary */}
-                  <View style={styles.orderSummaryCard}>
+              {/* Order Summary */}
+              <View style={styles.orderSummaryCard}>
+                <View style={styles.orderSummaryHeader}>
+                  <View style={styles.orderSummaryIconContainer}>
+                    <Ionicons name="receipt-outline" size={24} color="#2563EB" />
+                  </View>
+                  <View style={styles.orderSummaryHeaderText}>
                     <Text style={styles.orderSummaryTitle}>Order Summary</Text>
-                    <View style={styles.orderSummaryRow}>
-                      <Text style={styles.orderSummaryLabel}>Order Total:</Text>
-                      <Text style={styles.orderSummaryValue}>
-                        {formatPrice(order.totalAmount, order.currencyCode)}
-                      </Text>
-                    </View>
-                    <View style={styles.orderNumberContainer}>
-                      <Text style={styles.orderNumberLabel}>Order Number:</Text>
-                      <Text style={styles.orderNumberValue} numberOfLines={2} ellipsizeMode="tail">
-                        {order.orderNumber}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Action Buttons */}
-                  <View style={styles.paymentActionButtons}>
-                    <TouchableOpacity
-                      style={styles.addPaymentButton}
-                      onPress={() => {
-                        setShowPaymentModal(false);
-                        // Navigate to add payment method screen
-                        // navigation.navigate('AddPaymentMethod', { returnTo: 'OrderDetails', orderId: order.id });
-                        Alert.alert(
-                          'Add Payment Method',
-                          'Navigate to add payment method screen',
-                          [
-                            {
-                              text: 'Cancel',
-                              style: 'cancel',
-                            },
-                            {
-                              text: 'Add Payment Method',
-                              onPress: () => {
-                                console.log('Navigate to add payment method');
-                                // Add navigation logic here
-                              },
-                            },
-                          ]
-                        );
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      }}
-                    >
-                      <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-                      <Text style={styles.addPaymentButtonText}>Add Payment Method</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={styles.cancelPaymentButton}
-                      onPress={() => {
-                        setShowPaymentModal(false);
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }}
-                    >
-                      <Text style={styles.cancelPaymentButtonText}>Cancel</Text>
-                    </TouchableOpacity>
+                    <Text style={styles.orderSummarySubtitle}>Review your order details</Text>
                   </View>
                 </View>
-              )}
+                
+                <View style={styles.orderSummaryDivider} />
+                
+                <View style={styles.orderSummaryContent}>
+                  <View style={styles.orderSummaryRow}>
+                    <View style={styles.orderSummaryLabelContainer}>
+                      <Ionicons name="document-text-outline" size={16} color="#6B7280" />
+                      <Text style={styles.orderSummaryLabel}>Order Number</Text>
+                    </View>
+                    <Text style={styles.orderSummaryValue} numberOfLines={1} ellipsizeMode="tail">
+                      #{order?.orderNumber}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.orderSummaryRow}>
+                    <View style={styles.orderSummaryLabelContainer}>
+                      <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                      <Text style={styles.orderSummaryLabel}>Order Date</Text>
+                    </View>
+                    <Text style={styles.orderSummaryValue}>
+                      {order?.createdAt ? new Date(order.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      }) : 'N/A'}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.orderSummaryRow}>
+                    <View style={styles.orderSummaryLabelContainer}>
+                      <Ionicons name="cube-outline" size={16} color="#6B7280" />
+                      <Text style={styles.orderSummaryLabel}>Items</Text>
+                    </View>
+                    <Text style={styles.orderSummaryValue}>
+                      {order?.items?.length || 0} item{order?.items?.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                  
+                  {order?.shippingAmount > 0 && (
+                    <View style={styles.orderSummaryRow}>
+                      <View style={styles.orderSummaryLabelContainer}>
+                        <Ionicons name="car-outline" size={16} color="#6B7280" />
+                        <Text style={styles.orderSummaryLabel}>Delivery</Text>
+                      </View>
+                      <Text style={styles.orderSummaryValue}>
+                        {formatPrice(order.shippingAmount, order.deliveryCurrency || order.currencyCode)}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  <View style={styles.orderSummaryTotalRow}>
+                    <View style={styles.orderSummaryLabelContainer}>
+                      <Ionicons name="card-outline" size={18} color="#059669" />
+                      <Text style={styles.orderSummaryTotalLabel}>Total Amount</Text>
+                    </View>
+                    <Text style={styles.orderSummaryTotalValue}>
+                      {formatPrice(order?.totalAmount || 0, order?.currencyCode || 'USD')}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Available Payment Methods */}
+              <View style={styles.availablePaymentMethodsCard}>
+                <Text style={styles.availablePaymentMethodsTitle}>Available Payment Methods</Text>
+                
+                {paymentMethods.map((method) => (
+                  <TouchableOpacity
+                    key={method.id}
+                    style={[
+                      styles.paymentMethodItem,
+                      selectedPaymentMethod === method.id && styles.selectedPaymentMethodItem,
+                      method.isDefault && styles.defaultPaymentMethodItem
+                    ]}
+                    onPress={() => handlePaymentMethodSelect(method.id)}
+                  >
+                    <View style={styles.paymentMethodItemIcon}>
+                      <Ionicons 
+                        name={method.type === 'CREDIT_CARD' ? 'card-outline' : 
+                             method.type === 'MOBILE_MONEY' ? 'phone-portrait-outline' :
+                             method.type === 'BANK_TRANSFER' ? 'business-outline' :
+                             method.type === 'CRYPTO' ? 'logo-bitcoin' : 'wallet-outline'} 
+                        size={24} 
+                        color="#2563EB" 
+                      />
+                    </View>
+                    <View style={styles.paymentMethodItemDetails}>
+                      <View style={styles.paymentMethodItemHeader}>
+                        <Text style={styles.paymentMethodItemProvider}>
+                          {getPaymentMethodDisplayName(method)}
+                        </Text>
+                        <View style={styles.paymentMethodItemMeta}>
+                          {method.isDefault && (
+                            <View style={styles.defaultBadge}>
+                              <Text style={styles.defaultBadgeText}>Default</Text>
+                            </View>
+                          )}
+                          <View style={styles.paymentMethodItemArrow}>
+                            <Ionicons name="chevron-forward" size={16} color="#2563EB" />
+                          </View>
+                        </View>
+                      </View>
+                      <Text style={styles.paymentMethodItemAccount}>
+                        {method.accountName} • {method.accountId}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </ScrollView>
+
+            {/* Action Buttons - Fixed at bottom */}
+            <View style={styles.paymentActionButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.proceedToCheckoutButton,
+                  !selectedPaymentMethod && styles.disabledButton
+                ]}
+                onPress={handleProceedToStripePayment}
+                disabled={!selectedPaymentMethod}
+              >
+                <Ionicons name="card-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.proceedToCheckoutButtonText}>
+                  Proceed to Payment
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.addMorePaymentButton}
+                onPress={() => {
+                  setShowPaymentModal(false);
+                  setShowAddPaymentModal(true);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.addMorePaymentButtonText}>
+                  Add More Payment Methods
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Stripe Payment Modal */}
+      <StripePayment
+        visible={showStripePayment}
+        onClose={() => setShowStripePayment(false)}
+        amount={order?.totalAmount || 0}
+        currency={order?.currencyCode || 'USD'}
+        orderId={order?.id || ''}
+        customerId={order?.customer?.id || user?.id || ''}
+        onPaymentSuccess={handleStripePaymentSuccess}
+        onPaymentError={handleStripePaymentError}
+        userInfo={{
+          firstName: user?.firstName || '',
+          lastName: user?.lastName || ''
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -1068,20 +2539,22 @@ export function OrderDetails() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 16,
+    paddingBottom: 16,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 64 : 64,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   backButton: {
-    padding: 8,
+    padding: 12,
   },
   headerTitle: {
     fontSize: 18,
@@ -1303,8 +2776,12 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#1F2937',
+    textAlign: 'right',
+    flex: 1,
+    flexWrap: 'wrap',
+    maxWidth: '50%',
   },
   totalRow: {
     borderBottomWidth: 0,
@@ -1669,6 +3146,9 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 20,
   },
+  paymentMethodContentContainer: {
+    flexGrow: 1,
+  },
   paymentContentWrapper: {
     alignItems: 'center',
     paddingBottom: 20,
@@ -1711,39 +3191,101 @@ const styles = StyleSheet.create({
   orderSummaryCard: {
     width: '100%',
     padding: 20,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    marginBottom: 32,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
   },
   orderSummaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 16,
+    marginBottom: 4,
   },
   orderSummaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 12,
     flexWrap: 'wrap',
+  },
+  orderSummaryLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
   },
   orderSummaryLabel: {
     fontSize: 14,
     color: '#6B7280',
-    flex: 0,
-    minWidth: 80,
-    marginRight: 8,
+    fontWeight: '500',
   },
   orderSummaryValue: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1F2937',
-    flex: 1,
     textAlign: 'right',
+    flex: 1,
     flexWrap: 'wrap',
+    maxWidth: '50%',
+  },
+  orderSummaryTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  orderSummaryTotalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  orderSummaryTotalValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  orderSummaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  orderSummaryIconContainer: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  orderSummaryHeaderText: {
+    flex: 1,
+  },
+  orderSummarySubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  orderSummaryDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 16,
+  },
+  orderSummaryContent: {
+    gap: 16,
   },
   orderNumberContainer: {
     marginBottom: 12,
@@ -1796,5 +3338,520 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontSize: 16,
     fontWeight: '600',
+  },
+  paymentMethodsList: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
+  paymentMethodsSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 20,
+  },
+  paymentMethodCard: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  paymentMethodCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  paymentMethodInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  paymentMethodIcon: {
+    width: 56,
+    height: 56,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  paymentMethodDetails: {
+    flex: 1,
+  },
+  paymentMethodName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  paymentMethodDescription: {
+    fontSize: 15,
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  toggleSwitch: {
+    width: 48,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  toggleSwitchActive: {
+    borderColor: '#2563EB',
+    backgroundColor: '#2563EB',
+  },
+  toggleKnob: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+    elevation: 2,
+  },
+  toggleKnobActive: {
+    backgroundColor: '#FFFFFF',
+    transform: [{ translateX: 24 }],
+  },
+  paymentMethodForm: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  formTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  collapseButton: {
+    padding: 4,
+  },
+  formFields: {
+    gap: 16,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#1F2937',
+    backgroundColor: '#FFFFFF',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  defaultToggleContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  defaultToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  defaultToggleSwitch: {
+    width: 40,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  defaultToggleSwitchActive: {
+    borderColor: '#2563EB',
+    backgroundColor: '#2563EB',
+  },
+  defaultToggleKnob: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  defaultToggleKnobActive: {
+    backgroundColor: '#FFFFFF',
+    transform: [{ translateX: 16 }],
+  },
+  defaultToggleText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  collapsedFormIndicator: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  collapsedFormText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  expandButton: {
+    padding: 4,
+  },
+  disabledInput: {
+    backgroundColor: '#F3F4F6',
+    color: '#6B7280',
+  },
+  inputHelperText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  availablePaymentMethodsCard: {
+    marginBottom: 24,
+    width: '100%',
+  },
+  availablePaymentMethodsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 16,
+  },
+  paymentMethodItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    width: '100%',
+    minHeight: 90,
+  },
+  paymentMethodItemIcon: {
+    width: 56,
+    height: 56,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  paymentMethodItemDetails: {
+    flex: 1,
+  },
+  paymentMethodItemName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  paymentMethodItemType: {
+    fontSize: 15,
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  defaultBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#10B981',
+    marginLeft: 8,
+  },
+  defaultBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  proceedToCheckoutButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  proceedToCheckoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  addMorePaymentButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  addMorePaymentButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  paymentMethodItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  paymentMethodItemProvider: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  paymentMethodItemMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  paymentMethodItemAccount: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  paymentMethodItemArrow: {
+    width: 24,
+    height: 24,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  defaultPaymentMethodItem: {
+    borderWidth: 2,
+    borderColor: '#2563EB',
+    backgroundColor: '#F0F9FF',
+  },
+  selectedPaymentMethodItem: {
+    borderWidth: 2,
+    borderColor: '#10B981',
+    backgroundColor: '#EFF6FF',
+  },
+  paymentMethodSelectionHint: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  paymentStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  paymentStatusLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginRight: 8,
+  },
+  paymentDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  paymentDateLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginRight: 8,
+  },
+  paymentDateValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  paymentCompletedSection: {
+    padding: 16,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    borderRadius: 12,
+    marginBottom: 16,
+    marginHorizontal: 16,
+  },
+  paymentCompletedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  paymentCompletedTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#10B981',
+    marginLeft: 8,
+  },
+  paymentCompletedText: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 4,
+  },
+  paymentCompletedDate: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  paymentInfoBanner: {
+    padding: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  paymentInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  paymentInfoIconContainer: {
+    padding: 6,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  paymentInfoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  paymentInfoDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  paymentStatusDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  noPaymentStatusText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  paymentStatusSection: {
+    marginBottom: 24,
+  },
+  paymentStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  paymentStatusIconContainer: {
+    padding: 6,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  paymentStatusTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  paymentStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  paymentStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  paymentMethodInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  paymentMethodIconContainer: {
+    padding: 6,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  paymentMethodText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  paymentDateInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  paymentDateIconContainer: {
+    padding: 6,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  paymentDateText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  paymentReferenceInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  paymentReferenceIconContainer: {
+    padding: 6,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 6,
+    marginRight: 12,
+  },
+  paymentReferenceText: {
+    fontSize: 14,
+    color: '#6B7280',
   },
 });

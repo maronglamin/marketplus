@@ -6,13 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  SafeAreaView,
   StatusBar,
   Platform,
   ActivityIndicator,
   Alert,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,7 +24,7 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.254.48';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.40.48';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type HomeNavigationProp = NativeStackNavigationProp<AppStackParamList, 'Home'>;
@@ -537,94 +537,96 @@ export function Home() {
           </ScrollView>
 
           {/* Fixed Bottom Navigation */}
-          <View style={styles.bottomNav}>
-            <TouchableOpacity
-              style={[styles.navItem, isActiveTab('home') && styles.activeNavItem]}
-              onPress={() => handleTabPress('home')}
-            >
-              <Ionicons
-                name={isActiveTab('home') ? 'home' : 'home-outline'}
-                size={24}
-                color={isActiveTab('home') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('home') && styles.activeNavText,
-                ]}
+          <SafeAreaView edges={['bottom']} style={styles.bottomNavContainer}>
+            <View style={styles.bottomNav}>
+              <TouchableOpacity
+                style={[styles.navItem, isActiveTab('home') && styles.activeNavItem]}
+                onPress={() => handleTabPress('home')}
               >
-                Home
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navItem, isActiveTab('orders') && styles.activeNavItem]}
-              onPress={() => handleTabPress('orders')}
-            >
-              <Ionicons
-                name={isActiveTab('orders') ? 'bag' : 'bag-outline'}
-                size={24}
-                color={isActiveTab('orders') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('orders') && styles.activeNavText,
-                ]}
+                <Ionicons
+                  name={isActiveTab('home') ? 'home' : 'home-outline'}
+                  size={24}
+                  color={isActiveTab('home') ? '#2563EB' : '#6B7280'}
+                />
+                <Text
+                  style={[
+                    styles.navText,
+                    isActiveTab('home') && styles.activeNavText,
+                  ]}
+                >
+                  Home
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.navItem, isActiveTab('orders') && styles.activeNavItem]}
+                onPress={() => handleTabPress('orders')}
               >
-                Orders
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.navItem,
-                isActiveTab('interestmanagement') && styles.activeNavItem,
-              ]}
-              onPress={() => handleTabPress('interests')}
-            >
-              <Ionicons
-                name={
-                  isActiveTab('interestmanagement')
-                    ? 'heart'
-                    : 'heart-outline'
-                }
-                size={24}
-                color={isActiveTab('interestmanagement') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
+                <Ionicons
+                  name={isActiveTab('orders') ? 'bag' : 'bag-outline'}
+                  size={24}
+                  color={isActiveTab('orders') ? '#2563EB' : '#6B7280'}
+                />
+                <Text
+                  style={[
+                    styles.navText,
+                    isActiveTab('orders') && styles.activeNavText,
+                  ]}
+                >
+                  Orders
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={[
-                  styles.navText,
-                  isActiveTab('interestmanagement') && styles.activeNavText,
+                  styles.navItem,
+                  isActiveTab('interestmanagement') && styles.activeNavItem,
                 ]}
+                onPress={() => handleTabPress('interests')}
               >
-                Interests
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.navItem,
-                isActiveTab('accountsettings') && styles.activeNavItem,
-              ]}
-              onPress={() => handleTabPress('account')}
-            >
-              <Ionicons
-                name={
-                  isActiveTab('accountsettings')
-                    ? 'person'
-                    : 'person-outline'
-                }
-                size={24}
-                color={isActiveTab('accountsettings') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
+                <Ionicons
+                  name={
+                    isActiveTab('interestmanagement')
+                      ? 'heart'
+                      : 'heart-outline'
+                  }
+                  size={24}
+                  color={isActiveTab('interestmanagement') ? '#2563EB' : '#6B7280'}
+                />
+                <Text
+                  style={[
+                    styles.navText,
+                    isActiveTab('interestmanagement') && styles.activeNavText,
+                  ]}
+                >
+                  Interests
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={[
-                  styles.navText,
-                  isActiveTab('accountsettings') && styles.activeNavText,
+                  styles.navItem,
+                  isActiveTab('accountsettings') && styles.activeNavItem,
                 ]}
+                onPress={() => handleTabPress('account')}
               >
-                Seller
-              </Text>
-            </TouchableOpacity>
-          </View>
+                <Ionicons
+                  name={
+                    isActiveTab('accountsettings')
+                      ? 'person'
+                      : 'person-outline'
+                  }
+                  size={24}
+                  color={isActiveTab('accountsettings') ? '#2563EB' : '#6B7280'}
+                />
+                <Text
+                  style={[
+                    styles.navText,
+                    isActiveTab('accountsettings') && styles.activeNavText,
+                  ]}
+                >
+                  Seller
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </View>
       </SafeAreaView>
     </View>
@@ -873,14 +875,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-    paddingTop: 8,
+    paddingBottom: 0,
+    paddingTop: 0,
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: 5,
   },
   activeNavItem: {
     // Add any active state styles if needed
@@ -917,5 +919,8 @@ const styles = StyleSheet.create({
   },
   reloadButton: {
     padding: 4,
+  },
+  bottomNavContainer: {
+    backgroundColor: '#FFFFFF',
   },
 }); 
