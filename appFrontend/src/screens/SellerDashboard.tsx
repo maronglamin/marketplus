@@ -26,6 +26,9 @@ import { Button } from '../components/Button'
 import type { AppStackParamList } from '../navigation/AppNavigator'
 import { useAuth } from '../contexts/AuthContext'
 import { kycService, type SellerKycResponse } from '../services/kycService'
+import { interestService, type Interest } from '../services/interestService'
+import { productService, type SellerStats } from '../services/productService'
+import { getImageUrl } from '../utils/imageUtils'
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
@@ -37,6 +40,18 @@ export function SellerDashboard() {
   const [kycStatus, setKycStatus] = useState<SellerKycResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [customerInterests, setCustomerInterests] = useState<Interest[]>([])
+  const [interestsLoading, setInterestsLoading] = useState(false)
+  const [stats, setStats] = useState<SellerStats>({
+    totalProducts: 0,
+    activeProducts: 0,
+    totalSales: 0,
+    pendingOrders: 0,
+    totalRevenue: 0,
+    revenueCurrency: 'USD',
+    hasOtherCurrencies: false
+  })
+  const [statsLoading, setStatsLoading] = useState(false)
 
   const checkKycStatus = useCallback(async (forceRefresh = false) => {
     try {
@@ -72,6 +87,34 @@ export function SellerDashboard() {
     }
   }, [])
 
+  const loadCustomerInterests = useCallback(async () => {
+    if (kycStatus?.status !== 'APPROVED') return
+    
+    try {
+      setInterestsLoading(true)
+      const response = await interestService.getCustomerInterests(1, 10) // Show latest 10 interests
+      setCustomerInterests(response.interests)
+    } catch (error) {
+      console.error('Error loading customer interests:', error)
+    } finally {
+      setInterestsLoading(false)
+    }
+  }, [kycStatus?.status])
+
+  const loadSellerStats = useCallback(async () => {
+    if (kycStatus?.status !== 'APPROVED') return
+    
+    try {
+      setStatsLoading(true)
+      const statsData = await productService.getSellerStats()
+      setStats(statsData)
+    } catch (error) {
+      console.error('Error loading seller stats:', error)
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [kycStatus?.status])
+
   // Add focus listener to refresh data when screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
@@ -86,14 +129,63 @@ export function SellerDashboard() {
     checkKycStatus()
   }, [token, checkKycStatus])
 
-  // Mock data - replace with actual API call
-  const stats = {
-    totalProducts: 42,
-    activeProducts: 38,
-    totalSales: 156,
-    pendingOrders: 5,
-    totalRevenue: 12500,
+  // Load customer interests and stats when KYC is approved
+  useEffect(() => {
+    if (kycStatus?.status === 'APPROVED') {
+      loadCustomerInterests()
+      loadSellerStats()
+    }
+  }, [kycStatus?.status, loadCustomerInterests, loadSellerStats])
+
+  // Mock data for rating - replace with actual API call
+  const ratingData = {
     averageRating: 4.8,
+  }
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInMs = now.getTime() - date.getTime()
+    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60))
+    const diffInDays = Math.floor(diffInHours / 24)
+
+    if (diffInDays > 0) {
+      return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`
+    } else if (diffInHours > 0) {
+      return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`
+    } else {
+      return 'Just now'
+    }
+  }
+
+  const getCurrencySymbol = (currencyCode: string) => {
+    const currencySymbols: { [key: string]: string } = {
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+      JPY: '¥',
+      CAD: 'C$',
+      AUD: 'A$',
+      CHF: 'CHF',
+      CNY: '¥',
+      INR: '₹',
+      BRL: 'R$',
+      MXN: '$',
+      KRW: '₩',
+      SGD: 'S$',
+      HKD: 'HK$',
+      NZD: 'NZ$',
+    };
+    return currencySymbols[currencyCode] || currencyCode;
+  }
+
+
+  const handleChatPress = (interestId: string) => {
+    navigation.navigate('SellerInterestDetail', { interestId })
+  }
+
+  const handleViewAllInterests = () => {
+    navigation.navigate('InterestManagement')
   }
 
   if (loading || refreshing) {
@@ -201,28 +293,42 @@ export function SellerDashboard() {
 
           <ScrollView style={styles.content}>
 
-          <View style={styles.revenueCard}>
+          <TouchableOpacity 
+            style={styles.revenueCard}
+            onPress={() => navigation.navigate('RevenueDetails' as any)}
+            activeOpacity={0.7}
+          >
             <View style={styles.revenueHeader}>
               <Text style={styles.revenueTitle}>Total Revenue</Text>
-              <TouchableOpacity
-                style={styles.viewAllButton}
-                onPress={() => navigation.navigate('RevenueDetails' as any)}
-              >
-                <Text style={styles.viewAllText}>View All</Text>
+              <View style={styles.viewAllButton}>
+                <Text style={styles.viewAllText}>
+                  {stats.hasOtherCurrencies ? 'View All Currencies' : 'View All'}
+                </Text>
                 <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
-              </TouchableOpacity>
+              </View>
             </View>
-            <Text style={styles.revenueValue}>${stats.totalRevenue.toLocaleString()}</Text>
-            <Text style={styles.revenueSubtitle}>USD (Default)</Text>
+            <Text style={styles.revenueValue}>
+              {getCurrencySymbol(stats.revenueCurrency)} {stats.totalRevenue.toLocaleString()}
+            </Text>
+            <Text style={styles.revenueSubtitle}>
+              {stats.revenueCurrency} {stats.hasOtherCurrencies ? '(Latest TNX)' : ''}
+            </Text>
             <View style={styles.ratingContainer}>
               <Ionicons name="star" size={16} color="#F59E0B" />
-              <Text style={styles.rating}>{stats.averageRating}</Text>
+              <Text style={styles.rating}>{ratingData.averageRating}</Text>
               <Text style={styles.ratingLabel}>Average Rating</Text>
             </View>
-          </View>
+          </TouchableOpacity>
 
 
             <View style={styles.statsContainer}>
+              {statsLoading ? (
+                <View style={styles.statsLoading}>
+                  <ActivityIndicator size="small" color="#2563EB" />
+                  <Text style={styles.statsLoadingText}>Loading stats...</Text>
+                </View>
+              ) : (
+                <>
               <View style={styles.statsRow}>
                 <View style={styles.statCard}>
                   <Text style={styles.statValue}>{stats.totalProducts}</Text>
@@ -243,6 +349,8 @@ export function SellerDashboard() {
                   <Text style={styles.statLabel}>Pending Orders</Text>
                 </View>
               </View>
+                </>
+              )}
             </View>
 
             <View style={styles.actionsContainer}>
@@ -261,14 +369,76 @@ export function SellerDashboard() {
                 <Ionicons name="list-outline" size={24} color="#2563EB" />
                 <Text style={styles.actionButtonText}>Product Listing</Text>
               </TouchableOpacity>
+            </View>
 
+            {/* Customer Interests Section */}
+            <View style={styles.interestsSection}>
+              <View style={styles.interestsHeader}>
+                <Text style={styles.interestsTitle}>Customer Interests</Text>
+                <TouchableOpacity
+                  style={styles.viewAllButton}
+                  onPress={handleViewAllInterests}
+                >
+                  <Text style={styles.viewAllText}>View All</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#2563EB" />
+                </TouchableOpacity>
+              </View>
+
+              {interestsLoading ? (
+                <View style={styles.interestsLoading}>
+                  <ActivityIndicator size="small" color="#2563EB" />
+                  <Text style={styles.interestsLoadingText}>Loading interests...</Text>
+                </View>
+              ) : customerInterests.length > 0 ? (
+                <View style={styles.interestsList}>
+                  {customerInterests.map((interest) => (
               <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => navigation.navigate('InterestManagement')}
-              >
-                <Ionicons name="heart-outline" size={24} color="#2563EB" />
-                <Text style={styles.actionButtonText}>Manage Interests</Text>
+                      key={interest.id}
+                      style={styles.interestCard}
+                      onPress={() => handleChatPress(interest.id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.interestProductInfo}>
+                        <Image
+                          source={{ 
+                            uri: interest.product.image 
+                              ? (getImageUrl(interest.product.image) || 'https://via.placeholder.com/60x60?text=No+Image')
+                              : 'https://via.placeholder.com/60x60?text=No+Image'
+                          }}
+                          style={styles.interestProductImage}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.interestDetails}>
+                          <Text style={styles.interestProductName} numberOfLines={2}>
+                            {interest.product.title}
+                          </Text>
+                          <Text style={styles.interestCustomerName}>
+                            {interest.customer?.name || 'Unknown Customer'}
+                          </Text>
+                          <Text style={styles.interestTime}>
+                            {formatTimeAgo(interest.createdAt)}
+                          </Text>
+                          <Text style={styles.interestQuantity}>
+                            Qty: {interest.quantity}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.chatButton}>
+                        <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
+                        <Text style={styles.chatButtonText}>Chat</Text>
+                      </View>
               </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.noInterestsContainer}>
+                  <Ionicons name="heart-outline" size={48} color="#D1D5DB" />
+                  <Text style={styles.noInterestsText}>No customer interests yet</Text>
+                  <Text style={styles.noInterestsSubtext}>
+                    When customers show interest in your products, they'll appear here
+                  </Text>
+                </View>
+              )}
             </View>
           </ScrollView>
         </View>
@@ -526,5 +696,116 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  interestsSection: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  interestsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  interestsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  interestsLoading: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  interestsLoadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  interestsList: {
+    gap: 12,
+  },
+  interestCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  interestProductInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  interestProductImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  interestDetails: {
+    flex: 1,
+  },
+  interestProductName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  interestCustomerName: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 2,
+  },
+  interestTime: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  interestQuantity: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  chatButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  chatButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  noInterestsContainer: {
+    alignItems: 'center',
+    padding: 32,
+  },
+  noInterestsText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  noInterestsSubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  statsLoading: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  statsLoadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
   },
 }) 

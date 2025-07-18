@@ -90,10 +90,39 @@ export interface ProductDetail {
   updatedAt: string;
 }
 
+export interface SellerStats {
+  totalProducts: number;
+  activeProducts: number;
+  totalSales: number;
+  pendingOrders: number;
+  totalRevenue: number;
+  revenueCurrency: string;
+  hasOtherCurrencies: boolean;
+}
+
+export interface RevenueBreakdown {
+  totalRevenue: number;
+  revenueByCurrency: Array<{
+    currency: string;
+    amount: number;
+    percentage: number;
+  }>;
+}
+
 export const productService = {
   async getSellerProducts(page: number = 1, limit: number = 10): Promise<ProductListResponse> {
     const response = await api.get(`/api/products/seller?page=${page}&limit=${limit}`);
     return response.data;
+  },
+
+  async getSellerStats(): Promise<SellerStats> {
+    const response = await api.get('/api/products/seller/stats')
+    return response.data
+  },
+
+  async getSellerRevenue(): Promise<RevenueBreakdown> {
+    const response = await api.get('/api/products/seller/revenue')
+    return response.data
   },
 
   async getCustomerProducts(page: number = 1, limit: number = 10, categoryId?: string, search?: string): Promise<CustomerProductListResponse> {

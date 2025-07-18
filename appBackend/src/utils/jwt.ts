@@ -26,8 +26,8 @@ export const generateToken = async (userId: string, deviceId: string): Promise<s
       {
         expiresIn: env.JWT_EXPIRES_IN,
         algorithm: 'HS256',
-        audience: 'marketplace-app',
-        issuer: 'marketplace-api',
+        audience: 'snap-app',
+        issuer: 'snap-api',
         jwtid: crypto.randomBytes(16).toString('hex') // Unique token ID
       } as jwt.SignOptions
     );
@@ -56,8 +56,8 @@ export const verifyToken = async (token: string): Promise<{ userId: string; devi
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET, {
       algorithms: ['HS256'],
-      audience: 'marketplace-app',
-      issuer: 'marketplace-api'
+      audience: 'snap-app',
+      issuer: 'snap-api'
     } as jwt.VerifyOptions) as { userId: string; deviceId: string; type: string };
 
     // Verify token type

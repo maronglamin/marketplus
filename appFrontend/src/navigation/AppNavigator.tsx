@@ -23,9 +23,13 @@ import { DeliveryOptions } from '../screens/DeliveryOptions';
 import { RevenueDetails } from '../screens/RevenueDetails';
 import { TransactionHistory } from '../screens/transactions/TransactionHistory';
 import { TransactionDetail } from '../screens/transactions/TransactionDetail';
+import { SettlementRequest } from '../screens/transactions/SettlementRequest';
+import { SettlementHistory } from '../screens/transactions/SettlementHistory';
+import { SettlementDetail } from '../screens/transactions/SettlementDetail';
 import { CustomerOrders } from '../screens/CustomerOrders';
 import { OrderDetails } from '../screens/OrderDetails';
 import { SellerInterestDetail } from '../screens/SellerInterestDetail';
+import { RideRequest } from '../screens/RideRequest';
 
 export type AppStackParamList = {
   Home: undefined;
@@ -43,6 +47,7 @@ export type AppStackParamList = {
   Order: { productId: string };
   OrderDetails: { orderId: string };
   SellerInterestDetail: { interestId: string };
+  RideRequest: undefined;
   SellerKycForm: undefined | {
     businessData?: {
       businessName: string;
@@ -105,6 +110,9 @@ export type AppStackParamList = {
   RevenueDetails: undefined;
   TransactionHistory: { currency: string; currencySymbol: string };
   TransactionDetail: { transactionId: string; currency: string; currencySymbol: string };
+  SettlementRequest: undefined;
+  SettlementHistory: undefined;
+  SettlementDetail: { settlementId: string; currency: string; currencySymbol: string };
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -173,8 +181,12 @@ const AppNavigator = () => {
       <Stack.Screen name="RevenueDetails" component={RevenueDetails} />
       <Stack.Screen name="TransactionHistory" component={TransactionHistory} />
       <Stack.Screen name="TransactionDetail" component={TransactionDetail} />
+      <Stack.Screen name="SettlementRequest" component={SettlementRequest} />
+      <Stack.Screen name="SettlementHistory" component={SettlementHistory} />
+      <Stack.Screen name="SettlementDetail" component={SettlementDetail} />
       <Stack.Screen name="OrderDetails" component={OrderDetails} />
       <Stack.Screen name="SellerInterestDetail" component={SellerInterestDetail} />
+      <Stack.Screen name="RideRequest" component={RideRequest} />
     </Stack.Navigator>
   );
 };

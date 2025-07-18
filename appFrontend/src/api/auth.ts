@@ -14,6 +14,8 @@ export interface LoginResponse {
   token: string;
   user: any;
   isFirstLogin?: boolean;
+  requiresPinReset?: boolean;
+  pinResetOTPId?: string;
 }
 
 export interface AuthError {
@@ -473,6 +475,31 @@ export const requestNewPin = async (deviceId: string): Promise<void> => {
       throw new Error(error.response.data.message);
     } else {
       throw new Error('Failed to request new PIN. Please check your connection and try again.');
+    }
+  }
+};
+
+export const completePinReset = async (newPin: string, pinResetOTPId: string): Promise<void> => {
+  try {
+    console.log('Completing PIN reset for OTP ID:', pinResetOTPId);
+    
+    // Get or create API instance
+    if (!apiInstance) {
+      apiInstance = await getApi();
+    }
+
+    const response = await apiInstance.post('/auth/complete-pin-reset', {
+      newPin,
+      pinResetOTPId
+    });
+
+    console.log('PIN reset completion response:', response.data);
+  } catch (error: any) {
+    console.error('Error completing PIN reset:', error);
+    if (error.response?.data?.message) {
+      throw new Error(error.response.data.message);
+    } else {
+      throw new Error('Failed to complete PIN reset');
     }
   }
 };

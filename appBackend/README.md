@@ -1,6 +1,8 @@
-# Marketplace Backend
+# SNAP Backend
 
-Backend service for the Marketplace App, handling authentication, user management, and device verification.
+## Overview
+
+Backend service for the SNAP App, handling authentication, user management, and device verification.
 
 ## Features
 
@@ -36,7 +38,7 @@ Create a `.env` file in the root directory with the following variables:
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/marketplace?schema=public"
+DATABASE_URL="postgresql://user:password@localhost:5432/snap?schema=public"
 
 # JWT
 JWT_SECRET="your-super-secret-jwt-key"

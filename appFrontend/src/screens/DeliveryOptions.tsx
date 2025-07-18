@@ -15,8 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { deliveryOptionsService, type DeliveryOption, type Currency } from '../services/deliveryOptionsService';
-import { WorldCurrencyPicker } from '../components/WorldCurrencyPicker';
+import { deliveryOptionsService, type DeliveryOption } from '../services/deliveryOptionsService';
+import { productService, type Product } from '../services/productService';
 
 interface RouteParams {
   productId: string;
@@ -30,43 +30,59 @@ export function DeliveryOptions() {
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [currencySearchQuery, setCurrencySearchQuery] = useState('');
-
-  const currencies = deliveryOptionsService.getPopularCurrencies();
-  const filteredCurrencies = currencySearchQuery 
-    ? deliveryOptionsService.searchCurrencies(currencySearchQuery)
-    : currencies;
+  const [product, setProduct] = useState<Product | null>(null);
 
   useEffect(() => {
-    loadDeliveryOptions();
+    loadProductAndDeliveryOptions();
   }, [productId]);
 
-  const loadDeliveryOptions = async () => {
+  const loadProductAndDeliveryOptions = async () => {
     try {
       setLoading(true);
+      
+      // Load product details first to get the currency - use seller endpoint
+      const productDetails = await productService.getSellerProductById(productId);
+      setProduct(productDetails);
+      
+      // Load delivery options
       const options = await deliveryOptionsService.getDeliveryOptions(productId);
       if (options.length === 0) {
-        // Use default options if none exist
-        setDeliveryOptions(deliveryOptionsService.getDefaultDeliveryOptions());
+        // Use default options if none exist, but with the product's currency
+        const defaultOptions = deliveryOptionsService.getDefaultDeliveryOptions();
+        const optionsWithProductCurrency = defaultOptions.map(option => ({
+          ...option,
+          currencyCode: productDetails.currencyCode
+        }));
+        setDeliveryOptions(optionsWithProductCurrency);
       } else {
-        setDeliveryOptions(options);
+        // Ensure all existing options use the product's currency
+        const optionsWithCorrectCurrency = options.map(option => ({
+          ...option,
+          currencyCode: productDetails.currencyCode
+        }));
+        setDeliveryOptions(optionsWithCorrectCurrency);
       }
     } catch (error) {
-      console.error('Error loading delivery options:', error);
-      // Use default options on error
-      setDeliveryOptions(deliveryOptionsService.getDefaultDeliveryOptions());
+      console.error('Error loading product and delivery options:', error);
+      // Don't set default options on error - wait for product to load
+      setDeliveryOptions([]);
     } finally {
       setLoading(false);
     }
   };
 
   const addDeliveryOption = () => {
+    if (!product) {
+      Alert.alert('Error', 'Product information not loaded. Please try again.');
+      return;
+    }
+    
     const newOption: DeliveryOption = {
       deliveryType: 'STANDARD',
       name: '',
       description: '',
       price: 0,
-      currencyCode: 'USD',
+      currencyCode: product.currencyCode,
       estimatedDays: 1,
       isDefault: false,
       isActive: true,
@@ -111,6 +127,11 @@ export function DeliveryOptions() {
     try {
       setSaving(true);
       
+      if (!product) {
+        Alert.alert('Error', 'Product information not loaded. Please try again.');
+        return;
+      }
+      
       if (deliveryOptions.length === 0) {
         Alert.alert('Error', 'At least one delivery option is required');
         return;
@@ -122,7 +143,13 @@ export function DeliveryOptions() {
         return;
       }
 
-      await deliveryOptionsService.updateDeliveryOptions(productId, deliveryOptions);
+      // Ensure all options use the product's currency
+      const optionsWithCorrectCurrency = deliveryOptions.map(option => ({
+        ...option,
+        currencyCode: product.currencyCode
+      }));
+
+      await deliveryOptionsService.updateDeliveryOptions(productId, optionsWithCorrectCurrency);
       
       Alert.alert('Success', 'Delivery options saved successfully', [
         { text: 'OK', onPress: () => navigation.goBack() }
@@ -271,11 +298,15 @@ export function DeliveryOptions() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <WorldCurrencyPicker
-                    value={option.currencyCode}
-                    onChange={(code: string) => updateDeliveryOption(index, 'currencyCode', code)}
-                    label="Currency"
-                  />
+                  <Text style={styles.inputLabel}>Currency</Text>
+                  <View style={styles.currencyDisplayContainer}>
+                    <Text style={styles.currencyDisplayText}>
+                      {product?.currencyCode}
+                    </Text>
+                    <Text style={styles.currencyNote}>
+                      Product currency (fixed)
+                    </Text>
+                  </View>
                 </View>
 
                 <View style={styles.checkboxContainer}>
@@ -292,9 +323,15 @@ export function DeliveryOptions() {
               </View>
             ))}
 
-            <TouchableOpacity style={styles.addButton} onPress={addDeliveryOption}>
-              <Ionicons name="add-circle-outline" size={24} color="#2563EB" />
-              <Text style={styles.addButtonText}>Add Delivery Option</Text>
+            <TouchableOpacity 
+              style={[styles.addButton, !product && styles.disabledButton]} 
+              onPress={addDeliveryOption}
+              disabled={!product}
+            >
+              <Ionicons name="add-circle-outline" size={24} color={product ? "#2563EB" : "#9CA3AF"} />
+              <Text style={[styles.addButtonText, !product && styles.disabledText]}>
+                {product ? 'Add Delivery Option' : 'Loading product...'}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -419,43 +456,39 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   addButtonText: { fontSize: 16, fontWeight: '600', color: '#2563EB', marginLeft: 8 },
-  currencyScrollView: {
-    flexDirection: 'row',
-  },
-  currencyContainer: {
-    flexDirection: 'row',
-  },
-  currencyOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    borderWidth: 1,
+  currencyDisplayContainer: {
+    borderWidth: 2,
     borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
-    marginRight: 8,
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  currencyOptionSelected: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-  currencyOptionText: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  currencyOptionTextSelected: {
-    color: '#FFFFFF',
-  },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  currencyDisplayText: {
     fontSize: 16,
-    backgroundColor: '#FFFFFF',
-    marginBottom: 8,
+    color: '#111827',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  currencyNote: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
   },
   contentContainer: {
     paddingBottom: 16,
+  },
+  disabledButton: {
+    opacity: 0.7,
+  },
+  disabledText: {
+    color: '#9CA3AF',
   },
 }); 

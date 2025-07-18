@@ -18,14 +18,14 @@ import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { PDFExportService } from '../services/pdfExportService';
+import { generateAndSharePDF } from '../services/pdfExportService';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { orderService, type Order } from '../services/orderService';
 import { kycService } from '../services/kycService';
 import Constants from 'expo-constants';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.40.48';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '10.77.205.48';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type CustomerOrdersNavigationProp = NativeStackNavigationProp<AppStackParamList, 'CustomerOrders'>;
@@ -223,10 +223,13 @@ export function CustomerOrders() {
     };
     const symbol = currencySymbols[currencyCode] || currencyCode;
     
-    const formattedPrice = price.toLocaleString('en-US', {
+    // Ensure proper thousand separators and decimal formatting
+    const formattedPrice = new Intl.NumberFormat('en-US', {
+      style: 'decimal',
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
+      maximumFractionDigits: 2,
+      useGrouping: true
+    }).format(price);
     
     return `${symbol}${formattedPrice}`;
   };
@@ -291,7 +294,7 @@ export function CustomerOrders() {
         return;
       }
 
-      await PDFExportService.generateAndSharePDF({
+      await generateAndSharePDF({
         type: 'orders',
         data: filteredOrders,
         dateRange: {

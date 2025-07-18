@@ -8,7 +8,8 @@ import {
   resendOTP,
   testSMS,
   changePin,
-  requestNewPin
+  requestNewPin,
+  completePinReset
 } from '../controllers/auth';
 import { authenticate } from '../middleware/auth';
 import {
@@ -63,5 +64,6 @@ router.post(
 router.post('/logout', authenticate, logout);
 router.post('/resend-otp', resendOTP);
 router.post('/change-pin', authenticate, changePin);
+router.post('/complete-pin-reset', authenticate, completePinReset);
 
 export default router; 

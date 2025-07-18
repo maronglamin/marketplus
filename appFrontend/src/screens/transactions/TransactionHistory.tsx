@@ -17,30 +17,11 @@ import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { format } from 'date-fns';
-import Constants from 'expo-constants';
-
-// Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.137.84';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+import { transactionService, type Transaction } from '../../services/transactionService';
+import { getImageUrl } from '../../utils/imageUtils';
 
 type TransactionHistoryNavigationProp = NativeStackNavigationProp<AppStackParamList, 'TransactionHistory'>;
 type TransactionHistoryRouteProp = RouteProp<AppStackParamList, 'TransactionHistory'>;
-
-interface Transaction {
-  id: string;
-  productId: string;
-  productTitle: string;
-  productImage: string;
-  unitPrice: number;
-  quantity: number;
-  totalAmount: number;
-  currency: string;
-  currencySymbol: string;
-  buyerName: string;
-  transactionDate: string;
-  status: 'completed' | 'pending' | 'cancelled';
-  orderNumber: string;
-}
 
 export function TransactionHistory() {
   const navigation = useNavigation<TransactionHistoryNavigationProp>();
@@ -48,6 +29,7 @@ export function TransactionHistory() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalRevenue, setTotalRevenue] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const currency = route.params?.currency || 'USD';
   const currencySymbol = route.params?.currencySymbol || '$';
@@ -59,90 +41,18 @@ export function TransactionHistory() {
   const loadTransactions = async () => {
     try {
       setLoading(true);
-      // Mock data - replace with actual API call
-      const mockTransactions: Transaction[] = [
-        {
-          id: '1',
-          productId: 'prod1',
-          productTitle: 'iPhone 15 Pro Max - 256GB',
-          productImage: '/uploads/iphone15.jpg',
-          unitPrice: 1199,
-          quantity: 1,
-          totalAmount: 1199,
-          currency,
-          currencySymbol,
-          buyerName: 'John Smith',
-          transactionDate: '2024-01-15T10:30:00Z',
-          status: 'completed',
-          orderNumber: 'ORD-2024-001',
-        },
-        {
-          id: '2',
-          productId: 'prod2',
-          productTitle: 'MacBook Air M2 - 13 inch',
-          productImage: '/uploads/macbook-air.jpg',
-          unitPrice: 1099,
-          quantity: 2,
-          totalAmount: 2198,
-          currency,
-          currencySymbol,
-          buyerName: 'Sarah Johnson',
-          transactionDate: '2024-01-14T14:20:00Z',
-          status: 'completed',
-          orderNumber: 'ORD-2024-002',
-        },
-        {
-          id: '3',
-          productId: 'prod3',
-          productTitle: 'AirPods Pro 2nd Generation',
-          productImage: '/uploads/airpods-pro.jpg',
-          unitPrice: 249,
-          quantity: 1,
-          totalAmount: 249,
-          currency,
-          currencySymbol,
-          buyerName: 'Mike Davis',
-          transactionDate: '2024-01-13T09:15:00Z',
-          status: 'pending',
-          orderNumber: 'ORD-2024-003',
-        },
-        {
-          id: '4',
-          productId: 'prod4',
-          productTitle: 'iPad Air 5th Generation',
-          productImage: '/uploads/ipad-air.jpg',
-          unitPrice: 599,
-          quantity: 1,
-          totalAmount: 599,
-          currency,
-          currencySymbol,
-          buyerName: 'Emily Wilson',
-          transactionDate: '2024-01-12T16:45:00Z',
-          status: 'completed',
-          orderNumber: 'ORD-2024-004',
-        },
-        {
-          id: '5',
-          productId: 'prod5',
-          productTitle: 'Apple Watch Series 9',
-          productImage: '/uploads/apple-watch.jpg',
-          unitPrice: 399,
-          quantity: 1,
-          totalAmount: 399,
-          currency,
-          currencySymbol,
-          buyerName: 'David Brown',
-          transactionDate: '2024-01-11T11:30:00Z',
-          status: 'cancelled',
-          orderNumber: 'ORD-2024-005',
-        },
-      ];
-
-      setTransactions(mockTransactions);
-      const total = mockTransactions.reduce((sum, t) => sum + t.totalAmount, 0);
-      setTotalRevenue(total);
+      setError(null);
+      
+      const response = await transactionService.getTransactionsByCurrency(currency);
+      
+      console.log('Transactions loaded:', response.transactions.map(t => ({ id: t.id, productTitle: t.productTitle })));
+      setTransactions(response.transactions);
+      setTotalRevenue(response.totalRevenue);
     } catch (error) {
       console.error('Error loading transactions:', error);
+      setError('Failed to load transactions');
+      setTransactions([]);
+      setTotalRevenue(0);
     } finally {
       setLoading(false);
     }
@@ -156,6 +66,8 @@ export function TransactionHistory() {
         return '#F59E0B';
       case 'cancelled':
         return '#DC2626';
+      case 'refunded':
+        return '#8B5CF6';
       default:
         return '#6B7280';
     }
@@ -169,6 +81,8 @@ export function TransactionHistory() {
         return 'Pending';
       case 'cancelled':
         return 'Cancelled';
+      case 'refunded':
+        return 'Refunded';
       default:
         return 'Unknown';
     }
@@ -180,6 +94,32 @@ export function TransactionHistory() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>Loading transactions...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <Ionicons name="arrow-back" size={24} color="#000" />
+            </TouchableOpacity>
+            <Text style={styles.title}>Transaction History</Text>
+            <View style={styles.placeholder} />
+          </View>
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={loadTransactions}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -205,7 +145,10 @@ export function TransactionHistory() {
         </View>
 
         <ScrollView style={styles.content}>
-          <View style={styles.summaryCard}>
+          <TouchableOpacity 
+            style={styles.summaryCard}
+            onPress={() => navigation.navigate('SettlementRequest')}
+          >
             <View style={styles.summaryHeader}>
               <Text style={styles.summaryTitle}>{currency} Transactions</Text>
               <View style={styles.currencyBadge}>
@@ -218,7 +161,11 @@ export function TransactionHistory() {
             <Text style={styles.summarySubtitle}>
               {transactions.length} transactions
             </Text>
-          </View>
+            <View style={styles.settlementHint}>
+              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+              <Text style={styles.settlementHintText}>Tap to request settlement</Text>
+            </View>
+          </TouchableOpacity>
 
           <View style={styles.transactionsList}>
             <Text style={styles.sectionTitle}>Recent Transactions</Text>
@@ -235,7 +182,11 @@ export function TransactionHistory() {
                 <View style={styles.transactionHeader}>
                   <View style={styles.productInfo}>
                     <Image
-                      source={{ uri: `${API_URL}${transaction.productImage}` }}
+                      source={{ 
+                        uri: transaction.productImage 
+                          ? (getImageUrl(transaction.productImage) || 'https://via.placeholder.com/60x60?text=No+Image')
+                          : 'https://via.placeholder.com/60x60?text=No+Image'
+                      }}
                       style={styles.productImage}
                       resizeMode="cover"
                     />
@@ -296,8 +247,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    height: 56,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
+    paddingBottom: 12,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 56 : 56,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
@@ -324,6 +276,30 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryButton: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   summaryCard: {
     margin: 16,
@@ -360,6 +336,20 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   summarySubtitle: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    opacity: 0.9,
+  },
+  settlementHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  settlementHintText: {
+    marginLeft: 8,
     fontSize: 14,
     color: '#FFFFFF',
     opacity: 0.9,

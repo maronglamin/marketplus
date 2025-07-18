@@ -19,8 +19,19 @@ export type AuthStackParamList = {
   UserRegistration: undefined;
   LoginPin: undefined;
   ChangePin: undefined;
-  NewPin: undefined;
-  ConfirmPin: undefined;
+  NewPin: { 
+    currentPin: string; 
+    isFirstTime?: boolean; 
+    isPinReset?: boolean; 
+    pinResetOTPId?: string;
+  };
+  ConfirmPin: { 
+    currentPin: string; 
+    newPin: string; 
+    isFirstTime?: boolean; 
+    isPinReset?: boolean; 
+    pinResetOTPId?: string;
+  };
   App: undefined;
 };
 

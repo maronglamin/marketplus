@@ -23,7 +23,7 @@ import { api } from '../services/api';
 import Constants from 'expo-constants';
 import { getImageUrl } from '../config/env';
 
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.40.48';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '10.77.205.48';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type SellerInterestDetailNavigationProp = NativeStackNavigationProp<AppStackParamList, 'SellerInterestDetail'>;
@@ -392,7 +392,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
+    paddingBottom: 12,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 56 : 56,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
@@ -577,7 +579,7 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     marginBottom: 12,
-    alignItems: 'flex-start',
+    width: '100%',
   },
   ownMessage: {
     alignItems: 'flex-end',
@@ -617,7 +619,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
     paddingHorizontal: 4,
-    width: '80%',
+    maxWidth: '80%',
   },
   senderName: {
     fontSize: 12,

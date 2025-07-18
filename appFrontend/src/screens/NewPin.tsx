@@ -7,8 +7,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,14 +21,19 @@ import { colors, spacing, typography } from '../theme';
 interface RouteParams {
   currentPin: string;
   isFirstTime?: boolean;
+  isPinReset?: boolean;
+  pinResetOTPId?: string;
 }
 
+type NewPinNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'NewPin'>;
+
 const NewPin = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NewPinNavigationProp>();
   const route = useRoute();
-  const { currentPin, isFirstTime } = (route.params || {}) as RouteParams;
+  const { currentPin, isFirstTime, isPinReset, pinResetOTPId } = (route.params || {}) as RouteParams;
   const [newPin, setNewPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   const handlePinSubmit = async () => {
     if (newPin.length !== 4) {
@@ -44,7 +52,9 @@ const NewPin = () => {
       navigation.navigate('ConfirmPin', { 
         currentPin,
         newPin,
-        isFirstTime 
+        isFirstTime,
+        isPinReset,
+        pinResetOTPId
       });
     } catch (error) {
       Alert.alert('Error', 'Failed to proceed. Please try again.');
@@ -70,6 +80,24 @@ const NewPin = () => {
         </View>
 
         <View style={styles.content}>
+          <View style={styles.logoContainer}>
+            {imageError ? (
+              <View style={styles.logoFallback}>
+                <Text style={styles.logoText}>SNAP</Text>
+              </View>
+            ) : (
+              <Image
+                source={require('../../assets/icon.png')}
+                style={styles.logo}
+                resizeMode="contain"
+                onError={(error) => {
+                  console.error('Failed to load logo:', error.nativeEvent.error);
+                  setImageError(true);
+                }}
+              />
+            )}
+          </View>
+
           <Text style={styles.subtitle}>
             Enter a new 4-digit PIN
           </Text>
@@ -80,7 +108,9 @@ const NewPin = () => {
             maxLength={4}
             style={styles.pinInput}
           />
+        </View>
 
+        <View style={styles.footer}>
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handlePinSubmit}
@@ -124,6 +154,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  logoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  logo: {
+    width: 80,
+    height: 80,
+  },
+  logoFallback: {
+    width: 80,
+    height: 80,
+    backgroundColor: colors.primary,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.white,
+  },
   subtitle: {
     ...typography.body1,
     textAlign: 'center',
@@ -132,6 +184,10 @@ const styles = StyleSheet.create({
   },
   pinInput: {
     marginBottom: spacing.xl,
+  },
+  footer: {
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
   },
   button: {
     backgroundColor: colors.primary,

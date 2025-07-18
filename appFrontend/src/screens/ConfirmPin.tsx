@@ -7,27 +7,36 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import PinInput from '../components/PinInput';
 import { colors, spacing, typography } from '../theme';
+import { completePinReset } from '../api/auth';
 
 interface RouteParams {
   currentPin: string;
   newPin: string;
   isFirstTime?: boolean;
+  isPinReset?: boolean;
+  pinResetOTPId?: string;
 }
 
+type ConfirmPinNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'ConfirmPin'>;
+
 const ConfirmPin = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<ConfirmPinNavigationProp>();
   const { changePin } = useAuth();
   const route = useRoute();
-  const { currentPin, newPin, isFirstTime } = (route.params || {}) as RouteParams;
+  const { currentPin, newPin, isFirstTime, isPinReset, pinResetOTPId } = (route.params || {}) as RouteParams;
   const [confirmPin, setConfirmPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   const handlePinSubmit = async () => {
     if (confirmPin.length !== 4) {
@@ -42,10 +51,30 @@ const ConfirmPin = () => {
 
     setIsLoading(true);
     try {
-      // Call API to change PIN
+      if (isPinReset && pinResetOTPId) {
+        // For PIN reset flow, call the complete PIN reset API
+        await completePinReset(newPin, pinResetOTPId);
+        
+        Alert.alert(
+          'Success',
+          'PIN reset completed successfully',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate to app screen
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'App' }],
+                });
+              },
+            },
+          ]
+        );
+      } else {
+        // Regular PIN change flow
       await changePin(currentPin, newPin);
 
-      // Show success message
       Alert.alert(
         'Success',
         'PIN changed successfully',
@@ -54,10 +83,10 @@ const ConfirmPin = () => {
             text: 'OK',
             onPress: () => {
               if (isFirstTime) {
-                // Navigate to home screen for first-time users
+                  // Navigate to app screen for first-time users
                 navigation.reset({
                   index: 0,
-                  routes: [{ name: 'Home' }],
+                    routes: [{ name: 'App' }],
                 });
               } else {
                 // Go back to previous screen for existing users
@@ -67,8 +96,9 @@ const ConfirmPin = () => {
           },
         ]
       );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to change PIN. Please try again.');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to change PIN. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -91,6 +121,24 @@ const ConfirmPin = () => {
         </View>
 
         <View style={styles.content}>
+          <View style={styles.logoContainer}>
+            {imageError ? (
+              <View style={styles.logoFallback}>
+                <Text style={styles.logoText}>SNAP</Text>
+              </View>
+            ) : (
+              <Image
+                source={require('../../assets/icon.png')}
+                style={styles.logo}
+                resizeMode="contain"
+                onError={(error) => {
+                  console.error('Failed to load logo:', error.nativeEvent.error);
+                  setImageError(true);
+                }}
+              />
+            )}
+          </View>
+
           <Text style={styles.subtitle}>
             Confirm your new 4-digit PIN
           </Text>
@@ -101,7 +149,9 @@ const ConfirmPin = () => {
             maxLength={4}
             style={styles.pinInput}
           />
+        </View>
 
+        <View style={styles.footer}>
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handlePinSubmit}
@@ -145,6 +195,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  logoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  logo: {
+    width: 80,
+    height: 80,
+  },
+  logoFallback: {
+    width: 80,
+    height: 80,
+    backgroundColor: colors.primary,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.white,
+  },
   subtitle: {
     ...typography.body1,
     textAlign: 'center',
@@ -153,6 +225,10 @@ const styles = StyleSheet.create({
   },
   pinInput: {
     marginBottom: spacing.xl,
+  },
+  footer: {
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
   },
   button: {
     backgroundColor: colors.primary,

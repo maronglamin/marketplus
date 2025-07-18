@@ -17,80 +17,43 @@ import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { format } from 'date-fns';
-import Constants from 'expo-constants';
-
-// Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.137.84';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+import { transactionService, type TransactionDetail } from '../../services/transactionService';
+import { getImageUrl } from '../../utils/imageUtils';
 
 type TransactionDetailNavigationProp = NativeStackNavigationProp<AppStackParamList, 'TransactionDetail'>;
 type TransactionDetailRouteProp = RouteProp<AppStackParamList, 'TransactionDetail'>;
-
-interface TransactionDetail {
-  id: string;
-  productTitle: string;
-  productDescription: string;
-  productImage: string;
-  unitPrice: number;
-  quantity: number;
-  totalAmount: number;
-  currencySymbol: string;
-  buyerName: string;
-  buyerEmail: string;
-  buyerPhone: string;
-  transactionDate: string;
-  status: 'completed' | 'pending' | 'cancelled';
-  orderNumber: string;
-  paymentMethod: string;
-  shippingAddress: string;
-  trackingNumber?: string;
-  estimatedDelivery?: string;
-  notes?: string;
-}
 
 export function TransactionDetail() {
   const navigation = useNavigation<TransactionDetailNavigationProp>();
   const route = useRoute<TransactionDetailRouteProp>();
   const [transaction, setTransaction] = useState<TransactionDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const transactionId = route.params?.transactionId || '1';
-  const currency = route.params?.currency || 'USD';
-  const currencySymbol = route.params?.currencySymbol || '$';
+  const transactionId = route.params?.transactionId || '';
 
   useEffect(() => {
+    if (transactionId) {
     loadTransactionDetail();
+    }
   }, [transactionId]);
 
   const loadTransactionDetail = async () => {
     try {
       setLoading(true);
-      // Mock data - replace with actual API call
-      const mockTransaction: TransactionDetail = {
-        id: transactionId,
-        productTitle: 'iPhone 15 Pro Max - 256GB',
-        productDescription: 'The most advanced iPhone ever with A17 Pro chip, 48MP camera system, and titanium design.',
-        productImage: '/uploads/iphone15.jpg',
-        unitPrice: 1199,
-        quantity: 1,
-        totalAmount: 1199,
-        currencySymbol,
-        buyerName: 'John Smith',
-        buyerEmail: 'john.smith@email.com',
-        buyerPhone: '+1 (555) 123-4567',
-        transactionDate: '2024-01-15T10:30:00Z',
-        status: 'completed',
-        orderNumber: 'ORD-2024-001',
-        paymentMethod: 'Credit Card (Visa ending in 1234)',
-        shippingAddress: '123 Main Street, New York, NY 10001, United States',
-        trackingNumber: 'TRK123456789',
-        estimatedDelivery: '2024-01-18T18:00:00Z',
-        notes: 'Customer requested signature confirmation for delivery.',
-      };
-
-      setTransaction(mockTransaction);
-    } catch (error) {
+      setError(null);
+      
+      console.log('Loading transaction detail for ID:', transactionId);
+      
+      const transactionData = await transactionService.getTransactionDetail(transactionId);
+      setTransaction(transactionData);
+    } catch (error: any) {
       console.error('Error loading transaction detail:', error);
+      if (error.response?.status === 404) {
+        setError('Transaction not found');
+      } else {
+        setError('Failed to load transaction details');
+      }
     } finally {
       setLoading(false);
     }
@@ -101,6 +64,7 @@ export function TransactionDetail() {
       case 'completed': return '#059669';
       case 'pending': return '#F59E0B';
       case 'cancelled': return '#DC2626';
+      case 'refunded': return '#8B5CF6';
       default: return '#6B7280';
     }
   };
@@ -110,6 +74,7 @@ export function TransactionDetail() {
       case 'completed': return 'Completed';
       case 'pending': return 'Pending';
       case 'cancelled': return 'Cancelled';
+      case 'refunded': return 'Refunded';
       default: return 'Unknown';
     }
   };
@@ -119,6 +84,7 @@ export function TransactionDetail() {
       case 'completed': return 'checkmark-circle';
       case 'pending': return 'time';
       case 'cancelled': return 'close-circle';
+      case 'refunded': return 'refresh-circle';
       default: return 'help-circle';
     }
   };
@@ -134,12 +100,26 @@ export function TransactionDetail() {
     );
   }
 
-  if (!transaction) {
+  if (error || !transaction) {
     return (
       <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color="#000" />
+            </TouchableOpacity>
+            <Text style={styles.title}>Transaction Details</Text>
+            <View style={styles.placeholder} />
+          </View>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#DC2626" />
-          <Text style={styles.errorText}>Transaction not found</Text>
+            <Text style={styles.errorText}>{error || 'Transaction not found'}</Text>
+            {error && (
+              <TouchableOpacity style={styles.retryButton} onPress={loadTransactionDetail}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -178,7 +158,11 @@ export function TransactionDetail() {
             <Text style={styles.sectionTitle}>Product Information</Text>
             <View style={styles.productCard}>
               <Image
-                source={{ uri: `${API_URL}${transaction.productImage}` }}
+                  source={{ 
+                    uri: transaction.productImage 
+                      ? (getImageUrl(transaction.productImage) || 'https://via.placeholder.com/400x200?text=No+Image')
+                      : 'https://via.placeholder.com/400x200?text=No+Image'
+                  }}
                 style={styles.productImage}
                 resizeMode="cover"
               />
@@ -196,11 +180,110 @@ export function TransactionDetail() {
                   <Text style={styles.priceValue}>{transaction.quantity}</Text>
                 </View>
                 <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Total Amount:</Text>
-                  <Text style={styles.totalAmount}>
-                    {transaction.currencySymbol}{transaction.totalAmount.toLocaleString()}
+                  <Text style={styles.priceLabel}>Subtotal:</Text>
+                  <Text style={styles.priceValue}>
+                    {transaction.currencySymbol}{transaction.subtotal.toLocaleString()}
                   </Text>
                 </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Amounts Breakdown */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Amount Breakdown</Text>
+            <View style={styles.amountsCard}>
+              <View style={styles.amountRow}>
+                <Text style={styles.amountLabel}>Subtotal:</Text>
+                <Text style={styles.amountValue}>
+                  {transaction.currencySymbol}{transaction.subtotal.toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.amountRow}>
+                <Text style={styles.amountLabel}>Tax:</Text>
+                <Text style={styles.amountValue}>
+                  {transaction.currencySymbol}{transaction.taxAmount.toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.amountRow}>
+                <Text style={styles.amountLabel}>Shipping:</Text>
+                <Text style={styles.amountValue}>
+                  {transaction.currencySymbol}{transaction.shippingAmount.toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.amountRow}>
+                <Text style={styles.amountLabel}>Discount:</Text>
+                <Text style={[styles.amountValue, { color: '#DC2626' }]}>
+                  -{transaction.currencySymbol}{transaction.discountAmount.toLocaleString()}
+                </Text>
+              </View>
+              <View style={styles.amountRow}>
+                <Text style={styles.amountLabel}>Service Fee:</Text>
+                <Text style={[styles.amountValue, { color: '#DC2626' }]}>
+                  -{transaction.currencySymbol}{transaction.serviceFeeAmount.toLocaleString()}
+                </Text>
+              </View>
+              
+              {/* Calculation Summary */}
+              <View style={[styles.amountRow, styles.calculationRow]}>
+                <Text style={styles.calculationLabel}>Calculation:</Text>
+                <Text style={styles.calculationValue}>
+                  {transaction.currencySymbol}{transaction.subtotal.toFixed(2)} + {transaction.currencySymbol}{transaction.taxAmount.toFixed(2)} + {transaction.currencySymbol}{transaction.shippingAmount.toFixed(2)} - {transaction.currencySymbol}{transaction.discountAmount.toFixed(2)} - {transaction.currencySymbol}{transaction.serviceFeeAmount.toFixed(2)}
+                </Text>
+              </View>
+              
+              {/* Calculated Total */}
+              {(() => {
+                // Round all values to 2 decimal places to avoid floating-point precision issues
+                const subtotal = Math.round(transaction.subtotal * 100) / 100;
+                const taxAmount = Math.round(transaction.taxAmount * 100) / 100;
+                const shippingAmount = Math.round(transaction.shippingAmount * 100) / 100;
+                const discountAmount = Math.round(transaction.discountAmount * 100) / 100;
+                const serviceFeeAmount = Math.round(transaction.serviceFeeAmount * 100) / 100;
+                const totalAmount = Math.round(transaction.totalAmount * 100) / 100;
+                
+                const calculatedTotal = Math.round((subtotal + taxAmount + shippingAmount - discountAmount - serviceFeeAmount) * 100) / 100;
+                const difference = Math.abs(calculatedTotal - totalAmount);
+                const hasDiscrepancy = difference > 0.01; // Allow for small rounding differences
+                
+                // Debug logging
+                console.log('Transaction Amount Breakdown:', {
+                  subtotal,
+                  taxAmount,
+                  shippingAmount,
+                  discountAmount,
+                  serviceFeeAmount,
+                  calculatedTotal,
+                  actualTotal: totalAmount,
+                  difference,
+                  hasDiscrepancy
+                });
+                
+                return (
+                  <>
+                    <View style={[styles.amountRow, styles.calculatedRow]}>
+                      <Text style={styles.calculatedLabel}>Calculated Total:</Text>
+                      <Text style={styles.calculatedValue}>
+                        {transaction.currencySymbol}{calculatedTotal.toFixed(2)}
+                      </Text>
+                    </View>
+                    {hasDiscrepancy && (
+                      <View style={[styles.amountRow, styles.discrepancyRow]}>
+                        <Text style={styles.discrepancyLabel}>Difference:</Text>
+                        <Text style={[styles.discrepancyValue, { color: '#DC2626' }]}>
+                          {transaction.currencySymbol}{difference.toFixed(2)}
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
+              
+              <View style={[styles.amountRow, styles.totalRow]}>
+                <Text style={styles.totalLabel}>Final Total:</Text>
+                <Text style={styles.totalValue}>
+                  {transaction.currencySymbol}{transaction.totalAmount.toLocaleString()}
+                </Text>
               </View>
             </View>
           </View>
@@ -236,11 +319,25 @@ export function TransactionDetail() {
                 <Text style={styles.infoLabel}>Payment:</Text>
                 <Text style={styles.infoValue}>{transaction.paymentMethod}</Text>
               </View>
+              {transaction.paymentReference && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="receipt-outline" size={20} color="#6B7280" />
+                  <Text style={styles.infoLabel}>Reference:</Text>
+                  <Text style={styles.infoValue}>{transaction.paymentReference}</Text>
+                </View>
+              )}
               <View style={styles.infoRow}>
                 <Ionicons name="location-outline" size={20} color="#6B7280" />
                 <Text style={styles.infoLabel}>Address:</Text>
                 <Text style={styles.infoValue}>{transaction.shippingAddress}</Text>
               </View>
+              {transaction.shippingMethod && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="car-outline" size={20} color="#6B7280" />
+                  <Text style={styles.infoLabel}>Method:</Text>
+                  <Text style={styles.infoValue}>{transaction.shippingMethod}</Text>
+                </View>
+              )}
               {transaction.trackingNumber && (
                 <View style={styles.infoRow}>
                   <Ionicons name="car-outline" size={20} color="#6B7280" />
@@ -248,12 +345,21 @@ export function TransactionDetail() {
                   <Text style={styles.infoValue}>{transaction.trackingNumber}</Text>
                 </View>
               )}
-              {transaction.estimatedDelivery && (
+              {transaction.shippedAt && (
                 <View style={styles.infoRow}>
                   <Ionicons name="calendar-outline" size={20} color="#6B7280" />
-                  <Text style={styles.infoLabel}>Delivery:</Text>
+                  <Text style={styles.infoLabel}>Shipped:</Text>
                   <Text style={styles.infoValue}>
-                    {format(new Date(transaction.estimatedDelivery), 'MMM d, yyyy')}
+                    {format(new Date(transaction.shippedAt), 'MMM d, yyyy')}
+                  </Text>
+                </View>
+              )}
+              {transaction.deliveredAt && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#6B7280" />
+                  <Text style={styles.infoLabel}>Delivered:</Text>
+                  <Text style={styles.infoValue}>
+                    {format(new Date(transaction.deliveredAt), 'MMM d, yyyy')}
                   </Text>
                 </View>
               )}
@@ -290,8 +396,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    height: 56,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
+    paddingBottom: 12,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 56 : 56,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
@@ -302,7 +409,18 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 16, fontSize: 16, color: '#6B7280' },
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { marginTop: 16, fontSize: 18, color: '#DC2626', fontWeight: '600' },
+  errorText: { marginTop: 16, fontSize: 18, color: '#DC2626', fontWeight: '600', textAlign: 'center', marginBottom: 24 },
+  retryButton: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   statusCard: {
     margin: 16,
     padding: 20,
@@ -358,4 +476,89 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   notesText: { fontSize: 14, color: '#111827', lineHeight: 20 },
+  amountsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  amountLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  amountValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  totalRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 12,
+    marginTop: 8,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2563EB',
+  },
+  calculatedRow: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  calculatedLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  calculatedValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  discrepancyRow: {
+    marginTop: 4,
+  },
+  discrepancyLabel: {
+    fontSize: 12,
+    color: '#DC2626',
+  },
+  discrepancyValue: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  calculationRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  calculationLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  calculationValue: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontFamily: 'monospace',
+    flex: 1,
+  },
 }); 

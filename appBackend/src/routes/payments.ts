@@ -1,8 +1,8 @@
 import express from 'express';
 import Stripe from 'stripe';
 import { authenticate } from '../middleware/auth';
-import { config } from '../config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TransactionType } from '@prisma/client';
+import UCPService from '../services/ucpService';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -275,5 +275,214 @@ router.get('/payment-intent/:paymentIntentId', authenticate, async (req, res) =>
     });
   }
 });
+
+// Payment success endpoint - updates order and creates external transaction
+router.post('/payment-success', authenticate, async (req, res) => {
+  try {
+    const { paymentIntentId, orderId } = req.body;
+
+    if (!paymentIntentId || !orderId) {
+      return res.status(400).json({
+        message: 'Missing required fields: paymentIntentId, orderId'
+      });
+    }
+
+    // Retrieve the payment intent from Stripe to get full details
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({
+        message: 'Payment intent is not in succeeded status'
+      });
+    }
+
+    // Get order details
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: true,
+        seller: true
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        message: 'Order not found'
+      });
+    }
+
+    // Verify the payment intent belongs to this order
+    if (paymentIntent.metadata.orderId !== orderId) {
+      return res.status(400).json({
+        message: 'Payment intent does not belong to this order'
+      });
+    }
+
+    // Generate unique app transaction ID for this payment
+    const appTransactionId = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    
+    // Calculate amounts
+    const originalAmount = paymentIntent.amount / 100; // Convert from cents to dollars
+    const gatewayChargeFees = calculateStripeFees(originalAmount, paymentIntent.currency);
+    const processedAmount = originalAmount - gatewayChargeFees; // What seller actually receives
+
+    // Calculate service fee using UCP
+    const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } = await UCPService.calculateServiceFee('stripe', originalAmount, paymentIntent.currency);
+
+    // Use a transaction to ensure all updates and external transaction creations succeed
+    const result = await prisma.$transaction(async (tx) => {
+      // Update the order
+      const updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          paymentStatus: 'PAID',
+          status: 'CONFIRMED',
+          paymentReference: paymentIntent.id,
+          paidAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+
+      // Create original transaction record (customer payment)
+      const originalTransaction = await tx.externalTransaction.create({
+        data: {
+          orderId: orderId,
+          customerId: order.userId,
+          sellerId: order.sellerId,
+          gatewayProvider: 'stripe',
+          gatewayTransactionId: paymentIntent.id,
+          paymentReference: paymentIntent.id,
+          appTransactionId: appTransactionId,
+          transactionType: 'ORIGINAL',
+          amount: originalAmount,
+          currencyCode: paymentIntent.currency.toUpperCase(),
+          gatewayChargeFees: null, // No fees on original transaction
+          processedAmount: null, // Not applicable for original transaction
+          paidThroughGateway: true,
+          gatewayResponse: paymentIntent as any, // Store full Stripe response
+          status: 'SUCCESS',
+          processedAt: new Date()
+        }
+      });
+
+      // Create fee transaction record (Stripe fees)
+      const feeTransaction = await tx.externalTransaction.create({
+        data: {
+          orderId: orderId,
+          customerId: order.userId,
+          sellerId: order.sellerId,
+          gatewayProvider: 'stripe',
+          gatewayTransactionId: `${paymentIntent.id}-fee`,
+          paymentReference: paymentIntent.id,
+          appTransactionId: appTransactionId, // Same app transaction ID
+          transactionType: 'FEE',
+          amount: gatewayChargeFees,
+          currencyCode: paymentIntent.currency.toUpperCase(),
+          gatewayChargeFees: gatewayChargeFees,
+          processedAmount: 0, // Fees are deducted, so processed amount is 0
+          paidThroughGateway: true,
+          gatewayResponse: {
+            originalPaymentIntent: paymentIntent.id,
+            feeCalculation: {
+              percentage: 0.029,
+              fixedFee: 30,
+              totalFees: gatewayChargeFees
+            }
+          },
+          status: 'SUCCESS',
+          processedAt: new Date()
+        }
+      });
+
+      // Create service fee transaction record (App service fee)
+      const serviceFeeTransaction = await tx.externalTransaction.create({
+        data: {
+          orderId: orderId,
+          customerId: order.userId,
+          sellerId: order.sellerId,
+          gatewayProvider: 'stripe',
+          gatewayTransactionId: `${paymentIntent.id}-servicefee`,
+          paymentReference: paymentIntent.id,
+          appTransactionId: appTransactionId, // Same app transaction ID
+          transactionType: 'SERVICE_FEE' as TransactionType,
+          amount: serviceFeeAmount,
+          currencyCode: paymentIntent.currency.toUpperCase(),
+          gatewayChargeFees: null,
+          processedAmount: 0, // Service fee is deducted from seller
+          paidThroughGateway: false,
+          gatewayResponse: {
+            originalPaymentIntent: paymentIntent.id,
+            serviceFeeConfig: serviceFeeConfig ? {
+              name: serviceFeeConfig.name,
+              value: serviceFeeConfig.value,
+              description: serviceFeeConfig.description,
+              serviceType: serviceFeeConfig.serviceType,
+              metadata: serviceFeeConfig.metadata
+            } : null,
+            serviceFeePercentage,
+            serviceFeeAmount
+          },
+          status: 'SUCCESS',
+          processedAt: new Date()
+        }
+      });
+
+      return { updatedOrder, originalTransaction, feeTransaction, serviceFeeTransaction };
+    });
+
+    res.json({
+      success: true,
+      order: {
+        id: result.updatedOrder.id,
+        paymentStatus: result.updatedOrder.paymentStatus,
+        status: result.updatedOrder.status,
+        paidAt: result.updatedOrder.paidAt
+      },
+      transaction: {
+        appTransactionId: result.originalTransaction.appTransactionId,
+        originalTransaction: {
+          id: result.originalTransaction.id,
+          amount: result.originalTransaction.amount,
+          status: result.originalTransaction.status
+        },
+        feeTransaction: {
+          id: result.feeTransaction.id,
+          amount: result.feeTransaction.amount,
+          status: result.feeTransaction.status
+        },
+        serviceFeeTransaction: {
+          id: result.serviceFeeTransaction.id,
+          amount: result.serviceFeeTransaction.amount,
+          status: result.serviceFeeTransaction.status
+        },
+        processedAmount: processedAmount,
+        totalFees: gatewayChargeFees,
+        serviceFee: serviceFeeAmount
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Error processing payment success:', error);
+    res.status(500).json({
+      message: error.message || 'Failed to process payment success'
+    });
+  }
+});
+
+// Helper function to calculate Stripe fees
+function calculateStripeFees(amount: number, currency: string): number {
+  // Stripe fees: 2.9% + 30 cents for most currencies
+  const percentageFee = 0.029; // 2.9%
+  const fixedFee = 30; // 30 cents in smallest currency unit
+  
+  // For zero-decimal currencies, adjust the fixed fee
+  const zeroDecimalCurrencies = ['jpy', 'bif', 'clp', 'djf', 'gnf', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
+  const adjustedFixedFee = zeroDecimalCurrencies.includes(currency.toLowerCase()) ? fixedFee : fixedFee / 100;
+  
+  const percentageAmount = amount * percentageFee;
+  const totalFees = percentageAmount + adjustedFixedFee;
+  
+  return totalFees;
+}
 
 export default router; 

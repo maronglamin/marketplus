@@ -17,6 +17,7 @@ import userRoutes from './routes/users';
 import productRoutes from './routes/products';
 import orderRoutes from './routes/orders';
 import paymentMethodRoutes from './routes/paymentMethods';
+import settlementRoutes from './routes/settlements';
 
 const app = express();
 
@@ -96,9 +97,10 @@ app.use(limiter);
 app.use('/api', routes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/products', productRoutes);
 app.use('/api/payment-methods', paymentMethodRoutes);
+app.use('/api/settlements', settlementRoutes);
 app.use('/api/upload', uploadRouter);
 
 // Health check endpoint under /api

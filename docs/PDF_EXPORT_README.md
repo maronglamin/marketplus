@@ -1,6 +1,6 @@
-# PDF Export Feature
+# PDF Export Functionality
 
-This document describes the PDF export functionality added to the marketplace app.
+This document describes the PDF export functionality added to the SNAP app.
 
 ## Overview
 
@@ -99,7 +99,7 @@ The backend APIs have been updated to support date range filtering:
 ## Styling
 
 The PDF uses a professional design with:
-- Company branding (Marketplace)
+- Company branding (SNAP)
 - Clean typography and spacing
 - Color-coded status badges
 - Responsive table layout

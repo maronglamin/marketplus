@@ -7,6 +7,10 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -274,7 +278,12 @@ function StripePaymentContent(props: StripePaymentProps) {
 
   return (
     <Modal visible={props.visible} animationType="slide" transparent={true}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardAvoidingView}
+          >
         <View style={styles.modalContent}>
           <View style={styles.header}>
             <Text style={styles.title}>Complete Payment</Text>
@@ -350,7 +359,9 @@ function StripePaymentContent(props: StripePaymentProps) {
             </TouchableOpacity>
           </View>
         </View>
+          </KeyboardAvoidingView>
       </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }
@@ -373,6 +384,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
@@ -409,6 +426,7 @@ const styles = StyleSheet.create({
     height: 50,
     marginBottom: 24,
   },
+
   payButton: {
     backgroundColor: '#2563EB',
     paddingVertical: 16,

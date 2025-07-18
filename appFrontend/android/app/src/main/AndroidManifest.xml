@@ -27,8 +27,8 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="marketplace"/>
-        <data android:scheme="com.marketplace.app"/>
+        <data android:scheme="snap"/>
+        <data android:scheme="com.snap.app"/>
       </intent-filter>
     </activity>
   </application>

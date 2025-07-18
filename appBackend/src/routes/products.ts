@@ -1,6 +1,6 @@
 import express from 'express';
 import { logger } from '../utils/logger';
-import { PrismaClient, ProductCondition, ProductStatus } from '@prisma/client';
+import { PrismaClient, ProductCondition, ProductStatus, TransactionType } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { notificationService } from '../services/notificationService';
 
@@ -537,6 +537,236 @@ router.post('/:productId/view', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Get seller dashboard statistics
+router.get('/seller/stats', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      logger.error('No user in request for seller stats')
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    logger.info('Fetching seller dashboard stats:', { 
+      userId: req.user.id
+    });
+
+    // Get product counts
+    const [totalProducts, activeProducts] = await Promise.all([
+      prisma.product.count({
+        where: {
+          sellerId: req.user.id,
+          deletedAt: null
+        }
+      }),
+      prisma.product.count({
+        where: {
+          sellerId: req.user.id,
+          status: 'ACTIVE',
+          deletedAt: null
+        }
+      })
+    ]);
+
+    logger.info('Product counts calculated:', { totalProducts, activeProducts });
+
+    // Get order statistics and revenue
+    const [totalSales, pendingOrders, paidOrders] = await Promise.all([
+      // Total sales: orders with PAID payment status
+      prisma.order.count({
+        where: {
+          sellerId: req.user.id,
+          paymentStatus: 'PAID'
+        }
+      }),
+      // Pending orders: orders not in CONFIRMED or AUTHORIZED status
+      prisma.order.count({
+        where: {
+          sellerId: req.user.id,
+          status: {
+            notIn: ['CONFIRMED', 'AUTHORIZED', 'CANCELLED']
+          }
+        }
+      }),
+      // Get all paid orders for revenue calculation
+      prisma.order.findMany({
+        where: {
+          sellerId: req.user.id,
+          paymentStatus: 'PAID'
+        },
+        select: {
+          totalAmount: true,
+          currencyCode: true,
+          createdAt: true
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      })
+    ]);
+
+    // Calculate revenue based on latest paid order currency
+    let totalRevenue = 0;
+    let revenueCurrency = 'USD'; // Default currency
+    let hasOtherCurrencies = false;
+
+    if (paidOrders.length > 0) {
+      // Get the currency of the latest paid order
+      revenueCurrency = paidOrders[0].currencyCode;
+      
+      // Sum all paid orders in the same currency
+      const grossRevenue = paidOrders
+        .filter(order => order.currencyCode === revenueCurrency)
+        .reduce((sum, order) => sum + parseFloat(order.totalAmount.toString()), 0);
+      
+      // Get service fees for this currency from ExternalTransaction table
+      const serviceFeesResult = await prisma.externalTransaction.aggregate({
+        where: {
+          sellerId: req.user.id,
+          currencyCode: revenueCurrency,
+          transactionType: 'SERVICE_FEE' as TransactionType,
+          status: 'SUCCESS'
+        },
+        _sum: {
+          amount: true
+        }
+      });
+
+      const totalServiceFees = serviceFeesResult._sum?.amount
+        ? parseFloat(serviceFeesResult._sum.amount.toString())
+        : 0;
+
+      // Calculate net revenue after deducting service fees
+      totalRevenue = Math.max(0, grossRevenue - totalServiceFees);
+      
+      // Check if there are orders in other currencies
+      const uniqueCurrencies = [...new Set(paidOrders.map(order => order.currencyCode))];
+      hasOtherCurrencies = uniqueCurrencies.length > 1;
+    }
+
+    logger.info('Order counts and revenue calculated:', { 
+      totalSales, 
+      pendingOrders, 
+      totalRevenue, 
+      revenueCurrency, 
+      hasOtherCurrencies 
+    });
+
+    const stats = {
+      totalProducts,
+      activeProducts,
+      totalSales,
+      pendingOrders,
+      totalRevenue,
+      revenueCurrency,
+      hasOtherCurrencies
+    };
+
+    logger.info('Seller dashboard stats fetched successfully:', { 
+      userId: req.user.id,
+      stats
+    });
+
+    res.json(stats);
+  } catch (error) {
+    logger.error('Error fetching seller dashboard stats:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch dashboard stats',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get seller revenue breakdown by currency
+router.get('/seller/revenue', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      logger.error('No user in request for seller revenue')
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    logger.info('Fetching seller revenue breakdown:', { 
+      userId: req.user.id
+    });
+
+    // Get all paid orders grouped by currency
+    const paidOrders = await prisma.order.findMany({
+      where: {
+        sellerId: req.user.id,
+        paymentStatus: 'PAID'
+      },
+      select: {
+        totalAmount: true,
+        currencyCode: true,
+        createdAt: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    // Get service fees from ExternalTransaction table
+    const serviceFees = await prisma.externalTransaction.findMany({
+      where: {
+        sellerId: req.user.id,
+        transactionType: 'SERVICE_FEE' as TransactionType,
+        status: 'SUCCESS'
+      },
+      select: {
+        amount: true,
+        currencyCode: true
+      }
+    });
+
+    // Group orders by currency and calculate totals
+    const revenueByCurrency = new Map<string, number>();
+    
+    paidOrders.forEach(order => {
+      const currency = order.currencyCode;
+      const amount = parseFloat(order.totalAmount.toString());
+      revenueByCurrency.set(currency, (revenueByCurrency.get(currency) || 0) + amount);
+    });
+
+    // Subtract service fees from revenue by currency
+    serviceFees.forEach(fee => {
+      const currency = fee.currencyCode;
+      const feeAmount = parseFloat(fee.amount.toString());
+      const currentRevenue = revenueByCurrency.get(currency) || 0;
+      revenueByCurrency.set(currency, Math.max(0, currentRevenue - feeAmount)); // Ensure revenue doesn't go negative
+    });
+
+    // Calculate total revenue across all currencies
+    const totalRevenue = Array.from(revenueByCurrency.values()).reduce((sum, amount) => sum + amount, 0);
+
+    // Convert to array format for frontend
+    const revenueData = Array.from(revenueByCurrency.entries()).map(([currency, amount]) => ({
+      currency,
+      amount,
+      percentage: totalRevenue > 0 ? Math.round((amount / totalRevenue) * 100) : 0
+    }));
+
+    // Sort by amount (highest first)
+    revenueData.sort((a, b) => b.amount - a.amount);
+
+    logger.info('Seller revenue breakdown calculated:', { 
+      userId: req.user.id,
+      totalRevenue,
+      currencyCount: revenueData.length,
+      currencies: revenueData.map(item => item.currency),
+      serviceFeesCount: serviceFees.length
+    });
+
+    res.json({
+      totalRevenue,
+      revenueByCurrency: revenueData
+    });
+  } catch (error) {
+    logger.error('Error fetching seller revenue breakdown:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch revenue breakdown',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Get a single product by ID for sellers (their own products)
 router.get('/seller/:productId', authenticate, async (req: AuthRequest, res) => {
   try {
@@ -712,7 +942,7 @@ router.get('/:productId', authenticate, async (req: AuthRequest, res) => {
       ratingCount: product.ratingCount,
       description: `Experience premium quality with this ${product.title}. Perfect for your needs.\n\n${product.description || ''}`,
       images: product.images.length > 0 
-        ? product.images.map(img => `http://192.168.40.48:3000${img.imageUrl}`)
+        ? product.images.map(img => `http://10.77.205.48:3000${img.imageUrl}`)
         : ['https://via.placeholder.com/400x300?text=No+Image'],
       seller: {
         name: product.seller.sellerKyc?.businessName || `${product.seller.firstName} ${product.seller.lastName}`,

@@ -10,6 +10,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Alert,
+  Image,
 } from 'react-native'
 import { ArrowLeft } from 'lucide-react-native'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
@@ -25,6 +26,7 @@ type LoginPinRouteProp = RouteProp<AuthStackParamList, 'LoginPin'>
 export function LoginPin() {
   const [pin, setPin] = useState(['', '', '', ''])
   const [loading, setLoading] = useState(false)
+  const [imageError, setImageError] = useState(false)
   const inputRefs = useRef<Array<TextInput | null>>([])
   const navigation = useNavigation<LoginPinNavigationProp>()
   const route = useRoute<LoginPinRouteProp>()
@@ -89,8 +91,21 @@ export function LoginPin() {
       await AsyncStorage.setItem('token', response.token)
       console.log('Login successful, token stored')
 
-      // Check if this is first login and PIN needs to be changed
-      if (response.isFirstLogin) {
+      // Check if PIN reset is required
+      if (response.requiresPinReset) {
+        // Navigate to PIN reset flow
+        navigation.reset({
+          index: 0,
+          routes: [{ 
+            name: 'NewPin',
+            params: { 
+              currentPin: pinString,
+              isPinReset: true,
+              pinResetOTPId: response.pinResetOTPId
+            }
+          }],
+        })
+      } else if (response.isFirstLogin) {
         // Navigate to PIN change flow
         navigation.reset({
           index: 0,
@@ -190,6 +205,24 @@ export function LoginPin() {
         </View>
 
         <View style={styles.content}>
+          <View style={styles.logoContainer}>
+            {imageError ? (
+              <View style={styles.logoFallback}>
+                <Text style={styles.logoText}>SNAP</Text>
+              </View>
+            ) : (
+              <Image
+                source={require('../../assets/icon.png')}
+                style={styles.logo}
+                resizeMode="contain"
+                onError={(error) => {
+                  console.error('Failed to load logo:', error.nativeEvent.error);
+                  setImageError(true);
+                }}
+              />
+            )}
+          </View>
+          
           <Text style={styles.title}>Enter Your PIN</Text>
           <Text style={styles.subtitle}>
             Please enter your 4-digit PIN to continue
@@ -213,7 +246,9 @@ export function LoginPin() {
               />
             ))}
           </View>
+        </View>
 
+        <View style={styles.footer}>
           <TouchableOpacity
             onPress={handleLogin}
             disabled={loading || pin.some(digit => !digit)}
@@ -252,6 +287,28 @@ const styles = StyleSheet.create({
     padding: 20,
     justifyContent: 'center',
   },
+  logoContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  logo: {
+    width: 80,
+    height: 80,
+  },
+  logoFallback: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#2563EB',
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -279,6 +336,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 20,
     backgroundColor: '#F9FAFB',
+  },
+  footer: {
+    padding: 24,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
   },
   button: {
     backgroundColor: '#2563EB',

@@ -29,7 +29,7 @@ const prodFormat = winston.format.combine(
 export const logger = winston.createLogger({
   level: env.LOG_LEVEL,
   format: env.NODE_ENV === 'production' ? prodFormat : devFormat,
-  defaultMeta: { service: 'marketplace-api' },
+  defaultMeta: { service: 'snap-api' },
   transports: [
     // Write all logs to console
     new winston.transports.Console(),

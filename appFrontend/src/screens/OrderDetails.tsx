@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -27,8 +27,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from '../api/api';
 import { deliveryOptionsService, type DeliveryOption } from '../services/deliveryOptionsService';
 import { WorldCurrencyPicker } from '../components/WorldCurrencyPicker';
-import { MobileWalletPicker } from '../components/MobileWalletPicker';
-import { mobileWalletService, type MobileWalletProvider } from '../services/mobileWalletService';
 import { StripePayment } from '../components/StripePayment';
 import { stripeService } from '../services/stripeService';
 import Constants from 'expo-constants';
@@ -64,6 +62,7 @@ interface Order {
   currencyCode: string;
   deliveryCurrency?: string;
   shippingAmount: number;
+  discountAmount?: number;
   createdAt: string;
   updatedAt: string;
   sellerId: string;
@@ -116,12 +115,14 @@ export function OrderDetails() {
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
   const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
+  const [showUpdatePriceModal, setShowUpdatePriceModal] = useState(false);
+  const [updatingPrice, setUpdatingPrice] = useState(false);
+  const [newProductPrice, setNewProductPrice] = useState('');
+  const [newPriceCurrency, setNewPriceCurrency] = useState('');
   const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<{[key: string]: boolean}>({
     card: false,
     mobileWallets: false,
     cash: false,
-    bankTransfer: false,
-    crypto: false,
   });
 
   // Selected payment method for checkout
@@ -131,10 +132,7 @@ export function OrderDetails() {
   const [paymentMethodForms, setPaymentMethodForms] = useState<{[key: string]: any}>({
     card: {
       provider: '',
-      cardNumber: '',
       cardholderName: '',
-      expiryDate: '',
-      cvv: '',
       isDefault: false,
     },
     mobileWallets: {
@@ -149,20 +147,6 @@ export function OrderDetails() {
       accountName: 'Cash Payment',
       isDefault: false,
     },
-    bankTransfer: {
-      provider: '',
-      accountName: '',
-      accountNumber: '',
-      bankName: '',
-      swiftCode: '',
-      isDefault: false,
-    },
-    crypto: {
-      provider: '',
-      walletAddress: '',
-      walletType: '',
-      isDefault: false,
-    },
   });
 
   // Expanded payment method states
@@ -170,12 +154,13 @@ export function OrderDetails() {
     card: false,
     mobileWallets: false,
     cash: false,
-    bankTransfer: false,
-    crypto: false,
   });
 
   // Mobile wallet provider selection
   const [selectedMobileWalletProvider, setSelectedMobileWalletProvider] = useState<string>('');
+  const [mobileWalletProviders, setMobileWalletProviders] = useState<any[]>([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [providerSearch, setProviderSearch] = useState('');
 
   // Stripe payment state
   const [showStripePayment, setShowStripePayment] = useState(false);
@@ -229,20 +214,6 @@ export function OrderDetails() {
       icon: 'cash-outline',
       enabled: selectedPaymentMethods.cash,
     },
-    {
-      id: 'bankTransfer',
-      name: 'Bank Transfer',
-      description: 'Direct bank transfer',
-      icon: 'business-outline',
-      enabled: selectedPaymentMethods.bankTransfer,
-    },
-    {
-      id: 'crypto',
-      name: 'Cryptocurrency',
-      description: 'Bitcoin, Ethereum, etc.',
-      icon: 'logo-bitcoin',
-      enabled: selectedPaymentMethods.crypto,
-    },
   ];
 
   const handlePaymentMethodToggle = (methodId: string) => {
@@ -279,7 +250,7 @@ export function OrderDetails() {
 
   const handleMobileWalletProviderSelect = (providerId: string) => {
     setSelectedMobileWalletProvider(providerId);
-    const provider = mobileWalletService.getProviderById(providerId);
+    const provider = mobileWalletProviders.find(p => p.id === providerId);
     if (provider) {
       handlePaymentFormUpdate('mobileWallets', 'provider', provider.name);
     }
@@ -313,18 +284,16 @@ export function OrderDetails() {
             userId: user.id, // Add current user ID
             type: 'CREDIT_CARD',
             provider: formData.provider,
-            accountId: formData.cardNumber.replace(/\s/g, '').slice(-4), // Last 4 digits
+            accountId: 'CARD', // Generic identifier instead of card number
             accountName: formData.cardholderName,
             isDefault: formData.isDefault,
             metadata: {
-              cardNumber: formData.cardNumber,
-              expiryDate: formData.expiryDate,
-              cvv: formData.cvv
+              cardholderName: formData.cardholderName
             }
           };
           break;
         case 'mobileWallets':
-          const selectedProvider = mobileWalletService.getProviderById(selectedMobileWalletProvider);
+          const selectedProvider = mobileWalletProviders.find(p => p.id === selectedMobileWalletProvider);
           paymentData = {
             userId: user.id, // Add current user ID
             type: 'MOBILE_MONEY',
@@ -349,34 +318,6 @@ export function OrderDetails() {
             isDefault: formData.isDefault,
             metadata: {
               paymentType: 'cash_on_delivery'
-            }
-          };
-          break;
-        case 'bankTransfer':
-          paymentData = {
-            userId: user.id, // Add current user ID
-            type: 'BANK_TRANSFER',
-            provider: formData.bankName,
-            accountId: formData.accountNumber,
-            accountName: formData.accountName,
-            isDefault: formData.isDefault,
-            metadata: {
-              accountNumber: formData.accountNumber,
-              swiftCode: formData.swiftCode
-            }
-          };
-          break;
-        case 'crypto':
-          paymentData = {
-            userId: user.id, // Add current user ID
-            type: 'CRYPTO',
-            provider: formData.provider,
-            accountId: formData.walletAddress,
-            accountName: `${formData.walletType} Wallet`,
-            isDefault: formData.isDefault,
-            metadata: {
-              walletAddress: formData.walletAddress,
-              walletType: formData.walletType
             }
           };
           break;
@@ -418,7 +359,7 @@ export function OrderDetails() {
         
         switch (methodId) {
           case 'card':
-            if (!formData.provider || !formData.cardNumber || !formData.cardholderName || !formData.expiryDate || !formData.cvv) {
+            if (!formData.provider || !formData.cardholderName) {
               validationErrors.push('Please complete all card details');
             }
             break;
@@ -455,8 +396,6 @@ export function OrderDetails() {
       }
 
       setShowAddPaymentModal(false);
-      Alert.alert('Success', `${createdMethods.length} payment method(s) added successfully`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
       // Refresh payment methods list and proceed to checkout
       setTimeout(async () => {
@@ -465,52 +404,13 @@ export function OrderDetails() {
           const hasPaymentMethods = await checkPaymentMethodsWithUserFeedback();
           
           if (hasPaymentMethods) {
-            Alert.alert(
-              'Ready to Checkout',
-              'Your payment methods have been added successfully. Would you like to proceed with the payment now?',
-              [
-                {
-                  text: 'Later',
-                  style: 'cancel',
-                },
-                {
-                  text: 'Proceed to Payment',
-                  onPress: () => {
-                    console.log('Proceeding to checkout after adding payment methods for order:', order?.id);
-                    console.log('Available payment methods:', paymentMethods);
-                    
-                    // TODO: Navigate to checkout/payment screen
-                    // navigation.navigate('Checkout', { 
-                    //   orderId: order?.id,
-                    //   paymentMethods: paymentMethods,
-                    //   totalAmount: order?.totalAmount,
-                    //   currencyCode: order?.currencyCode
-                    // });
-                    
-                    // For now, show success message
-                    Alert.alert(
-                      'Payment Processing',
-                      'Redirecting to payment gateway...',
-                      [{ text: 'OK' }]
-                    );
-                  },
-                },
-              ]
-            );
-          } else {
-            Alert.alert(
-              'Payment Method Issue',
-              'Payment methods were added but there was an issue retrieving them. Please try the checkout process again.',
-              [{ text: 'OK' }]
-            );
+            // Directly open payment selection modal without alerts
+            setShowPaymentModal(true);
           }
         } catch (error) {
           console.error('Error checking payment methods after save:', error);
-          Alert.alert(
-            'Payment Method Added',
-            'Your payment methods have been added successfully. You can now proceed to checkout.',
-            [{ text: 'OK' }]
-          );
+          // Still open payment modal even if there's an error checking
+          setShowPaymentModal(true);
         }
       }, 1000); // Small delay to ensure backend has processed the new payment methods
     } catch (error) {
@@ -576,15 +476,92 @@ export function OrderDetails() {
     setShowStripePayment(false);
   };
 
-  const handleProceedToStripePayment = () => {
-    if (!order || !user) {
-      Alert.alert('Error', 'Order or user information is missing.');
+  const handleProceedToPayment = () => {
+    if (!order || !user || !selectedPaymentMethod) {
+      Alert.alert('Error', 'Order, user, or payment method information is missing.');
+      return;
+    }
+
+    // Find the selected payment method
+    const method = paymentMethods.find(m => m.id === selectedPaymentMethod);
+    if (!method) {
+      Alert.alert('Error', 'Selected payment method not found.');
       return;
     }
     
     setShowPaymentModal(false);
+
+    // Handle different payment method types
+    switch (method.type) {
+      case 'CREDIT_CARD':
+      case 'DEBIT_CARD':
+        // Use Stripe for card payments
     setShowStripePayment(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        break;
+
+      case 'MOBILE_MONEY':
+        // Check if the mobile wallet provider has integration
+        const providerId = method.metadata?.providerId;
+        if (providerId) {
+          // Check if we have integration for this provider
+          const provider = mobileWalletProviders.find(p => p.id === providerId);
+          if (provider && provider.isActive) {
+            // TODO: Implement mobile wallet payment flow
+            Alert.alert(
+              'Mobile Wallet Payment',
+              `Redirecting to ${provider.name} payment gateway...`,
+              [{ text: 'OK' }]
+            );
+          } else {
+            Alert.alert(
+              'Payment Gateway Not Available',
+              `${method.provider} payment gateway is not currently available. Please try another payment method.`,
+              [{ text: 'OK' }]
+            );
+          }
+        } else {
+          Alert.alert(
+            'Payment Method Error',
+            'Mobile wallet provider information is missing. Please try another payment method.',
+            [{ text: 'OK' }]
+          );
+        }
+        break;
+
+      case 'DIGITAL_WALLET':
+        // Handle cash on delivery or other digital wallet types
+        if (method.provider === 'Cash on Delivery') {
+          Alert.alert(
+            'Cash on Delivery',
+            'Your order will be processed for cash on delivery. The seller will contact you to arrange payment upon delivery.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // TODO: Update order status to indicate COD payment method
+                  console.log('Processing cash on delivery order');
+                }
+              }
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Digital Wallet Payment',
+            `Processing payment through ${method.provider}...`,
+            [{ text: 'OK' }]
+          );
+        }
+        break;
+
+      default:
+        Alert.alert(
+          'Payment Method Not Supported',
+          `${method.type} payment method is not currently supported. Please try another payment method.`,
+          [{ text: 'OK' }]
+        );
+        break;
+    }
   };
 
   // Pre-check payment methods for authorized orders
@@ -1138,9 +1115,9 @@ export function OrderDetails() {
       if (order) {
         setOrder({
           ...order,
-          shippingAmount: response.data.order.shippingAmount,
-          deliveryCurrency: response.data.order.deliveryCurrency,
-          totalAmount: response.data.order.totalAmount,
+        shippingAmount: response.data.order.shippingAmount,
+        deliveryCurrency: response.data.order.deliveryCurrency,
+        totalAmount: response.data.order.totalAmount,
           shippingMethod: response.data.order.shippingMethod
         });
       }
@@ -1154,6 +1131,72 @@ export function OrderDetails() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setUpdatingDelivery(false);
+    }
+  };
+
+  const handleUpdateProductPrice = async () => {
+    // Security check - only seller can apply discount
+    if (order?.sellerId !== user?.id) {
+      Alert.alert('Access Denied', 'Only the product owner can apply discount.');
+      return;
+    }
+
+    // Check if payment is completed
+    if (order?.paymentStatus?.toLowerCase() === 'paid') {
+      Alert.alert('Cannot Apply Discount', 'Discount cannot be applied after payment is completed.');
+      return;
+    }
+
+    // Validate inputs
+    if (!newProductPrice) {
+      Alert.alert('Validation Error', 'Please enter a discount amount.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    const discountAmount = parseFloat(newProductPrice);
+    if (isNaN(discountAmount) || discountAmount < 0) {
+      Alert.alert('Validation Error', 'Please enter a valid discount amount (must be a positive number).');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    // Check if discount exceeds total amount
+    if (order && discountAmount >= order.totalAmount) {
+      Alert.alert('Validation Error', 'Discount amount cannot exceed or equal the total order amount.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    try {
+      setUpdatingPrice(true);
+      
+      const payload = {
+        newPrice: discountAmount,
+        currency: newPriceCurrency
+      };
+      
+      const response = await api.patch(`/api/orders/${orderId}/product-price`, payload);
+      
+      if (order) {
+        setOrder({
+          ...order,
+          totalAmount: response.data.order.totalAmount,
+          discountAmount: response.data.order.discountAmount,
+          currencyCode: response.data.order.currencyCode,
+          items: response.data.order.items
+        });
+      }
+      
+      setShowUpdatePriceModal(false);
+      Alert.alert('Success', 'Discount applied successfully');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Error applying discount:', error);
+      Alert.alert('Error', 'Failed to apply discount');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setUpdatingPrice(false);
     }
   };
 
@@ -1268,6 +1311,53 @@ export function OrderDetails() {
     
     return buyerStatusFlow[currentStatus.toLowerCase() as keyof typeof buyerStatusFlow] || [];
   };
+
+  // Fetch mobile wallet providers from database
+  const fetchMobileWalletProviders = async () => {
+    try {
+      setLoadingProviders(true);
+      const response = await api.get('/api/payment-gateway-service-providers');
+      console.log('Mobile wallet providers response:', response.data);
+      setMobileWalletProviders(response.data.providers || []);
+      
+      // Debug: Log the providers that were fetched
+      console.log('Fetched providers:', response.data.providers);
+      console.log('Provider count:', response.data.providers?.length || 0);
+      
+    } catch (error) {
+      console.error('Error fetching mobile wallet providers:', error);
+      // Fallback to empty array if API fails
+      setMobileWalletProviders([]);
+    } finally {
+      setLoadingProviders(false);
+    }
+  };
+
+  // Load mobile wallet providers on component mount
+  useEffect(() => {
+    fetchMobileWalletProviders();
+  }, []);
+
+  // Filter providers based on search
+  const filteredProviders = useMemo(() => {
+    console.log('Filtering providers. Total providers:', mobileWalletProviders.length);
+    console.log('Search term:', providerSearch);
+    
+    if (!providerSearch) {
+      console.log('No search term, returning all providers:', mobileWalletProviders);
+      return mobileWalletProviders;
+    }
+    
+    const search = providerSearch.toLowerCase();
+    const filtered = mobileWalletProviders.filter(provider =>
+      provider.name.toLowerCase().includes(search) ||
+      provider.code?.toLowerCase().includes(search) ||
+      provider.country?.toLowerCase().includes(search)
+    );
+    
+    console.log('Filtered providers:', filtered);
+    return filtered;
+  }, [mobileWalletProviders, providerSearch]);
 
   if (loading) {
     return (
@@ -1421,18 +1511,18 @@ export function OrderDetails() {
             if (order.status.toLowerCase() === 'pending') {
               // Pending: Show both Authorize and Cancel buttons
               return (
-                <View style={styles.statusActions}>
+            <View style={styles.statusActions}>
                   <Text style={styles.statusActionsTitle}>Buyer Actions:</Text>
-                  <View style={styles.statusButtons}>
-                    <TouchableOpacity
+              <View style={styles.statusButtons}>
+                  <TouchableOpacity
                       style={[styles.statusButton, styles.authorizeButton]}
                       onPress={() => updateOrderStatus('authorized')}
-                      disabled={updatingStatus}
-                    >
+                    disabled={updatingStatus}
+                  >
                       <Text style={[styles.statusButtonText, styles.authorizeButtonText]}>
                         Authorize Order
-                      </Text>
-                    </TouchableOpacity>
+                    </Text>
+                  </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.statusButton, styles.buyerCancelButton]}
                       onPress={() => updateOrderStatus('cancelled')}
@@ -1442,8 +1532,8 @@ export function OrderDetails() {
                         Cancel Order
                       </Text>
                     </TouchableOpacity>
-                  </View>
-                </View>
+              </View>
+            </View>
               );
             } else if (order.status.toLowerCase() === 'authorized') {
               // Authorized: Show only Cancel button
@@ -1501,50 +1591,76 @@ export function OrderDetails() {
         </View>
 
         <View style={styles.section}>
+          <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Order Items</Text>
+            {/* Only show update price button if user is the seller AND payment is not completed */}
+            {(() => {
+              const currentUserId = user?.id;
+              const orderSellerId = order?.sellerId;
+              const isSeller = currentUserId === orderSellerId;
+              const isPaymentCompleted = order.paymentStatus?.toLowerCase() === 'paid';
+              
+              return isSeller && !isPaymentCompleted ? (
+                <TouchableOpacity
+                  style={styles.updateButton}
+                  onPress={() => {
+                    setShowUpdatePriceModal(true);
+                    // Initialize with empty discount
+                    setNewProductPrice('');
+                    setNewPriceCurrency(order.currencyCode);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }}
+                >
+                  <Ionicons name="pricetag-outline" size={16} color="#2563EB" />
+                  <Text style={styles.updateButtonText}>Add Discount</Text>
+                </TouchableOpacity>
+              ) : null;
+            })()}
+          </View>
           <View style={styles.itemsContainer}>
             {order.items.map((item, index) => (
               <View key={item.id} style={[
                 styles.orderItem,
                 index === order.items.length - 1 && styles.lastOrderItem
               ]}>
-                <Image
-                  source={{ 
-                    uri: item.product.images && item.product.images.length > 0 
-                      ? (item.product.images[0].startsWith('http') 
-                          ? item.product.images[0] 
-                          : `${API_URL}${item.product.images[0]}`)
-                      : 'https://via.placeholder.com/80x80?text=No+Image'
-                  }}
-                  style={styles.productImage}
-                  resizeMode="cover"
-                />
-                <View style={styles.itemDetails}>
-                  <Text style={styles.productName}>{item.product.title}</Text>
-                  <Text style={styles.itemPrice}>
-                    {formatPrice(item.unitPrice, order.currencyCode)} × {item.quantity}
-                  </Text>
-                  <Text style={styles.itemTotal}>
-                    {formatPrice(item.totalPrice, order.currencyCode)}
-                  </Text>
-                </View>
+              <Image
+                source={{ 
+                  uri: item.product.images && item.product.images.length > 0 
+                    ? (item.product.images[0].startsWith('http') 
+                        ? item.product.images[0] 
+                        : `${API_URL}${item.product.images[0]}`)
+                    : 'https://via.placeholder.com/80x80?text=No+Image'
+                }}
+                style={styles.productImage}
+                resizeMode="cover"
+              />
+              <View style={styles.itemDetails}>
+                <Text style={styles.productName}>{item.product.title}</Text>
+                <Text style={styles.itemPrice}>
+                  {formatPrice(item.unitPrice, order.currencyCode)} × {item.quantity}
+                </Text>
+                <Text style={styles.itemTotal}>
+                  {formatPrice(item.totalPrice, order.currencyCode)}
+                </Text>
               </View>
-            ))}
+            </View>
+          ))}
           </View>
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Delivery Information</Text>
-            {/* Only show update button if user is the seller */}
+            {/* Only show update button if user is the seller AND payment is not completed */}
             {(() => {
               const currentUserId = user?.id;
               const orderSellerId = order?.sellerId;
               const isSeller = currentUserId === orderSellerId;
+              const isPaymentCompleted = order.paymentStatus?.toLowerCase() === 'paid';
               
-              return isSeller ? (
-                <TouchableOpacity
-                  style={styles.updateButton}
+              return isSeller && !isPaymentCompleted ? (
+            <TouchableOpacity 
+              style={styles.updateButton}
                   onPress={() => {
                     setShowDeliveryModal(true);
                     // Initialize with current shipping method if available
@@ -1558,14 +1674,14 @@ export function OrderDetails() {
                     }
                     setSelectedDeliveryOption('');
                     setCustomDeliveryPrice('');
-                    setCustomDeliveryCurrency('');
+                    setCustomDeliveryCurrency(order.currencyCode);
                     setValidationErrors([]);
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                   }}
                 >
                   <Ionicons name="create-outline" size={16} color="#2563EB" />
-                  <Text style={styles.updateButtonText}>Update Pricing</Text>
-                </TouchableOpacity>
+                  <Text style={styles.updateButtonText}>Add Delivery Price</Text>
+            </TouchableOpacity>
               ) : null;
             })()}
           </View>
@@ -1600,7 +1716,7 @@ export function OrderDetails() {
               <Text style={styles.noAddressText}>No delivery address provided</Text>
             </View>
           )}
-
+          
           {order.shippingMethod && (
             <View style={styles.shippingInfo}>
               <Text style={styles.shippingMethod}>Method: {order.shippingMethod}</Text>
@@ -1627,7 +1743,7 @@ export function OrderDetails() {
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal:</Text>
             <Text style={styles.summaryValue}>
-              {formatPrice(order.totalAmount - order.shippingAmount, order.currencyCode)}
+              {formatPrice(order.totalAmount - order.shippingAmount - (order.discountAmount || 0), order.currencyCode)}
             </Text>
           </View>
           {order.shippingAmount > 0 ? (
@@ -1641,6 +1757,14 @@ export function OrderDetails() {
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Delivery:</Text>
               <Text style={styles.summaryValue}>To be determined</Text>
+            </View>
+          )}
+          {order.discountAmount && order.discountAmount > 0 && (
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Discount:</Text>
+              <Text style={[styles.summaryValue, styles.discountValue]}>
+                -{formatPrice(order.discountAmount, order.currencyCode)}
+              </Text>
             </View>
           )}
           <View style={[styles.summaryRow, styles.totalRow]}>
@@ -1659,7 +1783,7 @@ export function OrderDetails() {
               <Text style={styles.deliveryNoteText}>
                 Delivery cost will be added by the seller after reviewing your address
               </Text>
-            </View>
+        </View>
           )}
         </View>
 
@@ -1707,7 +1831,7 @@ export function OrderDetails() {
                 {loadingPaymentMethods ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Ionicons name="card-outline" size={20} color="#FFFFFF" />
+                  <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
                 )}
                 <Text style={styles.checkoutButtonText}>
                   {loadingPaymentMethods 
@@ -1756,12 +1880,12 @@ export function OrderDetails() {
 
       {/* Professional Bottom Sheet Modal - Only show if user is the seller */}
       {order?.sellerId === user?.id && (
-        <Modal
-          visible={showDeliveryModal}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowDeliveryModal(false)}
-        >
+      <Modal
+        visible={showDeliveryModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowDeliveryModal(false)}
+      >
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalOverlay}
@@ -1771,8 +1895,8 @@ export function OrderDetails() {
               <View style={styles.handleBar} />
               
               {/* Header */}
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Update Delivery Pricing</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Update Delivery Pricing</Text>
                 <TouchableOpacity
                   onPress={() => {
                     setShowDeliveryModal(false);
@@ -1786,9 +1910,9 @@ export function OrderDetails() {
                   }}
                   style={styles.closeButton}
                 >
-                  <Ionicons name="close" size={24} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
 
               {/* Info Banner */}
               <View style={styles.infoBanner}>
@@ -1856,9 +1980,9 @@ export function OrderDetails() {
                     </Text>
                     
                     {deliveryOptions.map((option) => (
-                      <TouchableOpacity
-                        key={option.id}
-                        style={[
+                    <TouchableOpacity
+                      key={option.id}
+                      style={[
                           styles.deliveryOptionItem,
                           selectedDeliveryOption === option.id && styles.selectedDeliveryOption
                         ]}
@@ -1881,44 +2005,44 @@ export function OrderDetails() {
                               styles.deliveryOptionPrice,
                               selectedDeliveryOption === option.id && styles.selectedDeliveryOptionPrice
                             ]}>
-                              {formatPrice(option.price, option.currencyCode)}
-                            </Text>
-                          </View>
+                          {formatPrice(option.price, option.currencyCode)}
+                        </Text>
+                      </View>
                           <Text style={[
                             styles.deliveryOptionDescription,
                             selectedDeliveryOption === option.id && styles.selectedDeliveryOptionDescription
                           ]}>
-                            {option.description} • {option.estimatedDays} days
-                          </Text>
+                        {option.description} • {option.estimatedDays} days
+                      </Text>
                         </View>
                         {selectedDeliveryOption === option.id && (
                           <View style={styles.selectedIndicator}>
                             <Ionicons name="checkmark-circle" size={24} color="#2563EB" />
                           </View>
                         )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
 
                 {/* Divider */}
                 <View style={styles.divider} />
 
                 {/* Custom Price */}
-                <View style={styles.modalSection}>
+              <View style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>Custom Delivery Price</Text>
-                  <Text style={styles.modalSectionSubtitle}>
+                <Text style={styles.modalSectionSubtitle}>
                     Set your own delivery price and select from world currencies
-                  </Text>
-                  
+                </Text>
+                
                   <View style={styles.customPriceContainer}>
-                    <View style={styles.inputGroup}>
+                <View style={styles.inputGroup}>
                       <Text style={styles.inputLabel}>Price</Text>
                       <View style={[
                         styles.priceInputContainer,
                         validationErrors.some(err => err.includes('price')) && styles.errorInputContainer
                       ]}>
-                        <TextInput
+                  <TextInput
                           style={styles.priceInput}
                           value={customDeliveryPrice}
                           onChangeText={(text) => {
@@ -1926,40 +2050,37 @@ export function OrderDetails() {
                             setSelectedDeliveryOption('');
                             setValidationErrors([]);
                           }}
-                          placeholder="0.00"
-                          keyboardType="numeric"
+                    placeholder="0.00"
+                    keyboardType="numeric"
                           placeholderTextColor="#9CA3AF"
-                        />
+                  />
                       </View>
                       {validationErrors.some(err => err.includes('price')) && (
                         <Text style={styles.validationErrorText}>Please enter a valid price</Text>
                       )}
-                    </View>
-                    
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>Currency</Text>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Currency</Text>
                       <View style={[
+                        styles.currencyDisplayContainer,
                         validationErrors.some(err => err.includes('currency')) && styles.errorInputContainer
                       ]}>
-                        <WorldCurrencyPicker
-                          value={customDeliveryCurrency}
-                          onChange={(code: string) => {
-                            setCustomDeliveryCurrency(code);
-                            setValidationErrors([]);
-                          }}
-                        />
+                        <Text style={styles.currencyDisplayText}>
+                          {order?.currencyCode || 'USD'}
+                        </Text>
+                        <Text style={styles.currencyNote}>
+                          Order currency (fixed)
+                        </Text>
                       </View>
-                      {validationErrors.some(err => err.includes('currency')) && (
-                        <Text style={styles.validationErrorText}>Please select a currency</Text>
-                      )}
                     </View>
-                  </View>
                 </View>
-              </ScrollView>
+              </View>
+            </ScrollView>
 
               {/* Footer */}
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
                   style={styles.cancelButton}
                   onPress={() => {
                     setShowDeliveryModal(false);
@@ -1973,23 +2094,23 @@ export function OrderDetails() {
                   }}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+              </TouchableOpacity>
+              <TouchableOpacity
                   style={[
                     styles.saveButton,
                     ((!selectedDeliveryOption && !customDeliveryPrice) || !selectedDeliveryType) && styles.disabledButton
                   ]}
                   onPress={handleUpdateDeliveryPricing}
                   disabled={updatingDelivery || (!selectedDeliveryOption && !customDeliveryPrice) || !selectedDeliveryType}
-                >
-                  {updatingDelivery ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Update Pricing</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+              >
+                {updatingDelivery ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                    <Text style={styles.saveButtonText}>Add Price</Text>
+                )}
+              </TouchableOpacity>
             </View>
+          </View>
           </KeyboardAvoidingView>
         </Modal>
       )}
@@ -2021,7 +2142,7 @@ export function OrderDetails() {
               >
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
-            </View>
+        </View>
 
             {/* Payment Methods List */}
             <ScrollView style={styles.paymentMethodsList} showsVerticalScrollIndicator={false}>
@@ -2082,19 +2203,6 @@ export function OrderDetails() {
                             />
                           </View>
                           <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Card Number</Text>
-                            <TextInput
-                              style={styles.textInput}
-                              value={paymentMethodForms.card.cardNumber}
-                              onChangeText={(text) => handlePaymentFormUpdate('card', 'cardNumber', text)}
-                              placeholder="1234 5678 9012 3456"
-                              placeholderTextColor="#9CA3AF"
-                              keyboardType="numeric"
-                              maxLength={19}
-                            />
-                          </View>
-                          <View style={styles.inputRow}>
-                            <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
                               <Text style={styles.inputLabel}>Cardholder Name</Text>
                               <TextInput
                                 style={styles.textInput}
@@ -2102,31 +2210,6 @@ export function OrderDetails() {
                                 onChangeText={(text) => handlePaymentFormUpdate('card', 'cardholderName', text)}
                                 placeholder="John Doe"
                                 placeholderTextColor="#9CA3AF"
-                              />
-                            </View>
-                            <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-                              <Text style={styles.inputLabel}>Expiry Date</Text>
-                              <TextInput
-                                style={styles.textInput}
-                                value={paymentMethodForms.card.expiryDate}
-                                onChangeText={(text) => handlePaymentFormUpdate('card', 'expiryDate', text)}
-                                placeholder="MM/YY"
-                                placeholderTextColor="#9CA3AF"
-                                maxLength={5}
-                              />
-                            </View>
-                          </View>
-                          <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>CVV</Text>
-                            <TextInput
-                              style={styles.textInput}
-                              value={paymentMethodForms.card.cvv}
-                              onChangeText={(text) => handlePaymentFormUpdate('card', 'cvv', text)}
-                              placeholder="123"
-                              placeholderTextColor="#9CA3AF"
-                              keyboardType="numeric"
-                              maxLength={4}
-                              secureTextEntry
                             />
                           </View>
                         </View>
@@ -2137,10 +2220,65 @@ export function OrderDetails() {
                         <View style={styles.formFields}>
                           <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Wallet Provider</Text>
-                            <MobileWalletPicker
-                              value={selectedMobileWalletProvider}
-                              onChange={(providerId: string) => handleMobileWalletProviderSelect(providerId)}
-                            />
+                            {loadingProviders ? (
+                              <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="small" color="#2563EB" />
+                                <Text style={styles.loadingText}>Loading providers...</Text>
+                              </View>
+                            ) : mobileWalletProviders.length > 0 ? (
+                              <>
+                                {/* Search Input */}
+                                <TextInput
+                                  style={styles.providerSearchInput}
+                                  value={providerSearch}
+                                  onChangeText={setProviderSearch}
+                                  placeholder="Search mobile wallet providers..."
+                                  placeholderTextColor="#9CA3AF"
+                                />
+                                
+                                {/* Grid Layout Providers */}
+                                <View style={styles.providerDropdown}>
+                                  {filteredProviders.map((provider) => (
+                                    <TouchableOpacity
+                                      key={provider.id}
+                                      style={[
+                                        styles.providerOption,
+                                        selectedMobileWalletProvider === provider.id && styles.providerOptionSelected
+                                      ]}
+                                      onPress={() => handleMobileWalletProviderSelect(provider.id)}
+                                    >
+                                      <View style={styles.providerContent}>
+                                        <Ionicons 
+                                          name="phone-portrait-outline" 
+                                          size={16} 
+                                          color={selectedMobileWalletProvider === provider.id ? '#FFFFFF' : '#6B7280'} 
+                                        />
+                                        <Text style={[
+                                          styles.providerOptionText, 
+                                          selectedMobileWalletProvider === provider.id && styles.providerOptionTextSelected
+                                        ]}>
+                                          {provider.name}
+                                        </Text>
+                                        {selectedMobileWalletProvider === provider.id && (
+                                          <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                                        )}
+                                      </View>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                                
+                                {/* No results message */}
+                                {filteredProviders.length === 0 && providerSearch && (
+                                  <View style={styles.noResultsContainer}>
+                                    <Text style={styles.noResultsText}>No providers found for "{providerSearch}"</Text>
+                                  </View>
+                                )}
+                              </>
+                            ) : (
+                              <View style={styles.noProvidersContainer}>
+                                <Text style={styles.noProvidersText}>No mobile wallet providers available</Text>
+                              </View>
+                            )}
                           </View>
                           <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Phone Number</Text>
@@ -2165,90 +2303,6 @@ export function OrderDetails() {
                               onChangeText={(text) => handlePaymentFormUpdate('mobileWallets', 'walletType', text)}
                               placeholder="e.g., Mobile Money, Digital Wallet"
                               placeholderTextColor="#9CA3AF"
-                            />
-                          </View>
-                        </View>
-                      )}
-                      
-                      {/* Bank Transfer Form */}
-                      {method.id === 'bankTransfer' && (
-                        <View style={styles.formFields}>
-                          <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Bank Name</Text>
-                            <TextInput
-                              style={styles.textInput}
-                              value={paymentMethodForms.bankTransfer.bankName}
-                              onChangeText={(text) => handlePaymentFormUpdate('bankTransfer', 'bankName', text)}
-                              placeholder="e.g., Chase Bank, Bank of America"
-                              placeholderTextColor="#9CA3AF"
-                            />
-                          </View>
-                          <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Account Name</Text>
-                            <TextInput
-                              style={styles.textInput}
-                              value={paymentMethodForms.bankTransfer.accountName}
-                              onChangeText={(text) => handlePaymentFormUpdate('bankTransfer', 'accountName', text)}
-                              placeholder="Account holder name"
-                              placeholderTextColor="#9CA3AF"
-                            />
-                          </View>
-                          <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Account Number</Text>
-                            <TextInput
-                              style={styles.textInput}
-                              value={paymentMethodForms.bankTransfer.accountNumber}
-                              onChangeText={(text) => handlePaymentFormUpdate('bankTransfer', 'accountNumber', text)}
-                              placeholder="1234567890"
-                              placeholderTextColor="#9CA3AF"
-                              keyboardType="numeric"
-                            />
-                          </View>
-                          <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>SWIFT Code (Optional)</Text>
-                            <TextInput
-                              style={styles.textInput}
-                              value={paymentMethodForms.bankTransfer.swiftCode}
-                              onChangeText={(text) => handlePaymentFormUpdate('bankTransfer', 'swiftCode', text)}
-                              placeholder="CHASUS33"
-                              placeholderTextColor="#9CA3AF"
-                            />
-                          </View>
-                        </View>
-                      )}
-                      
-                      {/* Crypto Form */}
-                      {method.id === 'crypto' && (
-                        <View style={styles.formFields}>
-                          <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Cryptocurrency</Text>
-                            <TextInput
-                              style={styles.textInput}
-                              value={paymentMethodForms.crypto.provider}
-                              onChangeText={(text) => handlePaymentFormUpdate('crypto', 'provider', text)}
-                              placeholder="e.g., Bitcoin, Ethereum, USDT"
-                              placeholderTextColor="#9CA3AF"
-                            />
-                          </View>
-                          <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Wallet Type</Text>
-                            <TextInput
-                              style={styles.textInput}
-                              value={paymentMethodForms.crypto.walletType}
-                              onChangeText={(text) => handlePaymentFormUpdate('crypto', 'walletType', text)}
-                              placeholder="e.g., MetaMask, Trust Wallet, Hardware Wallet"
-                              placeholderTextColor="#9CA3AF"
-                            />
-                          </View>
-                          <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Wallet Address</Text>
-                            <TextInput
-                              style={styles.textInput}
-                              value={paymentMethodForms.crypto.walletAddress}
-                              onChangeText={(text) => handlePaymentFormUpdate('crypto', 'walletAddress', text)}
-                              placeholder="0x1234...5678"
-                              placeholderTextColor="#9CA3AF"
-                              multiline
                             />
                           </View>
                         </View>
@@ -2406,7 +2460,7 @@ export function OrderDetails() {
                       <Text style={styles.orderSummaryLabel}>Items</Text>
                     </View>
                     <Text style={styles.orderSummaryValue}>
-                      {order?.items?.length || 0} item{order?.items?.length !== 1 ? 's' : ''}
+                      {order?.items?.reduce((total, item) => total + item.quantity, 0) || 0} item{(order?.items?.reduce((total, item) => total + item.quantity, 0) || 0) !== 1 ? 's' : ''}
                     </Text>
                   </View>
                   
@@ -2475,7 +2529,7 @@ export function OrderDetails() {
                         </View>
                       </View>
                       <Text style={styles.paymentMethodItemAccount}>
-                        {method.accountName} • {method.accountId}
+                        {method.accountName}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -2490,12 +2544,12 @@ export function OrderDetails() {
                   styles.proceedToCheckoutButton,
                   !selectedPaymentMethod && styles.disabledButton
                 ]}
-                onPress={handleProceedToStripePayment}
+                onPress={handleProceedToPayment}
                 disabled={!selectedPaymentMethod}
               >
-                <Ionicons name="card-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
                 <Text style={styles.proceedToCheckoutButtonText}>
-                  Proceed to Payment
+                  Process Payment
                 </Text>
               </TouchableOpacity>
               
@@ -2511,6 +2565,164 @@ export function OrderDetails() {
                 <Text style={styles.addMorePaymentButtonText}>
                   Add More Payment Methods
                 </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Update Price Modal - Bottom Sheet */}
+      <Modal
+        visible={showUpdatePriceModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowUpdatePriceModal(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalContent, { maxHeight: screenHeight * 0.85, minHeight: screenHeight * 0.8 }]}>
+            {/* Handle Bar */}
+            <View style={styles.handleBar} />
+            
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Discount</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowUpdatePriceModal(false);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Info Banner */}
+            <View style={styles.infoBanner}>
+              <View style={styles.infoHeader}>
+                <View style={styles.infoIconContainer}>
+                  <Ionicons name="information-circle" size={20} color="#2563EB" />
+                </View>
+                <Text style={styles.infoTitle}>Add Discount</Text>
+              </View>
+              <Text style={styles.infoDescription}>
+                Enter the discount amount to apply to this order. The discount will be subtracted from the total order amount.
+              </Text>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {/* Current Order Summary */}
+              <View style={styles.modalSection}>
+                <Text style={styles.modalSectionTitle}>Current Order Summary</Text>
+                <View style={styles.currentPriceContainer}>
+                  <View style={styles.currentPriceRow}>
+                    <Text style={styles.currentPriceLabel}>Subtotal:</Text>
+                    <Text style={styles.currentPriceValue}>
+                      {order?.items && order.items.length > 0 
+                        ? formatPrice(order.items.reduce((total, item) => total + item.totalPrice, 0), order.currencyCode)
+                        : 'N/A'
+                      }
+                    </Text>
+                  </View>
+                  {order?.shippingAmount > 0 && (
+                    <View style={styles.currentPriceRow}>
+                      <Text style={styles.currentPriceLabel}>Delivery:</Text>
+                      <Text style={styles.currentPriceValue}>
+                        {formatPrice(order.shippingAmount, order.deliveryCurrency || order.currencyCode)}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.currentPriceRow}>
+                    <Text style={styles.currentPriceLabel}>Current Total:</Text>
+                    <Text style={styles.currentPriceValue}>
+                      {formatPrice(order?.totalAmount || 0, order?.currencyCode || 'USD')}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Divider */}
+              <View style={styles.divider} />
+
+              {/* Discount Input */}
+              <View style={styles.modalSection}>
+                <Text style={styles.modalSectionTitle}>Discount Amount</Text>
+                <Text style={styles.modalSectionSubtitle}>
+                  Enter the discount amount to apply to this order
+                </Text>
+                
+                <View style={styles.priceUpdateContainer}>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Discount Amount</Text>
+                    <View style={styles.priceInputContainer}>
+                      <TextInput
+                        style={styles.priceInput}
+                        value={newProductPrice}
+                        onChangeText={setNewProductPrice}
+                        placeholder="0.00"
+                        keyboardType="numeric"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Discount Preview */}
+                {newProductPrice && (
+                  <View style={styles.newTotalPreview}>
+                    <Text style={styles.newTotalLabel}>Discount Preview:</Text>
+                    <View style={styles.discountPreviewContainer}>
+                      <View style={styles.discountPreviewRow}>
+                        <Text style={styles.discountPreviewLabel}>Current Total:</Text>
+                        <Text style={styles.discountPreviewValue}>
+                          {formatPrice(order?.totalAmount || 0, order?.currencyCode || 'USD')}
+                        </Text>
+                      </View>
+                      <View style={styles.discountPreviewRow}>
+                        <Text style={styles.discountPreviewLabel}>Discount:</Text>
+                        <Text style={[styles.discountPreviewValue, styles.discountValue]}>
+                          -{formatPrice(parseFloat(newProductPrice) || 0, order?.currencyCode || 'USD')}
+                        </Text>
+                      </View>
+                      <View style={[styles.discountPreviewRow, styles.discountPreviewTotal]}>
+                        <Text style={styles.discountPreviewLabel}>New Total:</Text>
+                        <Text style={styles.discountPreviewValue}>
+                          {formatPrice((order?.totalAmount || 0) - (parseFloat(newProductPrice) || 0), order?.currencyCode || 'USD')}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => {
+                  setShowUpdatePriceModal(false);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  !newProductPrice && styles.disabledButton
+                ]}
+                onPress={handleUpdateProductPrice}
+                disabled={updatingPrice || !newProductPrice}
+              >
+                {updatingPrice ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Add Discount</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -3854,4 +4066,187 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
   },
+  providerDropdown: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+  },
+  providerOption: {
+    flex: 1,
+    minWidth: '48%',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    minHeight: 60,
+  },
+  providerOptionSelected: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  providerOptionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 4,
+  },
+  providerOptionTextSelected: {
+    color: '#1E40AF',
+    fontWeight: '700',
+  },
+  noProvidersContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+  },
+  noProvidersText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
+  },
+  providerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  providerSearchInput: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#374151',
+    backgroundColor: '#FFFFFF',
+    marginBottom: 12,
+  },
+
+  noResultsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  currentPriceContainer: {
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  currentPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  currentPriceLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  currentPriceValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  priceUpdateContainer: {
+    gap: 24,
+    marginTop: 12,
+  },
+  newTotalPreview: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    borderRadius: 12,
+  },
+  newTotalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  newTotalValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  discountValue: {
+    color: '#EF4444',
+    fontWeight: '600',
+  },
+  discountPreviewContainer: {
+    marginTop: 12,
+  },
+  discountPreviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  discountPreviewTotal: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  discountPreviewLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  discountPreviewValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  currencyDisplayContainer: {
+    borderWidth: 2,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  currencyDisplayText: {
+    fontSize: 16,
+    color: '#111827',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  currencyNote: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+
 });

@@ -1,6 +1,6 @@
 import express from 'express';
 import { logger } from '../utils/logger';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TransactionType } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
@@ -139,7 +139,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res) => {
           customerName: `${customer.firstName} ${customer.lastName}`,
           customerPhone: customer.phoneNumber,
           shippingAddress: shippingAddress || 'To be provided',
-          paymentMethod: 'CASH_ON_DELIVERY',
+          paymentMethod: null,
           paymentStatus: 'PENDING',
           shippingMethod: deliveryOption?.name || 'STANDARD'
         }
@@ -515,6 +515,7 @@ router.get('/:orderId', authenticate, async (req: AuthenticatedRequest, res) => 
       currencyCode: order.currencyCode,
       deliveryCurrency: order.deliveryCurrency,
       shippingAmount: order.shippingAmount,
+      discountAmount: order.discountAmount,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
       sellerId: order.sellerId,
@@ -820,6 +821,642 @@ router.get('/product/:productId/count', authenticate, async (req: AuthenticatedR
     res.status(500).json({ 
       message: 'Failed to fetch order count',
       error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get detailed transaction information
+router.get('/seller/transaction/:transactionId', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const { transactionId } = req.params;
+
+    logger.info('Fetching detailed transaction:', { 
+      userId: req.user.id,
+      transactionId
+    });
+
+    // Parse the transaction ID to get order ID and item ID
+    // Transaction ID format: orderId-itemId (both are UUIDs)
+    // UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (36 characters)
+    const uuidLength = 36;
+    const expectedLength = uuidLength + 1 + uuidLength; // orderId + dash + itemId
+    
+    if (transactionId.length !== expectedLength) {
+      logger.error('Invalid transaction ID length:', { 
+        transactionId, 
+        actualLength: transactionId.length, 
+        expectedLength 
+      });
+      return res.status(400).json({ error: 'Invalid transaction ID format' });
+    }
+    
+    const orderId = transactionId.substring(0, uuidLength);
+    const itemId = transactionId.substring(uuidLength + 1);
+    
+    logger.info('Parsed transaction ID:', { orderId, itemId, transactionId });
+    
+    if (!orderId || !itemId) {
+      logger.error('Invalid transaction ID format - missing orderId or itemId:', { transactionId, orderId, itemId });
+      return res.status(400).json({ error: 'Invalid transaction ID format' });
+    }
+
+    // First, let's check if the order exists
+    const orderExists = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        sellerId: req.user.id
+      }
+    });
+
+    if (!orderExists) {
+      logger.error('Order not found:', { orderId, userId: req.user.id });
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Check if the order item exists
+    const orderItemExists = await prisma.orderItem.findFirst({
+      where: {
+        id: itemId,
+        orderId: orderId
+      }
+    });
+
+    if (!orderItemExists) {
+      logger.error('Order item not found:', { itemId, orderId });
+      return res.status(404).json({ error: 'Order item not found' });
+    }
+
+    // Get the order with all details
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        sellerId: req.user.id
+      },
+      include: {
+        orderItems: {
+          where: {
+            id: itemId
+          },
+          include: {
+            product: {
+              include: {
+                images: true
+              }
+            }
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phoneNumber: true
+          }
+        }
+      }
+    });
+
+    if (!order || order.orderItems.length === 0) {
+      logger.error('Order or order items not found after include:', { orderId, itemId });
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    const orderItem = order.orderItems[0];
+    const product = orderItem.product;
+
+    // Get the actual amounts from the database - no calculations needed
+    const itemSubtotal = parseFloat(orderItem.totalPrice.toString());
+    const itemTax = parseFloat(order.taxAmount.toString());
+    const itemShipping = parseFloat(order.shippingAmount.toString());
+    const itemDiscount = parseFloat(order.discountAmount.toString());
+
+    // Get service fee for this order from ExternalTransaction table
+    const serviceFeeTransaction = await prisma.externalTransaction.findFirst({
+      where: {
+        orderId: order.id,
+        transactionType: 'SERVICE_FEE' as TransactionType,
+        status: 'SUCCESS'
+      },
+      select: {
+        amount: true
+      }
+    });
+
+    const serviceFeeAmount = serviceFeeTransaction 
+      ? parseFloat(serviceFeeTransaction.amount.toString()) 
+      : 0;
+
+    // Get item details
+    const itemUnitPrice = parseFloat(orderItem.unitPrice.toString());
+    const itemQuantity = orderItem.quantity;
+
+    // Helper function to format address
+    const formatAddress = (address: string | null): string => {
+      if (!address) return 'No address provided';
+      
+      try {
+        // Try to parse as JSON first
+        const addressObj = JSON.parse(address);
+        if (typeof addressObj === 'object' && addressObj !== null) {
+          // Format JSON address object
+          const parts = [];
+          if (addressObj.street) parts.push(addressObj.street);
+          if (addressObj.city) parts.push(addressObj.city);
+          if (addressObj.state) parts.push(addressObj.state);
+          if (addressObj.postalCode) parts.push(addressObj.postalCode);
+          if (addressObj.country) parts.push(addressObj.country);
+          return parts.join(', ');
+        }
+      } catch (e) {
+        // If not JSON, return as is
+      }
+      
+      return address;
+    };
+
+    const transactionDetail = {
+      id: transactionId,
+      productTitle: product.title,
+      productDescription: product.description || 'No description available',
+      productImage: product.images[0]?.imageUrl || null,
+      unitPrice: itemUnitPrice,
+      quantity: itemQuantity,
+      subtotal: itemSubtotal,
+      taxAmount: itemTax,
+      shippingAmount: itemShipping,
+      discountAmount: itemDiscount,
+      serviceFeeAmount: serviceFeeAmount,
+      totalAmount: itemSubtotal + itemTax + itemShipping - itemDiscount - serviceFeeAmount,
+      currencySymbol: getCurrencySymbol(order.currencyCode),
+      currencyCode: order.currencyCode,
+      buyerName: `${order.user.firstName} ${order.user.lastName}`,
+      buyerEmail: order.customerEmail || 'No email provided',
+      buyerPhone: order.user.phoneNumber,
+      transactionDate: order.createdAt.toISOString(),
+      status: getPaymentStatus(order.paymentStatus),
+      orderNumber: order.orderNumber || `ORD-${order.id.slice(-8).toUpperCase()}`,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+      paymentReference: order.paymentReference || null,
+      shippingMethod: order.shippingMethod,
+      shippingAddress: formatAddress(order.shippingAddress),
+      billingAddress: order.billingAddress ? formatAddress(order.billingAddress) : null,
+      trackingNumber: order.trackingNumber,
+      shippedAt: order.shippedAt?.toISOString(),
+      deliveredAt: order.deliveredAt?.toISOString(),
+      notes: order.notes,
+      sellerNotes: order.sellerNotes
+    };
+
+    logger.info('Transaction detail fetched successfully:', { 
+      userId: req.user.id,
+      transactionId,
+      orderNumber: transactionDetail.orderNumber
+    });
+
+    res.json(transactionDetail);
+  } catch (error) {
+    logger.error('Error fetching transaction detail:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch transaction detail',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get seller transactions by currency
+router.get('/seller/transactions/:currency', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const { currency } = req.params;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = (page - 1) * limit;
+
+    logger.info('Fetching seller transactions by currency:', { 
+      userId: req.user.id,
+      currency,
+      page,
+      limit
+    });
+
+    // Get orders for the seller in the specified currency (include all payment statuses for now)
+    const orders = await prisma.order.findMany({
+      where: {
+        sellerId: req.user.id,
+        currencyCode: currency
+        // Temporarily remove paymentStatus filter to see all orders
+      },
+      include: {
+        orderItems: {
+          include: {
+            product: {
+              include: {
+                images: true
+              }
+            }
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      skip: offset,
+      take: limit
+    });
+
+    // Transform orders to match the frontend Transaction interface
+    const transactions = orders.flatMap(order => 
+      order.orderItems.map(item => {
+        const transactionId = `${order.id}-${item.id}`;
+        const paymentStatus = order.paymentStatus;
+        const transactionStatus = getPaymentStatus(paymentStatus);
+        
+        logger.info('Generated transaction:', { 
+          orderId: order.id, 
+          itemId: item.id, 
+          transactionId,
+          productTitle: item.product.title,
+          paymentStatus,
+          transactionStatus
+        });
+        
+        return {
+          id: transactionId,
+          productId: item.productId,
+          productTitle: item.product.title,
+          productImage: item.product.images[0]?.imageUrl || null,
+          unitPrice: parseFloat(item.unitPrice.toString()),
+          quantity: item.quantity,
+          totalAmount: parseFloat(item.totalPrice.toString()),
+          currency: order.currencyCode,
+          currencySymbol: getCurrencySymbol(order.currencyCode),
+          buyerName: `${order.user.firstName} ${order.user.lastName}`,
+          transactionDate: order.createdAt.toISOString(),
+          status: transactionStatus,
+          orderNumber: order.orderNumber || `ORD-${order.id.slice(-8).toUpperCase()}`
+        };
+      })
+    );
+
+    // Get total count for pagination
+    const totalCount = await prisma.order.count({
+      where: {
+        sellerId: req.user.id,
+        currencyCode: currency
+        // Temporarily remove paymentStatus filter
+      }
+    });
+
+    // Calculate total revenue for this currency from ALL paid orders (not just paginated)
+    // Exclude refunded orders from revenue calculation
+    const totalRevenueResult = await prisma.order.aggregate({
+      where: {
+        sellerId: req.user.id,
+        currencyCode: currency,
+        paymentStatus: 'PAID' // Only count paid orders
+      },
+      _sum: {
+        totalAmount: true
+      }
+    });
+
+    // Get service fees for this currency from ExternalTransaction table
+    const serviceFeesResult = await prisma.externalTransaction.aggregate({
+      where: {
+        sellerId: req.user.id,
+        currencyCode: currency,
+        transactionType: 'SERVICE_FEE' as TransactionType,
+        status: 'SUCCESS'
+      },
+      _sum: {
+        amount: true
+      }
+    });
+
+    const grossRevenue = totalRevenueResult._sum?.totalAmount 
+      ? parseFloat(totalRevenueResult._sum.totalAmount.toString()) 
+      : 0;
+    
+    const totalServiceFees = serviceFeesResult._sum?.amount
+      ? parseFloat(serviceFeesResult._sum.amount.toString())
+      : 0;
+
+    const totalRevenue = Math.max(0, grossRevenue - totalServiceFees);
+
+    // Count refunded transactions for this currency
+    const refundedCount = await prisma.order.count({
+      where: {
+        sellerId: req.user.id,
+        currencyCode: currency,
+        paymentStatus: 'REFUNDED'
+      }
+    });
+
+    // Log payment statuses for debugging
+    const paymentStatuses = orders.map(order => ({
+      orderId: order.id,
+      paymentStatus: order.paymentStatus,
+      status: order.status,
+      totalAmount: order.totalAmount
+    }));
+
+    logger.info('Seller transactions fetched successfully:', { 
+      userId: req.user.id,
+      currency,
+      transactionCount: transactions.length,
+      totalRevenue,
+      totalCount,
+      refundedCount,
+      paymentStatuses
+    });
+
+    res.json({
+      transactions,
+      totalRevenue,
+      totalCount,
+      refundedCount,
+      currentPage: page,
+      totalPages: Math.ceil(totalCount / limit),
+      hasMore: page * limit < totalCount
+    });
+  } catch (error) {
+    logger.error('Error fetching seller transactions by currency:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch transactions',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Test endpoint to check seller orders
+router.get('/seller/test-orders', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    logger.info('Testing seller orders:', { userId: req.user.id });
+
+    // Get all orders for the seller
+    const allOrders = await prisma.order.findMany({
+      where: {
+        sellerId: req.user.id
+      },
+      include: {
+        orderItems: true
+      }
+    });
+
+    // Get paid orders
+    const paidOrders = await prisma.order.findMany({
+      where: {
+        sellerId: req.user.id,
+        paymentStatus: 'PAID'
+      },
+      include: {
+        orderItems: true
+      }
+    });
+
+    logger.info('Test results:', { 
+      userId: req.user.id,
+      totalOrders: allOrders.length,
+      paidOrders: paidOrders.length,
+      orders: allOrders.map(o => ({
+        id: o.id,
+        status: o.status,
+        paymentStatus: o.paymentStatus,
+        currencyCode: o.currencyCode,
+        itemCount: o.orderItems.length,
+        mappedStatus: getPaymentStatus(o.paymentStatus)
+      }))
+    });
+
+    res.json({
+      totalOrders: allOrders.length,
+      paidOrders: paidOrders.length,
+      orders: allOrders.map(o => ({
+        id: o.id,
+        status: o.status,
+        paymentStatus: o.paymentStatus,
+        currencyCode: o.currencyCode,
+        itemCount: o.orderItems.length,
+        orderItems: o.orderItems.map(item => ({
+          id: item.id,
+          productId: item.productId
+        }))
+      }))
+    });
+  } catch (error) {
+    logger.error('Error testing seller orders:', error);
+    res.status(500).json({ 
+      error: 'Failed to test orders',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Helper function to get currency symbol
+function getCurrencySymbol(currencyCode: string): string {
+  const currencySymbols: { [key: string]: string } = {
+    USD: '$',
+    EUR: '€',
+    GBP: '£',
+    JPY: '¥',
+    CAD: 'C$',
+    AUD: 'A$',
+    CHF: 'CHF',
+    CNY: '¥',
+    INR: '₹',
+    BRL: 'R$',
+    MXN: '$',
+    KRW: '₩',
+    SGD: 'S$',
+    HKD: 'HK$',
+    NZD: 'NZ$',
+  };
+  return currencySymbols[currencyCode] || currencyCode;
+}
+
+// Helper function to map payment status to transaction status
+function getPaymentStatus(paymentStatus: string): 'completed' | 'pending' | 'cancelled' | 'refunded' {
+  switch (paymentStatus?.toUpperCase()) {
+    case 'PAID':
+    case 'COMPLETED':
+    case 'SUCCESS':
+    case 'SETTLED':
+    case 'CONFIRMED':
+      return 'completed';
+    case 'PENDING':
+    case 'AUTHORIZED':
+    case 'PROCESSING':
+    case 'AWAITING_PAYMENT':
+    case 'PAYMENT_PENDING':
+      return 'pending';
+    case 'REFUNDED':
+    case 'PARTIALLY_REFUNDED':
+      return 'refunded';
+    case 'FAILED':
+    case 'CANCELLED':
+    case 'DECLINED':
+    case 'VOIDED':
+    case 'EXPIRED':
+      return 'cancelled';
+    default:
+      return 'pending';
+  }
+}
+
+// Helper function to map order status to transaction status
+function getOrderStatus(orderStatus: string): 'completed' | 'pending' | 'cancelled' | 'refunded' {
+  switch (orderStatus) {
+    case 'CONFIRMED':
+    case 'AUTHORIZED':
+      return 'completed';
+    case 'PENDING':
+    case 'PROCESSING':
+      return 'pending';
+    case 'CANCELLED':
+    case 'FAILED':
+      return 'cancelled';
+    default:
+      return 'pending';
+  }
+}
+
+// Apply discount to order
+router.patch('/:orderId/product-price', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { orderId } = req.params;
+    const { newPrice, currency } = req.body;
+
+    // Validate inputs
+    if (!newPrice || typeof newPrice !== 'number' || newPrice <= 0) {
+      return res.status(400).json({ error: 'Invalid price. Must be a positive number.' });
+    }
+
+    if (!currency || typeof currency !== 'string') {
+      return res.status(400).json({ error: 'Invalid currency.' });
+    }
+
+    // Find the order
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        orderItems: {
+          include: {
+            product: true
+          }
+        }
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    // Security check - only seller can apply discount
+    if (order.sellerId !== req.user?.id) {
+      return res.status(403).json({ error: 'Access denied. Only the product owner can apply discount.' });
+    }
+
+    // Check if payment is completed
+    if (order.paymentStatus?.toUpperCase() === 'PAID') {
+      return res.status(400).json({ error: 'Discount cannot be applied after payment is completed.' });
+    }
+
+    // Calculate the original total (without any existing discount)
+    const originalSubtotal = order.orderItems.reduce((total, item) => {
+      return total + parseFloat(item.unitPrice.toString()) * item.quantity;
+    }, 0);
+    
+    const originalTotal = originalSubtotal + parseFloat(order.shippingAmount.toString());
+
+    // The newPrice is actually the discount amount
+    const discountAmount = newPrice;
+
+    // Calculate the new total by subtracting the discount from the original total
+    const newTotal = originalTotal - discountAmount;
+
+    // Validate discount is not negative or exceeds total
+    if (discountAmount < 0) {
+      return res.status(400).json({ error: 'Discount amount must be positive.' });
+    }
+
+    if (discountAmount >= originalTotal) {
+      return res.status(400).json({ error: 'Discount amount cannot exceed or equal the total order amount.' });
+    }
+
+    // Update the order with new total and discount (keep original order item prices)
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        totalAmount: newTotal,
+        discountAmount: discountAmount,
+        currencyCode: currency,
+        updatedAt: new Date()
+      },
+      include: {
+        orderItems: {
+          include: {
+            product: true
+          }
+        },
+        user: true,
+        seller: true
+      }
+    });
+
+    logger.info('Discount applied successfully:', {
+      orderId,
+      sellerId: req.user?.id,
+      newPrice,
+      currency,
+      originalTotal,
+      newTotal,
+      discountAmount
+    });
+
+    res.json({
+      message: 'Discount applied successfully',
+      order: {
+        id: updatedOrder.id,
+        totalAmount: updatedOrder.totalAmount,
+        discountAmount: updatedOrder.discountAmount,
+        currencyCode: updatedOrder.currencyCode,
+        items: updatedOrder.orderItems.map(item => ({
+          id: item.id,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice,
+          product: {
+            id: item.product.id,
+            title: item.product.title
+          }
+        }))
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error applying discount:', error);
+    res.status(500).json({ 
+      error: 'Failed to apply discount',
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

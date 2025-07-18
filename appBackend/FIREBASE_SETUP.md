@@ -1,6 +1,6 @@
-# Firebase Setup for Push Notifications
+# Firebase Setup Guide
 
-This guide will help you set up Firebase for push notifications in the marketplace backend.
+This guide will help you set up Firebase for push notifications in the SNAP backend.
 
 ## Prerequisites
 
@@ -13,7 +13,7 @@ This guide will help you set up Firebase for push notifications in the marketpla
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Click "Add project"
-3. Enter a project name (e.g., "marketplace-app")
+3. Enter a project name (e.g., "snap-app")
 4. Follow the setup wizard
 
 ### 2. Generate Service Account Key
@@ -29,7 +29,7 @@ Create a `.env` file in the `appBackend` directory with the following variables:
 
 ```env
 # Database
-DATABASE_URL="postgresql://username:password@localhost:5432/marketplace"
+DATABASE_URL="postgresql://username:password@localhost:5432/snap"
 
 # JWT Secret
 JWT_SECRET="your-jwt-secret-key-here"

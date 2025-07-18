@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { Home } from './src/screens/Home';
 import { ProductDetail } from './src/screens/ProductDetail';
 import { ShowInterest } from './src/screens/ShowInterest';
@@ -76,27 +77,29 @@ export default function App() {
         translucent
       />
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
-          <AuthProvider>
-            <NavigationContainer>
-              <RootStack.Navigator
-                initialRouteName="Onboarding"
-                screenOptions={{
-                  headerShown: false,
-                  animation: 'slide_from_right',
-                  animationDuration: 200,
-                  contentStyle: {
-                    backgroundColor: '#FFFFFF',
-                  },
-                }}
-              >
-                <RootStack.Screen name="Onboarding" component={Onboarding} />
-                <RootStack.Screen name="Auth" component={AuthNavigator} />
-                <RootStack.Screen name="Main" component={MainNavigator} />
-              </RootStack.Navigator>
-            </NavigationContainer>
-          </AuthProvider>
-        </SafeAreaProvider>
+        <BottomSheetModalProvider>
+          <SafeAreaProvider>
+            <AuthProvider>
+              <NavigationContainer>
+                <RootStack.Navigator
+                  initialRouteName="Onboarding"
+                  screenOptions={{
+                    headerShown: false,
+                    animation: 'slide_from_right',
+                    animationDuration: 200,
+                    contentStyle: {
+                      backgroundColor: '#FFFFFF',
+                    },
+                  }}
+                >
+                  <RootStack.Screen name="Onboarding" component={Onboarding} />
+                  <RootStack.Screen name="Auth" component={AuthNavigator} />
+                  <RootStack.Screen name="Main" component={MainNavigator} />
+                </RootStack.Navigator>
+              </NavigationContainer>
+            </AuthProvider>
+          </SafeAreaProvider>
+        </BottomSheetModalProvider>
       </GestureHandlerRootView>
     </View>
   );

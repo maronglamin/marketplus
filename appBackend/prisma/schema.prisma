@@ -8,47 +8,94 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  firstName     String
-  middleName    String?
-  lastName      String
-  phoneNumber   String    @unique
-  pin           String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  devices       Device[]
-  sessions      Session[]
-  products      Product[]
-  sellerKyc     SellerKyc?
-  paymentMethods PaymentMethod[]
-  settlements   Settlement[]
-  productViews  ProductView[]
+  id                    String                 @id @default(uuid())
+  firstName             String
+  middleName            String?
+  lastName              String
+  phoneNumber           String                 @unique
+  pin                   String
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  deliveryAddresses     DeliveryAddress[]
+  devices               Device[]
+  customerTransactions  ExternalTransaction[]  @relation("CustomerTransactions")
+  sellerTransactions    ExternalTransaction[]  @relation("SellerTransactions")
+  paymentMethods        PaymentMethod[]
+  products              Product[]
+  sellerKyc             SellerKyc?
+  sessions              Session[]
+  settlements           Settlement[]
+  sellerOrders          Order[]                @relation("SellerOrders")
+  orders                Order[]
   productOrderInterests ProductOrderInterest[]
-  orders        Order[]   // Orders as customer
-  sellerOrders  Order[]   @relation("SellerOrders") // Orders as seller
+  productViews          ProductView[]
 
   @@index([phoneNumber])
   @@index([createdAt])
   @@index([updatedAt])
 }
 
+model DeliveryAddress {
+  id         String   @id @default(uuid())
+  userId     String
+  address    String
+  city       String
+  state      String
+  postalCode String?
+  country    String
+  isDefault  Boolean  @default(false)
+  label      String?
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isDefault])
+  @@index([isDeleted])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model PaymentGatewayServiceProvider {
+  id           String   @id @default(uuid())
+  name         String
+  type         String
+  countryCode  String   @db.VarChar(2)
+  currencyCode String   @db.VarChar(3)
+  isActive     Boolean  @default(true)
+  logoUrl      String?
+  description  String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([name, countryCode])
+  @@index([countryCode])
+  @@index([currencyCode])
+  @@index([type])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
 model Device {
-  id            String    @id @default(uuid())
-  deviceId      String
-  deviceName    String
-  deviceType    String
-  brand         String
-  modelName     String
-  osVersion     String
-  phoneNumber   String
-  isVerified    Boolean   @default(false)
-  lastLoginAt   DateTime  @default(now())
-  lastLogoutAt  DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  userId        String
-  user          User      @relation(fields: [userId], references: [id])
-  sessions      Session[]
+  id           String    @id @default(uuid())
+  deviceId     String
+  deviceName   String
+  deviceType   String
+  isVerified   Boolean   @default(false)
+  lastLoginAt  DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  userId       String
+  brand        String
+  modelName    String
+  osVersion    String
+  phoneNumber  String
+  lastLogoutAt DateTime?
+  user         User      @relation(fields: [userId], references: [id])
+  sessions     Session[]
 
   @@unique([userId, deviceId])
   @@index([userId])
@@ -62,15 +109,15 @@ model Device {
 }
 
 model Session {
-  id            String    @id @default(uuid())
-  token         String    @unique
-  expiresAt     DateTime
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  userId        String
-  deviceId      String
-  user          User      @relation(fields: [userId], references: [id])
-  device        Device    @relation(fields: [deviceId], references: [id])
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([deviceId])
@@ -81,15 +128,15 @@ model Session {
 }
 
 model OTP {
-  id            String    @id @default(uuid())
-  phoneNumber   String
-  code          String
-  originalCode  String?   // Store the original unhashed code
-  type          String    // "VERIFICATION" | "PIN_RESET"
-  expiresAt     DateTime
-  createdAt     DateTime  @default(now())
-  isUsed        Boolean   @default(false)
-  attempts      Int       @default(0)
+  id           String   @id @default(uuid())
+  phoneNumber  String
+  code         String
+  type         String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  isUsed       Boolean  @default(false)
+  attempts     Int      @default(0)
+  originalCode String?
 
   @@index([phoneNumber])
   @@index([code])
@@ -100,38 +147,37 @@ model OTP {
 }
 
 model Product {
-  id            String    @id @default(uuid())
-  sellerId      String
-  title         String
-  description   String?
-  price         Decimal   @db.Decimal(10, 2)
-  currencyCode  String    @db.VarChar(3)
-  quantity      Int
-  categoryId    String?
-  condition     ProductCondition
-  locationId    String
-  status        ProductStatus
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
-  views         Int       @default(0)
-  favorites     Int       @default(0)
-  rating        Decimal?  @db.Decimal(3, 2)
-  ratingCount   Int       @default(0)
-  isFeatured    Boolean   @default(true)
-  featuredUntil DateTime?
-  metadata      Json?
-
-  seller        User      @relation(fields: [sellerId], references: [id])
-  category      Category? @relation(fields: [categoryId], references: [id])
-  location      Location  @relation(fields: [locationId], references: [id])
-  images        ProductImage[]
-  attributes    ProductAttribute[]
-  translations  ProductTranslation[]
-  deliveryOptions ProductDeliveryOption[]
-  productViews  ProductView[]
+  id                    String                  @id @default(uuid())
+  sellerId              String
+  title                 String
+  description           String?
+  price                 Decimal                 @db.Decimal(10, 2)
+  currencyCode          String                  @db.VarChar(3)
+  quantity              Int
+  categoryId            String?
+  condition             ProductCondition
+  locationId            String
+  status                ProductStatus
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  deletedAt             DateTime?
+  views                 Int                     @default(0)
+  favorites             Int                     @default(0)
+  rating                Decimal?                @db.Decimal(3, 2)
+  ratingCount           Int                     @default(0)
+  isFeatured            Boolean                 @default(true)
+  featuredUntil         DateTime?
+  metadata              Json?
+  category              Category?               @relation(fields: [categoryId], references: [id])
+  location              Location                @relation(fields: [locationId], references: [id])
+  seller                User                    @relation(fields: [sellerId], references: [id])
+  attributes            ProductAttribute[]
+  deliveryOptions       ProductDeliveryOption[]
+  images                ProductImage[]
+  translations          ProductTranslation[]
+  orderItems            OrderItem[]
   productOrderInterests ProductOrderInterest[]
-  orderItems    OrderItem[]
+  productViews          ProductView[]
 
   @@index([sellerId])
   @@index([categoryId])
@@ -144,40 +190,38 @@ model Product {
 }
 
 model ProductImage {
-  id            String    @id @default(uuid())
-  productId     String
-  imageUrl      String
-  isPrimary     Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  width         Int?
-  height        Int?
-  size          Int?
-  format        String?
-  altText       String?
-
-  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  productId String
+  imageUrl  String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  width     Int?
+  height    Int?
+  size      Int?
+  format    String?
+  altText   String?
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
 }
 
 model Category {
-  id            String    @id @default(uuid())
-  name          String
-  parentId      String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  slug          String    @unique
-  description   String?
-  imageUrl      String?
-  order         Int       @default(0)
-  isActive      Boolean   @default(true)
-  metadata      Json?
-
-  parent        Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children      Category[] @relation("CategoryHierarchy")
-  products      Product[]
-  translations  CategoryTranslation[]
+  id           String                @id @default(uuid())
+  name         String
+  parentId     String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  slug         String                @unique
+  description  String?
+  imageUrl     String?
+  order        Int                   @default(0)
+  isActive     Boolean               @default(true)
+  metadata     Json?
+  parent       Category?             @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children     Category[]            @relation("CategoryHierarchy")
+  translations CategoryTranslation[]
+  products     Product[]
 
   @@index([parentId])
   @@index([slug])
@@ -185,18 +229,17 @@ model Category {
 }
 
 model Location {
-  id            String    @id @default(uuid())
-  countryCode   String    @db.VarChar(2)
-  region        String
-  city          String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  latitude      Float?
-  longitude     Float?
-  timezone      String?
-  isActive      Boolean   @default(true)
-
-  products      Product[]
+  id          String    @id @default(uuid())
+  countryCode String    @db.VarChar(2)
+  region      String
+  city        String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  latitude    Float?
+  longitude   Float?
+  timezone    String?
+  isActive    Boolean   @default(true)
+  products    Product[]
 
   @@index([countryCode])
   @@index([isActive])
@@ -204,17 +247,16 @@ model Location {
 }
 
 model ProductAttribute {
-  id            String    @id @default(uuid())
-  productId     String
-  key           String
-  value         String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  unit          String?
-  isFilterable  Boolean   @default(false)
-  order         Int       @default(0)
-
-  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid())
+  productId    String
+  key          String
+  value        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  unit         String?
+  isFilterable Boolean  @default(false)
+  order        Int      @default(0)
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@index([key])
@@ -222,35 +264,33 @@ model ProductAttribute {
 }
 
 model ProductTranslation {
-  id            String    @id @default(uuid())
-  productId     String
-  locale        String    @db.VarChar(5)
-  title         String
-  description   String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  productId   String
+  locale      String   @db.VarChar(5)
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, locale])
   @@index([locale])
 }
 
 model ProductDeliveryOption {
-  id            String    @id @default(uuid())
+  id            String       @id @default(uuid())
   productId     String
   deliveryType  DeliveryType
   name          String
   description   String?
-  price         Decimal   @db.Decimal(10, 2)
-  currencyCode  String    @db.VarChar(3)
-  estimatedDays Int       // Estimated delivery time in days
-  isDefault     Boolean   @default(false)
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  price         Decimal      @db.Decimal(10, 2)
+  currencyCode  String       @db.VarChar(3)
+  estimatedDays Int
+  isDefault     Boolean      @default(false)
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  product       Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@index([deliveryType])
@@ -259,18 +299,320 @@ model ProductDeliveryOption {
 }
 
 model CategoryTranslation {
-  id            String    @id @default(uuid())
-  categoryId    String
-  locale        String    @db.VarChar(5)
-  name          String
-  description   String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  category      Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  categoryId  String
+  locale      String   @db.VarChar(5)
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([categoryId, locale])
   @@index([locale])
+}
+
+model SellerKyc {
+  id                 String        @id @default(uuid())
+  userId             String        @unique
+  businessName       String
+  businessType       BusinessType
+  registrationNumber String?
+  taxId              String?
+  address            String
+  city               String
+  state              String
+  postalCode         String
+  documentType       DocumentType
+  documentNumber     String
+  documentUrl        String
+  status             KycStatus     @default(PENDING)
+  rejectionReason    String?
+  verifiedAt         DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  country            String[]
+  documentExpiryDate DateTime?
+  bankAccounts       BankAccount[]
+  user               User          @relation(fields: [userId], references: [id])
+  wallets            Wallet[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([documentNumber])
+  @@index([businessName])
+}
+
+model BankAccount {
+  id            String        @id @default(uuid())
+  sellerKycId   String
+  accountName   String
+  accountNumber String
+  bankName      String
+  bankCode      String
+  branchCode    String?
+  swiftCode     String?
+  iban          String?
+  currency      String        @db.VarChar(3)
+  isDefault     Boolean       @default(false)
+  status        AccountStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  sellerKyc     SellerKyc     @relation(fields: [sellerKycId], references: [id])
+  settlements   Settlement[]
+
+  @@index([sellerKycId])
+  @@index([accountNumber])
+  @@index([status])
+}
+
+model Wallet {
+  id            String        @id @default(uuid())
+  sellerKycId   String
+  walletType    WalletType
+  walletAddress String
+  account       String        // Phone number of the seller (wallet number)
+  currency      String        @db.VarChar(3)
+  isDefault     Boolean       @default(false)
+  status        AccountStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  settlements   Settlement[]
+  sellerKyc     SellerKyc     @relation(fields: [sellerKycId], references: [id])
+
+  @@index([sellerKycId])
+  @@index([walletAddress])
+  @@index([account])
+  @@index([status])
+}
+
+model PaymentMethod {
+  id                   String                @id @default(uuid())
+  userId               String
+  type                 PaymentType
+  provider             String
+  accountId            String
+  accountName          String
+  isDefault            Boolean               @default(false)
+  status               AccountStatus         @default(ACTIVE)
+  metadata             Json?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  externalTransactions ExternalTransaction[]
+  user                 User                  @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+}
+
+model Settlement {
+  id            String           @id @default(uuid())
+  userId        String
+  amount        Decimal          @db.Decimal(10, 2)
+  currency      String           @db.VarChar(3)
+  status        SettlementStatus @default(PENDING)
+  type          SettlementType
+  reference     String           @unique
+  bankAccountId String?
+  walletId      String?
+  metadata      Json?
+  processedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  
+  // Enhanced fields for financial integrity
+  includedOrderIds Json?         // Array of order IDs included in this settlement
+  totalOrdersCount Int           @default(0) // Number of orders included
+  serviceFeesDeducted Decimal    @default(0) @db.Decimal(10, 2) // Total service fees deducted
+  netAmountBeforeFees Decimal    @default(0) @db.Decimal(10, 2) // Gross amount before service fees
+  
+  bankAccount   BankAccount?     @relation(fields: [bankAccountId], references: [id])
+  user          User             @relation(fields: [userId], references: [id])
+  wallet        Wallet?          @relation(fields: [walletId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([reference])
+  @@index([createdAt])
+  @@index([currency])
+}
+
+model ProductView {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String
+  deviceId  String?
+  ipAddress String?
+  viewedAt  DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId, deviceId])
+  @@index([productId])
+  @@index([userId])
+  @@index([viewedAt])
+  @@map("product_views")
+}
+
+model ProductOrderInterest {
+  id                    String              @id @default(uuid())
+  productId             String
+  userId                String
+  quantity              Int                 @default(1)
+  originalPrice         Decimal             @db.Decimal(10, 2)
+  discountPrice         Decimal?            @db.Decimal(10, 2)
+  currencyCode          String              @db.VarChar(3)
+  totalAmount           Decimal             @db.Decimal(10, 2)
+  status                OrderInterestStatus @default(PENDING)
+  notes                 String?
+  preferredDeliveryDate DateTime?
+  deliveryAddress       String?
+  contactPhone          String?
+  paymentMethod         String?
+  paymentStatus         PaymentStatus       @default(PENDING)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  expiresAt             DateTime?
+  product               Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([userId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
+  @@index([expiresAt])
+  @@map("product_order_interests")
+}
+
+model Order {
+  id                   String                @id @default(uuid())
+  orderNumber          String                @unique
+  userId               String
+  sellerId             String
+  status               OrderStatus           @default(PENDING)
+  subtotal             Decimal               @db.Decimal(10, 2)
+  taxAmount            Decimal               @default(0) @db.Decimal(10, 2)
+  shippingAmount       Decimal               @default(0) @db.Decimal(10, 2)
+  discountAmount       Decimal               @default(0) @db.Decimal(10, 2)
+  totalAmount          Decimal               @db.Decimal(10, 2)
+  currencyCode         String                @db.VarChar(3)
+  customerName         String
+  customerEmail        String?
+  customerPhone        String
+  shippingAddress      String
+  billingAddress       String?
+  paymentMethod        String?
+  paymentStatus        PaymentStatus         @default(PENDING)
+  paymentReference     String?
+  paidAt               DateTime?
+  shippingMethod       String?
+  trackingNumber       String?
+  shippedAt            DateTime?
+  deliveredAt          DateTime?
+  notes                String?
+  sellerNotes          String?
+  metadata             Json?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  cancelledAt          DateTime?
+  deliveryCurrency     String?               @db.VarChar(3)
+  externalTransactions ExternalTransaction[]
+  orderItems           OrderItem[]
+  seller               User                  @relation("SellerOrders", fields: [sellerId], references: [id])
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([orderNumber])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String          @id @default(uuid())
+  orderId         String
+  productId       String
+  productSnapshot Json
+  quantity        Int
+  unitPrice       Decimal         @db.Decimal(10, 2)
+  totalPrice      Decimal         @db.Decimal(10, 2)
+  status          OrderItemStatus @default(PENDING)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         Product         @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([status])
+  @@map("order_items")
+}
+
+model ExternalTransaction {
+  id                    String    @id @default(uuid())
+  orderId               String
+  customerId            String
+  sellerId              String
+  paymentMethodId       String?
+  gatewayProvider       String    // e.g., "stripe", "mpesa", "airtel_money"
+  gatewayTransactionId  String?   // Gateway's internal transaction ID
+  paymentReference      String?   // Payment reference from gateway
+  appTransactionId      String    // Unique transaction ID generated by our app
+  transactionType       TransactionType @default(ORIGINAL) // ORIGINAL, FEE, or SERVICE_FEE
+  amount                Decimal   @db.Decimal(10, 2)
+  currencyCode          String    @db.VarChar(3)
+  gatewayChargeFees     Decimal?  @db.Decimal(10, 2) // Fees charged by gateway
+  processedAmount       Decimal?  @db.Decimal(10, 2) // Amount after fees (what seller receives)
+  paidThroughGateway    Boolean   @default(false)
+  gatewayResponse       Json?     // Full response from payment gateway
+  gatewayRequest        Json?     // Request sent to payment gateway
+  status                TransactionStatus
+  failureReason         String?   // Reason for failure if status is failed
+  processedAt           DateTime? // When gateway processed the transaction
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  order                 Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer              User      @relation("CustomerTransactions", fields: [customerId], references: [id])
+  seller                User      @relation("SellerTransactions", fields: [sellerId], references: [id])
+  paymentMethod         PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+
+  @@index([orderId])
+  @@index([customerId])
+  @@index([sellerId])
+  @@index([paymentMethodId])
+  @@index([gatewayProvider])
+  @@index([gatewayTransactionId])
+  @@index([paymentReference])
+  @@index([appTransactionId])
+  @@index([transactionType])
+  @@index([status])
+  @@index([processedAt])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model UCP {
+  id          String   @id @default(uuid())
+  name        String   @unique // e.g., "service_fee_stripe", "service_fee_mpesa", "delivery_fee"
+  value       Decimal  @db.Decimal(10, 4) // Percentage value (e.g., 0.05 for 5%)
+  description String?
+  serviceType String?  // e.g., "payment_gateway", "delivery", "subscription"
+  isActive    Boolean  @default(true)
+  metadata    Json?    // Additional configuration data
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([serviceType])
+  @@index([isActive])
+  @@index([createdAt])
+  @@index([updatedAt])
 }
 
 enum ProductCondition {
@@ -287,137 +629,6 @@ enum ProductStatus {
   PENDING
 }
 
-// Seller KYC model
-model SellerKyc {
-  id                String    @id @default(uuid())
-  userId            String    @unique
-  businessName      String
-  businessType      BusinessType
-  registrationNumber String?
-  taxId            String?
-  address          String
-  city             String
-  state            String
-  country          String[]   // Array of country codes
-  postalCode       String
-  documentType     DocumentType
-  documentNumber   String
-  documentUrl      String
-  documentExpiryDate DateTime?
-  status           KycStatus  @default(PENDING)
-  rejectionReason  String?
-  verifiedAt       DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  // Relations
-  user             User      @relation(fields: [userId], references: [id])
-  bankAccounts     BankAccount[]
-  wallets          Wallet[]
-
-  @@index([userId])
-  @@index([status])
-  @@index([documentNumber])
-  @@index([businessName])
-}
-
-// Bank Account model
-model BankAccount {
-  id              String    @id @default(uuid())
-  sellerKycId     String
-  accountName     String
-  accountNumber   String
-  bankName        String
-  bankCode        String
-  branchCode      String?
-  swiftCode       String?
-  iban            String?
-  currency        String    @db.VarChar(3)
-  isDefault       Boolean   @default(false)
-  status          AccountStatus @default(ACTIVE)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  // Relations
-  sellerKyc       SellerKyc @relation(fields: [sellerKycId], references: [id])
-  settlements     Settlement[]
-
-  @@index([sellerKycId])
-  @@index([accountNumber])
-  @@index([status])
-}
-
-// Wallet model
-model Wallet {
-  id              String    @id @default(uuid())
-  sellerKycId     String
-  walletType      WalletType
-  walletAddress   String
-  currency        String    @db.VarChar(3)
-  isDefault       Boolean   @default(false)
-  status          AccountStatus @default(ACTIVE)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  // Relations
-  sellerKyc       SellerKyc @relation(fields: [sellerKycId], references: [id])
-  settlements     Settlement[]
-
-  @@index([sellerKycId])
-  @@index([walletAddress])
-  @@index([status])
-}
-
-// Payment Method model
-model PaymentMethod {
-  id              String    @id @default(uuid())
-  userId          String
-  type            PaymentType
-  provider        String
-  accountId       String
-  accountName     String
-  isDefault       Boolean   @default(false)
-  status          AccountStatus @default(ACTIVE)
-  metadata        Json?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  // Relations
-  user            User      @relation(fields: [userId], references: [id])
-
-  @@index([userId])
-  @@index([type])
-  @@index([status])
-}
-
-// Settlement model
-model Settlement {
-  id              String    @id @default(uuid())
-  userId          String
-  amount          Decimal   @db.Decimal(10, 2)
-  currency        String    @db.VarChar(3)
-  status          SettlementStatus @default(PENDING)
-  type            SettlementType
-  reference       String    @unique
-  bankAccountId   String?
-  walletId        String?
-  metadata        Json?
-  processedAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  // Relations
-  user            User      @relation(fields: [userId], references: [id])
-  bankAccount     BankAccount? @relation(fields: [bankAccountId], references: [id])
-  wallet          Wallet?   @relation(fields: [walletId], references: [id])
-
-  @@index([userId])
-  @@index([status])
-  @@index([reference])
-  @@index([createdAt])
-}
-
-// Enums
 enum BusinessType {
   INDIVIDUAL
   SOLE_PROPRIETORSHIP
@@ -476,199 +687,46 @@ enum SettlementType {
   WALLET_TRANSFER
 }
 
-// Product view tracking for unique user views
-model ProductView {
-  id        String   @id @default(cuid())
-  productId String
-  userId    String
-  deviceId  String?  // For anonymous users
-  ipAddress String?  // For additional tracking
-  viewedAt  DateTime @default(now())
-  
-  // Relations
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Composite unique constraint to prevent duplicate views
-  @@unique([productId, userId, deviceId])
-  @@index([productId])
-  @@index([userId])
-  @@index([viewedAt])
-  
-  @@map("product_views")
-}
-
-// Product Order Interest model for tracking user interest in products
-model ProductOrderInterest {
-  id                String    @id @default(uuid())
-  productId         String
-  userId            String
-  quantity          Int       @default(1)
-  originalPrice     Decimal   @db.Decimal(10, 2)
-  discountPrice     Decimal?  @db.Decimal(10, 2)  // Can be null if no discount
-  currencyCode      String    @db.VarChar(3)
-  totalAmount       Decimal   @db.Decimal(10, 2)  // Calculated total (with discount if applicable)
-  
-  // Order details
-  status            OrderInterestStatus @default(PENDING)
-  notes             String?   // User notes or special requests
-  preferredDeliveryDate DateTime?
-  deliveryAddress   String?
-  contactPhone      String?
-  
-  // Payment information
-  paymentMethod     String?   // Preferred payment method
-  paymentStatus     PaymentStatus @default(PENDING)
-  
-  // Timestamps
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  expiresAt         DateTime? // When the interest expires if not converted to order
-  
-  // Relations
-  product           Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@index([productId])
-  @@index([userId])
-  @@index([status])
-  @@index([paymentStatus])
-  @@index([createdAt])
-  @@index([expiresAt])
-  
-  @@map("product_order_interests")
-}
-
-// Order model for actual purchases
-model Order {
-  id                String    @id @default(uuid())
-  orderNumber       String    @unique // Human-readable order number
-  userId            String
-  sellerId          String    // The seller of the products
-  status            OrderStatus @default(PENDING)
-  
-  // Order totals
-  subtotal          Decimal   @db.Decimal(10, 2)
-  taxAmount         Decimal   @db.Decimal(10, 2) @default(0)
-  shippingAmount    Decimal   @db.Decimal(10, 2) @default(0)
-  discountAmount    Decimal   @db.Decimal(10, 2) @default(0)
-  totalAmount       Decimal   @db.Decimal(10, 2)
-  currencyCode      String    @db.VarChar(3)
-  deliveryCurrency  String?   @db.VarChar(3) // Currency for delivery cost (can be different from product currency)
-  
-  // Customer information
-  customerName      String
-  customerEmail     String?
-  customerPhone     String
-  shippingAddress   String
-  billingAddress    String?
-  
-  // Payment information
-  paymentMethod     String
-  paymentStatus     PaymentStatus @default(PENDING)
-  paymentReference  String?   // External payment reference
-  paidAt            DateTime?
-  
-  // Shipping information
-  shippingMethod    String?
-  trackingNumber    String?
-  shippedAt         DateTime?
-  deliveredAt       DateTime?
-  
-  // Order metadata
-  notes             String?   // Customer notes
-  sellerNotes       String?   // Internal seller notes
-  metadata          Json?     // Additional order data
-  
-  // Timestamps
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  cancelledAt       DateTime?
-  
-  // Relations
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  seller            User      @relation("SellerOrders", fields: [sellerId], references: [id])
-  orderItems        OrderItem[]
-  
-  @@index([userId])
-  @@index([sellerId])
-  @@index([status])
-  @@index([paymentStatus])
-  @@index([orderNumber])
-  @@index([createdAt])
-  
-  @@map("orders")
-}
-
-// Order Item model for individual products in an order
-model OrderItem {
-  id                String    @id @default(uuid())
-  orderId           String
-  productId         String
-  productSnapshot   Json      // Store product details at time of order
-  quantity          Int
-  unitPrice         Decimal   @db.Decimal(10, 2)
-  totalPrice        Decimal   @db.Decimal(10, 2)
-  
-  // Item status
-  status            OrderItemStatus @default(PENDING)
-  
-  // Timestamps
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  
-  // Relations
-  order             Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product           Product   @relation(fields: [productId], references: [id])
-  
-  @@index([orderId])
-  @@index([productId])
-  @@index([status])
-  
-  @@map("order_items")
-}
-
-// Enums for ProductOrderInterest
 enum OrderInterestStatus {
-  PENDING           // Initial interest expressed
-  CONFIRMED         // Seller has confirmed interest
-  NEGOTIATING       // Price or terms being negotiated
-  ACCEPTED          // Interest accepted, ready for order
-  REJECTED          // Interest rejected by seller
-  EXPIRED           // Interest expired
-  CANCELLED         // Interest cancelled by user
-  CONVERTED_TO_ORDER // Converted to actual order
+  PENDING
+  CONFIRMED
+  NEGOTIATING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+  CONVERTED_TO_ORDER
 }
 
 enum PaymentStatus {
   PENDING
   AUTHORIZED
   PAID
+  SETTLED    // New status: Order has been included in a settlement
   FAILED
   REFUNDED
   CANCELLED
 }
 
-// Enums for Order system
 enum OrderStatus {
-  PENDING           // Order created, waiting for payment
-  CONFIRMED         // Payment confirmed, order being processed
-  PROCESSING        // Order is being prepared
-  SHIPPED           // Order has been shipped
-  DELIVERED         // Order has been delivered
-  AUTHORIZED        // Order authorized by buyer for payment
-  CANCELLED         // Order cancelled
-  REFUNDED          // Order refunded
-  COMPLETED         // Order completed successfully
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+  COMPLETED
+  AUTHORIZED
 }
 
 enum OrderItemStatus {
-  PENDING           // Item pending processing
-  PROCESSING        // Item being prepared
-  SHIPPED           // Item shipped
-  DELIVERED         // Item delivered
-  CANCELLED         // Item cancelled
-  REFUNDED          // Item refunded
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
 }
 
 enum DeliveryType {
@@ -679,3 +737,18 @@ enum DeliveryType {
   PICKUP
   INTERNATIONAL
 } 
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+  CANCELLED
+  EXPIRED
+} 
+
+enum TransactionType {
+  ORIGINAL    // The main customer payment transaction
+  FEE         // The gateway fee transaction
+  SERVICE_FEE // The app-wide service fee transaction
+}

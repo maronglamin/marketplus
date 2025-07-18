@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,9 +22,10 @@ import { interestService } from '../services/interestService';
 import { useAuth } from '../contexts/AuthContext';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.40.48';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.208.48';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type HomeNavigationProp = NativeStackNavigationProp<AppStackParamList, 'Home'>;
@@ -33,6 +34,15 @@ export function Home() {
   const navigation = useNavigation<HomeNavigationProp>();
   const route = useRoute();
   const { user, isLoading: authLoading } = useAuth();
+  
+  // Bottom sheet refs and state
+  const rideBottomSheetRef = useRef<BottomSheetModal>(null);
+  const [isRideBottomSheetOpen, setIsRideBottomSheetOpen] = useState(false);
+  const [isDriverMode, setIsDriverMode] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  
+  // Bottom sheet snap points
+  const rideSnapPoints = useMemo(() => ['90%'], []);
   
   console.log('Home component render - auth state:', { 
     hasUser: !!user, 
@@ -326,6 +336,30 @@ export function Home() {
     }
   }, [featuredProducts]);
 
+  const handleRideCardPress = useCallback(() => {
+    console.log('Ride card pressed!');
+    console.log('Bottom sheet ref:', rideBottomSheetRef.current);
+    rideBottomSheetRef.current?.present();
+  }, []);
+
+  const handleRideBottomSheetClose = useCallback(() => {
+    rideBottomSheetRef.current?.dismiss();
+  }, []);
+
+  const handleRideServicePress = (serviceType: string) => {
+    console.log('Selected ride service:', serviceType);
+    // Handle different ride services here
+    handleRideBottomSheetClose();
+    
+    if (serviceType === 'getRide') {
+      navigation.navigate('RideRequest');
+    }
+  };
+
+  const handleDriverModeToggle = () => {
+    setIsDriverMode(!isDriverMode);
+  };
+
   if (loading && isInitialLoad) {
     return (
       <View style={styles.container}>
@@ -351,6 +385,24 @@ export function Home() {
         <View style={styles.mainContent}>
           {/* Fixed Header */}
           <View style={styles.fixedHeader}>
+            <View style={styles.headerLogo}>
+              {imageError ? (
+                <View style={styles.logoFallback}>
+                  <Text style={styles.logoText}>SNAP</Text>
+                </View>
+              ) : (
+                <Image
+                  source={require('../../assets/icon.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                  onError={(error) => {
+                    console.error('Failed to load logo:', error.nativeEvent.error);
+                    setImageError(true);
+                  }}
+                />
+              )}
+              <Text style={styles.logoLabel}>SNAP</Text>
+            </View>
             <View style={styles.headerIcons}>
               <TouchableOpacity
                 onPress={() => navigation.navigate('Notifications')}
@@ -367,6 +419,14 @@ export function Home() {
             </View>
           </View>
 
+          {/* Riders Card (Uber-style) */}
+          <TouchableOpacity style={styles.ridersCard} onPress={handleRideCardPress}>
+            <View style={styles.ridersIconContainer}>
+              <Ionicons name="car-outline" size={32} color="#2563EB" />
+            </View>
+            <Text style={styles.ridersLabel}>Riders</Text>
+          </TouchableOpacity>
+
           {/* Scrollable Content */}
           <ScrollView 
             style={styles.content} 
@@ -380,14 +440,14 @@ export function Home() {
               />
             }
           >
-            <View style={styles.welcomeCard}>
+            {/* <View style={styles.welcomeCard}>
               <Text style={styles.welcomeTitle}>
                 Hello, {user?.firstName || 'User'}!
               </Text>
               <Text style={styles.welcomeSubtitle}>
                 Find amazing products from sellers.
               </Text>
-            </View>
+            </View> */}
 
             <View style={styles.categoriesContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -629,6 +689,140 @@ export function Home() {
           </SafeAreaView>
         </View>
       </SafeAreaView>
+
+      {/* Ride Services Bottom Sheet */}
+      <BottomSheetModal
+        ref={rideBottomSheetRef}
+        index={0}
+        snapPoints={rideSnapPoints}
+        enablePanDownToClose={true}
+        onDismiss={() => setIsRideBottomSheetOpen(false)}
+        backgroundStyle={styles.bottomSheetBackground}
+        handleIndicatorStyle={styles.bottomSheetIndicator}
+      >
+        <BottomSheetView style={styles.rideBottomSheetContent}>
+          {/* Header */}
+          <View style={styles.rideBottomSheetHeader}>
+            <Text style={styles.rideBottomSheetTitle}>Choose Your Ride</Text>
+            <TouchableOpacity onPress={handleRideBottomSheetClose} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Car Icon */}
+          <View style={styles.carIconContainer}>
+            <View style={styles.carIconBackground}>
+              <Ionicons name="car" size={48} color="#2563EB" />
+            </View>
+          </View>
+
+          {/* Service Options */}
+          <View style={styles.serviceOptionsContainer}>
+            {!isDriverMode ? (
+              <>
+                <TouchableOpacity 
+                  style={styles.serviceOption}
+                  onPress={() => handleRideServicePress('getRide')}
+                >
+                  <View style={styles.serviceIconContainer}>
+                    <Ionicons name="flash" size={24} color="#2563EB" />
+                  </View>
+                  <View style={styles.serviceContent}>
+                    <Text style={styles.serviceTitle}>Get a Ride</Text>
+                    <Text style={styles.serviceDescription}>Request a ride now and get picked up in minutes</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.serviceOption}
+                  onPress={() => handleRideServicePress('scheduleRide')}
+                >
+                  <View style={styles.serviceIconContainer}>
+                    <Ionicons name="time" size={24} color="#059669" />
+                  </View>
+                  <View style={styles.serviceContent}>
+                    <Text style={styles.serviceTitle}>Schedule a Ride</Text>
+                    <Text style={styles.serviceDescription}>Book a ride for a specific time today</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.serviceOption}
+                  onPress={() => handleRideServicePress('futureTrip')}
+                >
+                  <View style={styles.serviceIconContainer}>
+                    <Ionicons name="calendar" size={24} color="#DC2626" />
+                  </View>
+                  <View style={styles.serviceContent}>
+                    <Text style={styles.serviceTitle}>Future Trip</Text>
+                    <Text style={styles.serviceDescription}>Plan and book rides for upcoming trips</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={styles.driverModeContainer}>
+                <View style={styles.driverModeIcon}>
+                  <Ionicons name="car-sport" size={48} color="#2563EB" />
+                </View>
+                <Text style={styles.driverModeTitle}>Driver Mode</Text>
+                <Text style={styles.driverModeDescription}>
+                  You're now in driver mode. Switch back to rider mode to book rides.
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Footer with Driver Mode Toggle */}
+          <View style={styles.rideBottomSheetFooter}>
+            <View style={styles.modeToggleContainer}>
+              <View style={styles.modeToggle}>
+                <TouchableOpacity 
+                  style={[
+                    styles.modeButton, 
+                    !isDriverMode && styles.activeModeButton
+                  ]}
+                  onPress={() => setIsDriverMode(false)}
+                >
+                  <Ionicons 
+                    name="person" 
+                    size={16} 
+                    color={!isDriverMode ? "#FFFFFF" : "#6B7280"} 
+                  />
+                  <Text style={[
+                    styles.modeButtonText,
+                    !isDriverMode && styles.activeModeButtonText
+                  ]}>
+                    Rider
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[
+                    styles.modeButton, 
+                    isDriverMode && styles.activeModeButton
+                  ]}
+                  onPress={() => setIsDriverMode(true)}
+                >
+                  <Ionicons 
+                    name="car-sport" 
+                    size={16} 
+                    color={isDriverMode ? "#FFFFFF" : "#6B7280"} 
+                  />
+                  <Text style={[
+                    styles.modeButtonText,
+                    isDriverMode && styles.activeModeButtonText
+                  ]}>
+                    Driver
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            <Text style={styles.footerText}>All rides are subject to availability and pricing</Text>
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
     </View>
   );
 }
@@ -653,9 +847,38 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  headerLogo: {
+    flexDirection: 'column', // Changed to column
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: {
+    width: 40,
+    height: 40,
+    marginBottom: 4, // Added margin bottom
+  },
+  logoFallback: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#2563EB',
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4, // Added margin bottom
+  },
+  logoText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  logoLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827', // Changed to black
   },
   headerIcons: {
     flexDirection: 'row',
@@ -922,5 +1145,188 @@ const styles = StyleSheet.create({
   },
   bottomNavContainer: {
     backgroundColor: '#FFFFFF',
+  },
+  ridersCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    margin: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  ridersIconContainer: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 24,
+    padding: 12,
+    marginRight: 16,
+  },
+  ridersLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2563EB',
+  },
+  bottomSheetBackground: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    backgroundColor: '#FFFFFF',
+  },
+  bottomSheetIndicator: {
+    backgroundColor: '#E5E7EB',
+    width: 40,
+    height: 4,
+  },
+  rideBottomSheetContent: {
+    flex: 1,
+    padding: 20,
+  },
+  rideBottomSheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+    paddingTop: 8,
+  },
+  rideBottomSheetTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  carIconContainer: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  carIconBackground: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 40,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: '#DBEAFE',
+    width: '100%',
+    alignItems: 'center',
+  },
+  serviceOptionsContainer: {
+    flex: 1,
+  },
+  serviceOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  serviceIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  serviceContent: {
+    flex: 1,
+  },
+  serviceTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  serviceDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  rideBottomSheetFooter: {
+    alignItems: 'center',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  driverModeContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  driverModeIcon: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 40,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: '#DBEAFE',
+    marginBottom: 16,
+  },
+  driverModeTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  driverModeDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modeToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginBottom: 16,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: '#E5E7EB',
+    borderRadius: 20,
+    padding: 2,
+  },
+  modeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+  },
+  activeModeButton: {
+    backgroundColor: '#2563EB',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+    color: '#6B7280',
+  },
+  activeModeButtonText: {
+    color: '#FFFFFF',
   },
 }); 

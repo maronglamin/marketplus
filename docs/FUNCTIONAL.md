@@ -1,4 +1,4 @@
-# Marketplace Application Functional Documentation
+# SNAP Application Functional Documentation
 
 ## User Authentication
 
@@ -380,3 +380,9 @@
 - Session control
 - Token management
 - Rate limiting 
+
+
+### formular
+- Available Revenue = Total Paid Orders - Service Fees - PENDING Settlements - PROCESSING Settlements - COMPLETED Settlements
+
+-new: Available Revenue = Total PAID Orders (excluding SETTLED) - Service Fees

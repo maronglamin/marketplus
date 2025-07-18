@@ -1,4 +1,4 @@
-# **Business Plan and Technical Requirement Documentation for Marketplace App**
+# **Business Plan and Technical Requirement Documentation for SNAP App**
 
 ## **Table of Contents**
 
@@ -142,7 +142,7 @@ This document outlines the complete business and technical plan for a **mobile m
 
 ### **Conclusion**
 
-This marketplace app targets digital transformation for SMEs and retail-focused enterprises. It provides public users with an intuitive shopping experience, reliable seller communication, and multiple payment methods—all within a mobile-first, secure architecture.
+This SNAP app targets digital transformation for SMEs and retail-focused enterprises. It provides public users with an intuitive shopping experience, reliable seller communication, and multiple payment methods—all within a mobile-first, secure architecture.
 
 ---
 

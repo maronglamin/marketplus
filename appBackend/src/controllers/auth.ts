@@ -379,9 +379,42 @@ export const loginWithPin = async (req: Request, res: Response) => {
       });
     }
 
+    // Check if there's an unused PIN_RESET OTP for this user
+    const pinResetOTP = await prisma.oTP.findFirst({
+      where: {
+        phoneNumber,
+        type: 'PIN_RESET',
+        isUsed: false,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
     // Generate token
     const token = await generateToken(user.id, device.id);
     console.log('Generated token for PIN login:', token);
+
+    // If there's an unused PIN_RESET OTP, force PIN reset flow
+    if (pinResetOTP) {
+      console.log('PIN_RESET OTP found for user, forcing PIN reset:', phoneNumber);
+      
+      return res.status(200).json({
+        message: 'PIN reset required',
+        token,
+        requiresPinReset: true,
+        pinResetOTPId: pinResetOTP.id,
+        user: {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          phoneNumber: user.phoneNumber,
+        },
+      });
+    }
 
     // Update device last login
     await prisma.device.update({
@@ -627,6 +660,79 @@ export const requestNewPin = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error in requestNewPin:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const completePinReset = async (req: AuthRequest, res: Response) => {
+  try {
+    const { newPin, pinResetOTPId } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    if (!newPin || !pinResetOTPId) {
+      return res.status(400).json({ message: 'New PIN and OTP ID are required' });
+    }
+
+    // Validate PIN format
+    if (!/^\d{4}$/.test(newPin)) {
+      return res.status(400).json({ message: 'PIN must be 4 digits' });
+    }
+
+    // Get user
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Verify the PIN_RESET OTP exists and is unused
+    const pinResetOTP = await prisma.oTP.findFirst({
+      where: {
+        id: pinResetOTPId,
+        phoneNumber: user.phoneNumber,
+        type: 'PIN_RESET',
+        isUsed: false,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!pinResetOTP) {
+      return res.status(400).json({ message: 'Invalid or expired PIN reset OTP' });
+    }
+
+    // Hash new PIN
+    const hashedNewPin = await bcrypt.hash(newPin, 10);
+
+    // Update user's PIN and mark OTP as used in a transaction
+    await prisma.$transaction([
+      // Update user's PIN
+      prisma.user.update({
+        where: { id: userId },
+        data: { pin: hashedNewPin }
+      }),
+      // Mark OTP as used
+      prisma.oTP.update({
+        where: { id: pinResetOTPId },
+        data: { isUsed: true }
+      })
+    ]);
+
+    console.log('PIN reset completed successfully for user:', userId);
+
+    return res.status(200).json({ 
+      message: 'PIN reset completed successfully',
+      success: true
+    });
+  } catch (error) {
+    console.error('Error in completePinReset:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }; 

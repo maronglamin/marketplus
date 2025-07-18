@@ -1,4 +1,4 @@
-package com.marketplace.app
+package com.snap.app
 
 import android.app.Application
 import android.content.res.Configuration
@@ -54,4 +54,4 @@ class MainApplication : Application(), ReactApplication {
     super.onConfigurationChanged(newConfig)
     ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
   }
-}
+} 

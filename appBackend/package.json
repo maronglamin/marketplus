@@ -1,7 +1,7 @@
 {
-  "name": "marketplace-backend",
+  "name": "snap-backend",
   "version": "1.0.0",
-  "description": "Marketplace application backend",
+  "description": "SNAP application backend",
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",

@@ -1,12 +1,8 @@
-# Marketplace Application Business Documentation
+# SNAP Application Business Documentation
 
-## Business Overview
+## Mission Statement
 
-### Vision
 To create a secure, user-friendly marketplace platform that connects buyers and sellers, facilitating seamless transactions and fostering a trusted community of users.
-
-### Mission
-To provide a reliable platform where users can safely buy and sell products, with a focus on local commerce, user security, and transaction transparency.
 
 ## Market Analysis
 

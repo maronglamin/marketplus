@@ -1,7 +1,7 @@
-# Marketplace Application Documentation
+# SNAP Application Documentation
 
 ## Overview
-This documentation provides comprehensive information about the Marketplace Application, covering its architecture, functionality, and business aspects. The documentation is organized into three main sections:
+This documentation provides comprehensive information about the SNAP Application, covering its architecture, functionality, and business aspects. The documentation is organized into three main sections:
 
 1. [Architecture Documentation](ARCHITECTURE.md)
 2. [Functional Documentation](FUNCTIONAL.md)
@@ -91,16 +91,16 @@ For business-related questions:
 - Contact the business team
 - Schedule a meeting for detailed discussions
 
-## Contact
+## Contact Information
 
 ### Documentation Team
-- Email: docs@marketplace.com
+- Email: docs@snap.com
 - Internal: #documentation-team
 
 ### Technical Team
-- Email: tech@marketplace.com
+- Email: tech@snap.com
 - Internal: #technical-team
 
 ### Business Team
-- Email: business@marketplace.com
+- Email: business@snap.com
 - Internal: #business-team 

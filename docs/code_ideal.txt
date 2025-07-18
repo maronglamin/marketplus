@@ -92,7 +92,7 @@ export function Header({ currentScreen, setCurrentScreen }: HeaderProps) {
   const renderTitle = () => {
     switch (currentScreen) {
       case 'home':
-        return 'Marketplace'
+        return 'SNAP'
       case 'productDetail':
         return 'Product Details'
       case 'sellerDashboard':
@@ -102,7 +102,7 @@ export function Header({ currentScreen, setCurrentScreen }: HeaderProps) {
       case 'interestManagement':
         return 'Manage Interests'
       default:
-        return 'Marketplace'
+        return 'SNAP'
     }
   }
   const showBackButton = [
@@ -342,7 +342,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             </div>
           </div>
           <h1 className="text-3xl font-bold text-center text-gray-800 mb-4">
-            Welcome to MarketPlace
+            Welcome to SNAP
           </h1>
           <p className="text-center text-gray-600 mb-8">
             Connect with local businesses and find products you love.

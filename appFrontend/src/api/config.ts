@@ -23,7 +23,7 @@ const getApiUrl = async (): Promise<string> => {
     defaultUrl = `${ENV_CONFIG.API_BASE_URL}/api`;
   } else {
     // Production environment
-    defaultUrl = 'https://api.marketplace.com/api';
+    defaultUrl = 'https://api.snap.com/api';
   }
 
   console.log('Using API URL:', defaultUrl);

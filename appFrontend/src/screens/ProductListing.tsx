@@ -24,7 +24,7 @@ import Constants from 'expo-constants';
 import { getImageUrl } from '../config/env';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.40.48';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '10.77.205.48';
 
 type ProductListingNavigationProp = NativeStackNavigationProp<AppStackParamList, 'ProductListing'>;
 

@@ -3,14 +3,14 @@ import Constants from 'expo-constants';
 // Centralized environment configuration
 export const ENV_CONFIG = {
   // API Configuration
-  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || `http://192.168.40.48:3000`,
+  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || `http://10.77.205.48:3000`,
   API_TIMEOUT: 10000,
   
   // Local IP for development
-  LOCAL_IP: Constants.expoConfig?.extra?.localIp || '192.168.40.48',
+  LOCAL_IP: Constants.expoConfig?.extra?.localIp || '10.77.205.48',
   
   // App Configuration
-  APP_NAME: 'Marketplace',
+  APP_NAME: 'SNAP',
   APP_VERSION: '1.0.0',
   
   // Feature Flags

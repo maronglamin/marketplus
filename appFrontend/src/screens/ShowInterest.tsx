@@ -199,8 +199,8 @@ export function ShowInterest() {
       try {
         console.log('ShowInterest: Starting to load data');
         if (isMounted) {
-          setLoading(true);
-          setError(null);
+      setLoading(true);
+      setError(null);
         }
         
         // Test API connection first
@@ -219,11 +219,11 @@ export function ShowInterest() {
         
         // Load product details first
         console.log('ShowInterest: Loading product details');
-        const productDetail = await productService.getProductById(productId);
+      const productDetail = await productService.getProductById(productId);
         console.log('ShowInterest: Product loaded successfully', { productId: productDetail.id });
         
         if (isMounted) {
-          setProduct(productDetail);
+      setProduct(productDetail);
         }
         
         // Then check interest
@@ -240,7 +240,7 @@ export function ShowInterest() {
           console.log('ShowInterest: Loading messages for existing interest');
           loadInterestMessages(interestCheck.data.interest.id);
         }
-      } catch (error) {
+    } catch (error) {
         console.error('ShowInterest: Error initializing screen:', error);
         if (isMounted) {
           let errorMessage = 'Failed to load data. Please try again.';
@@ -251,10 +251,10 @@ export function ShowInterest() {
           }
           setError(errorMessage);
         }
-      } finally {
+    } finally {
         if (isMounted) {
           console.log('ShowInterest: Finished loading, setting loading to false');
-          setLoading(false);
+      setLoading(false);
         }
         if (timeoutId) {
           clearTimeout(timeoutId);
@@ -756,65 +756,65 @@ export function ShowInterest() {
           {!interestExists ? (
             // Original form for new interest
             <>
-              <View style={styles.messageContainer}>
-                <Text style={styles.messageLabel}>Message to Seller *</Text>
-                <TextInput
-                  style={styles.messageInput}
-                  value={message}
-                  onChangeText={setMessage}
-                  placeholder="Write a message to the seller..."
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
+          <View style={styles.messageContainer}>
+            <Text style={styles.messageLabel}>Message to Seller *</Text>
+            <TextInput
+              style={styles.messageInput}
+              value={message}
+              onChangeText={setMessage}
+              placeholder="Write a message to the seller..."
+              multiline
+              numberOfLines={4}
+            />
+          </View>
 
-              <View style={styles.quantityContainer}>
-                <Text style={styles.quantityLabel}>Quantity:</Text>
-                <TouchableOpacity 
-                  onPress={decrementQuantity} 
-                  style={[styles.quantityButton, quantity <= 1 && styles.quantityButtonDisabled]}
-                  disabled={quantity <= 1}
-                >
-                  <Ionicons name="remove" size={20} color={quantity <= 1 ? "#9CA3AF" : "#111827"} />
-                </TouchableOpacity>
-                <Text style={styles.quantity}>{quantity}</Text>
-                <TouchableOpacity 
-                  onPress={incrementQuantity} 
-                  style={[styles.quantityButton, product && quantity >= product.stock && styles.quantityButtonDisabled]}
-                  disabled={product ? quantity >= product.stock : false}
-                >
-                  <Ionicons name="add" size={20} color={product && quantity >= product.stock ? "#9CA3AF" : "#111827"} />
-                </TouchableOpacity>
-              </View>
+          <View style={styles.quantityContainer}>
+            <Text style={styles.quantityLabel}>Quantity:</Text>
+            <TouchableOpacity 
+              onPress={decrementQuantity} 
+              style={[styles.quantityButton, quantity <= 1 && styles.quantityButtonDisabled]}
+              disabled={quantity <= 1}
+            >
+              <Ionicons name="remove" size={20} color={quantity <= 1 ? "#9CA3AF" : "#111827"} />
+            </TouchableOpacity>
+            <Text style={styles.quantity}>{quantity}</Text>
+            <TouchableOpacity 
+              onPress={incrementQuantity} 
+              style={[styles.quantityButton, product && quantity >= product.stock && styles.quantityButtonDisabled]}
+              disabled={product ? quantity >= product.stock : false}
+            >
+              <Ionicons name="add" size={20} color={product && quantity >= product.stock ? "#9CA3AF" : "#111827"} />
+            </TouchableOpacity>
+          </View>
 
-              <View style={styles.totalContainer}>
-                <Text style={styles.totalLabel}>Total Price:</Text>
-                <Text style={styles.totalPrice}>
-                  {formatPrice(product.price * quantity, product.currencyCode)}
-                </Text>
-              </View>
+          <View style={styles.totalContainer}>
+            <Text style={styles.totalLabel}>Total Price:</Text>
+            <Text style={styles.totalPrice}>
+              {formatPrice(product.price * quantity, product.currencyCode)}
+            </Text>
+          </View>
 
-              <View style={styles.tipsContainer}>
-                <Text style={styles.tipsTitle}>Tips for a successful interest:</Text>
-                <View style={styles.tipItem}>
-                  <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                  <Text style={styles.tipText}>
-                    Be specific about what you're interested in
-                  </Text>
-                </View>
-                <View style={styles.tipItem}>
-                  <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                  <Text style={styles.tipText}>
-                    Mention any questions you have about the product
-                  </Text>
-                </View>
-                <View style={styles.tipItem}>
-                  <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                  <Text style={styles.tipText}>
-                    Be polite and professional in your message
-                  </Text>
-                </View>
-              </View>
+          <View style={styles.tipsContainer}>
+            <Text style={styles.tipsTitle}>Tips for a successful interest:</Text>
+            <View style={styles.tipItem}>
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+              <Text style={styles.tipText}>
+                Be specific about what you're interested in
+              </Text>
+            </View>
+            <View style={styles.tipItem}>
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+              <Text style={styles.tipText}>
+                Mention any questions you have about the product
+              </Text>
+            </View>
+            <View style={styles.tipItem}>
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+              <Text style={styles.tipText}>
+                Be polite and professional in your message
+              </Text>
+            </View>
+          </View>
             </>
           ) : (
             // Chat interface for existing interest
@@ -884,17 +884,17 @@ export function ShowInterest() {
 
         <View style={styles.footer}>
           {!interestExists ? (
-            <TouchableOpacity
-              style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
-              onPress={handleSubmit}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitButtonText}>Submit Interest</Text>
-              )}
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitButtonText}>Submit Interest</Text>
+            )}
+          </TouchableOpacity>
           ) : null}
         </View>
       </KeyboardAvoidingView>

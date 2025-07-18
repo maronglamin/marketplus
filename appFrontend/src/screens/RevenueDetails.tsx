@@ -14,6 +14,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../navigation/AppNavigator';
+import { productService, type RevenueBreakdown } from '../services/productService';
 
 type RevenueDetailsNavigationProp = NativeStackNavigationProp<AppStackParamList, 'RevenueDetails'>;
 
@@ -33,27 +34,50 @@ export function RevenueDetails() {
     loadRevenueData();
   }, []);
 
+  const getCurrencySymbol = (currencyCode: string) => {
+    const currencySymbols: { [key: string]: string } = {
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+      JPY: '¥',
+      CAD: 'C$',
+      AUD: 'A$',
+      CHF: 'CHF',
+      CNY: '¥',
+      INR: '₹',
+      BRL: 'R$',
+      MXN: '$',
+      KRW: '₩',
+      SGD: 'S$',
+      HKD: 'HK$',
+      NZD: 'NZ$',
+    };
+    return currencySymbols[currencyCode] || currencyCode;
+  };
+
   const loadRevenueData = async () => {
     try {
       setLoading(true);
-      // Mock data - replace with actual API call
-      const mockData: CurrencyRevenue[] = [
-        { currency: 'USD', symbol: '$', amount: 12500, percentage: 65 },
-        { currency: 'EUR', symbol: '€', amount: 8500, percentage: 22 },
-        { currency: 'GBP', symbol: '£', amount: 3200, percentage: 8 },
-        { currency: 'JPY', symbol: '¥', amount: 1800000, percentage: 3 },
-        { currency: 'CAD', symbol: 'C$', amount: 1500, percentage: 2 },
-      ];
       
-      setRevenueData(mockData);
+      const response = await productService.getSellerRevenue();
+      
+      // Transform the API data to match the component's expected format
+      const transformedData: CurrencyRevenue[] = response.revenueByCurrency.map(item => ({
+        currency: item.currency,
+        symbol: getCurrencySymbol(item.currency),
+        amount: item.amount,
+        percentage: item.percentage
+      }));
+      
+      setRevenueData(transformedData);
     } catch (error) {
       console.error('Error loading revenue data:', error);
+      // Fallback to empty data
+      setRevenueData([]);
     } finally {
       setLoading(false);
     }
   };
-
-  const totalRevenue = revenueData.reduce((sum, item) => sum + item.amount, 0);
 
   if (loading) {
     return (
@@ -86,13 +110,19 @@ export function RevenueDetails() {
         </View>
 
         <ScrollView style={styles.content}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Total Revenue</Text>
-            <Text style={styles.summaryValue}>
-              ${totalRevenue.toLocaleString()}
+          <TouchableOpacity 
+            style={styles.summaryCard}
+            onPress={() => navigation.navigate('SettlementRequest')}
+          >
+            <Text style={styles.summaryTitle}>Revenue Breakdown</Text>
+            <Text style={styles.summarySubtitle}>
+              {revenueData.length > 0 ? `${revenueData.length} currenc${revenueData.length === 1 ? 'y' : 'ies'}` : 'No revenue data'}
             </Text>
-            <Text style={styles.summarySubtitle}>Across all currencies</Text>
-          </View>
+            <View style={styles.settlementHint}>
+              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+              <Text style={styles.settlementHintText}>Tap to request settlement</Text>
+            </View>
+          </TouchableOpacity>
 
           <View style={styles.currencyList}>
             <Text style={styles.sectionTitle}>Revenue by Currency</Text>
@@ -134,17 +164,6 @@ export function RevenueDetails() {
               </TouchableOpacity>
             ))}
           </View>
-
-          <View style={styles.infoCard}>
-            <Ionicons name="information-circle-outline" size={24} color="#2563EB" />
-            <View style={styles.infoContent}>
-              <Text style={styles.infoTitle}>Multi-Currency Support</Text>
-              <Text style={styles.infoText}>
-                Your revenue is automatically converted and displayed in your default currency (USD). 
-                All transactions are processed in their original currency.
-              </Text>
-            </View>
-          </View>
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -164,8 +183,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    height: 56,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
+    paddingBottom: 12,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 56 : 56,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
@@ -315,5 +335,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1E40AF',
     lineHeight: 20,
+  },
+  settlementHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  settlementHintText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    marginLeft: 8,
   },
 }); 

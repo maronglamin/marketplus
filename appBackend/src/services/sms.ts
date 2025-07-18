@@ -39,7 +39,7 @@ export const sendOTP = async (phoneNumber: string, code: string): Promise<void> 
     }
 
     const message = await client.messages.create({
-      body: `Your Marketplace verification code is: ${code}. This code will expire in 10 minutes.`,
+      body: `Your SNAP verification code is: ${code}. This code will expire in 10 minutes.`,
       from: fromNumber,
       to: phoneNumber,
     });
@@ -73,7 +73,7 @@ export const sendPIN = async (phoneNumber: string, pin: string): Promise<void> =
     }
 
     const message = await client.messages.create({
-      body: `Your Marketplace PIN is: ${pin}. Please keep this PIN secure and do not share it with anyone.`,
+      body: `Your SNAP PIN is: ${pin}. Please keep this PIN secure and do not share it with anyone.`,
       from: fromNumber,
       to: phoneNumber,
     });

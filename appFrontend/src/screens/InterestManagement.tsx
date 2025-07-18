@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import { PDFExportService } from '../services/pdfExportService';
+import { generateAndSharePDF } from '../services/pdfExportService';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { interestService, type Interest } from '../services/interestService';
 import { kycService } from '../services/kycService';
@@ -26,7 +26,7 @@ import Constants from 'expo-constants';
 import { getImageUrl } from '../config/env';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.40.48';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '10.77.205.48';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type InterestManagementNavigationProp = NativeStackNavigationProp<AppStackParamList, 'InterestManagement'>;
@@ -280,7 +280,7 @@ export function InterestManagement() {
         return;
       }
 
-      await PDFExportService.generateAndSharePDF({
+      await generateAndSharePDF({
         type: 'interests',
         data: filteredInterests,
         dateRange: {
@@ -395,7 +395,7 @@ export function InterestManagement() {
                 My Interests
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity
+              <TouchableOpacity
               style={[styles.tab, activeTab === 'customer-interests' && styles.activeTab]}
               onPress={() => setActiveTab('customer-interests')}
             >
@@ -416,7 +416,7 @@ export function InterestManagement() {
           <Text style={styles.dateRangeText}>
             Export Range: {exportDateRange.startDate.toLocaleDateString()} - {exportDateRange.endDate.toLocaleDateString()}
           </Text>
-        </View>
+                </View>
 
         <ScrollView style={styles.content} onScroll={handleScroll} scrollEventThrottle={16}>
           {error ? (
@@ -489,22 +489,22 @@ export function InterestManagement() {
                         <Text style={styles.date}>{formatDate(interest.createdAt)}</Text>
                       </View>
                       <View style={styles.interestActions}>
-                        <View
-                          style={[
-                            styles.statusBadge,
-                            { backgroundColor: `${getStatusColor(interest.status)}20` },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.statusText,
-                              { color: getStatusColor(interest.status) },
-                            ]}
-                          >
-                            {interest.status.charAt(0).toUpperCase() + interest.status.slice(1)}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: `${getStatusColor(interest.status)}20` },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: getStatusColor(interest.status) },
+                    ]}
+                  >
+                    {interest.status.charAt(0).toUpperCase() + interest.status.slice(1)}
+                  </Text>
+                </View>
+                  <TouchableOpacity
                           style={[
                             styles.conversationButton,
                             {
@@ -520,7 +520,7 @@ export function InterestManagement() {
                                 '#E5E7EB'
                             }
                           ]}
-                          onPress={() => {
+                    onPress={() => {
                             handleViewInterestDetails(interest.id);
                           }}
                         >
@@ -539,25 +539,25 @@ export function InterestManagement() {
                               '#6B7280'
                             } 
                           />
-                        </TouchableOpacity>
+                  </TouchableOpacity>
                       </View>
                     </View>
 
                     {activeTab === 'my-interests' && interest.status === 'pending' && (
                       <View style={styles.actions}>
-                        <TouchableOpacity
+                  <TouchableOpacity
                           style={[styles.actionButton, styles.messageButton]}
-                          onPress={() => {
+                    onPress={() => {
                             handleViewInterestDetails(interest.id);
-                          }}
-                        >
+                    }}
+                  >
                           <Ionicons name="chatbubble-outline" size={16} color="#2563EB" />
                           <Text style={styles.messageButtonText}>Message Seller</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                ))}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          ))}
               </View>
             ))
           )}
