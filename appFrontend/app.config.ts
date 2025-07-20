@@ -31,7 +31,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png'
   },
   extra: {
-    localIp: '10.77.205.48',
+    localIp: '192.168.137.177',
     stripePublishableKey: 'pk_test_51G7XqgIFQtDBTvihaeU6FZCsQuHg1NQIkdd8CTGL0ZulPMIjQZUmFSW80gOzDpGe5UezYoqkc55WmQhpyYtZdLmk00QmAVRon0',
     eas: {
       projectId: '04ad20e1-cff1-4422-a7b3-bdb123420968'

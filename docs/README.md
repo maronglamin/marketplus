@@ -1,11 +1,13 @@
 # SNAP Application Documentation
 
 ## Overview
-This documentation provides comprehensive information about the SNAP Application, covering its architecture, functionality, and business aspects. The documentation is organized into three main sections:
+This documentation provides comprehensive information about the SNAP Application, covering its architecture, functionality, and business aspects. The documentation is organized into four main sections:
 
 1. [Architecture Documentation](ARCHITECTURE.md)
 2. [Functional Documentation](FUNCTIONAL.md)
 3. [Business Documentation](BUSINESS.md)
+4. [Admin Panel Documentation](ADMIN_PANEL.md)
+5. [Admin Implementation Guide](ADMIN_IMPLEMENTATION_GUIDE.md)
 
 ## Documentation Structure
 
@@ -37,6 +39,29 @@ The business documentation includes:
 - Operational model
 - Risk management
 - Growth strategy
+
+### Admin Panel Documentation
+The admin panel documentation covers:
+- Admin panel architecture and technology stack
+- Core features and modules
+- Database schema integration
+- API integration requirements
+- Security and authentication
+- UI/UX design guidelines
+- Implementation plan and timeline
+- Testing strategy
+- Deployment and DevOps
+
+### Admin Implementation Guide
+The implementation guide provides:
+- Quick start checklist
+- Detailed implementation tasks by priority
+- Technical implementation details
+- Code examples and components
+- Database queries for admin features
+- UI component examples
+- Deployment checklist
+- Support and resources
 
 ## Getting Started
 

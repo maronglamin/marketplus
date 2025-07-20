@@ -942,7 +942,7 @@ router.get('/:productId', authenticate, async (req: AuthRequest, res) => {
       ratingCount: product.ratingCount,
       description: `Experience premium quality with this ${product.title}. Perfect for your needs.\n\n${product.description || ''}`,
       images: product.images.length > 0 
-        ? product.images.map(img => `http://10.77.205.48:3000${img.imageUrl}`)
+        ? product.images.map(img => `http://192.168.137.177:3000${img.imageUrl}`)
         : ['https://via.placeholder.com/400x300?text=No+Image'],
       seller: {
         name: product.seller.sellerKyc?.businessName || `${product.seller.firstName} ${product.seller.lastName}`,
