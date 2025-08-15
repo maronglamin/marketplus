@@ -23,7 +23,7 @@ import { api } from '../services/api';
 import Constants from 'expo-constants';
 import { getImageUrl } from '../config/env';
 
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.137.177';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.199';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type SellerInterestDetailNavigationProp = NativeStackNavigationProp<AppStackParamList, 'SellerInterestDetail'>;
@@ -74,11 +74,15 @@ export function SellerInterestDetail() {
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
+    console.log('SellerInterestDetail: Loading interest with ID:', interestId);
+    console.log('SellerInterestDetail: Component mounted successfully');
     loadInterestDetails();
   }, [interestId]);
 
   const loadInterestDetails = async () => {
     try {
+      console.log('SellerInterestDetail: Starting to load interest details for ID:', interestId);
+      console.log('SellerInterestDetail: API call starting...');
       setLoading(true);
       setError(null);
       
@@ -88,11 +92,24 @@ export function SellerInterestDetail() {
         },
       });
       
+      console.log('SellerInterestDetail: Successfully loaded interest:', response.data);
       setInterest(response.data);
     } catch (error: any) {
       console.error('Error loading interest details:', error);
-      setError('Failed to load interest details');
-      Alert.alert('Error', 'Failed to load interest details. Please try again.');
+      
+      if (error.response?.status === 404) {
+        setError('Interest not found. It may have been deleted or is no longer available.');
+        Alert.alert(
+          'Interest Not Found', 
+          'This interest may have been deleted or is no longer available. Please check your interest list.',
+          [
+            { text: 'Go Back', onPress: () => navigation.goBack() }
+          ]
+        );
+      } else {
+        setError('Failed to load interest details');
+        Alert.alert('Error', 'Failed to load interest details. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -129,16 +146,27 @@ export function SellerInterestDetail() {
 
   const updateInterestStatus = async (newStatus: string) => {
     try {
+      // Convert to uppercase to match Prisma enum
+      const statusToSend = newStatus.toUpperCase();
+      
       await api.patch(`/api/products/interests/${interestId}/status`, {
-        status: newStatus,
+        status: statusToSend,
       }, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
       
-      setInterest(prev => prev ? { ...prev, status: newStatus } : null);
-      Alert.alert('Success', `Interest status updated to ${newStatus}`);
+      setInterest(prev => prev ? { ...prev, status: statusToSend } : null);
+      
+      const statusMessages = {
+        'confirmed': 'Interest confirmed successfully!',
+        'rejected': 'Interest rejected successfully!',
+        'cancelled': 'Interest cancelled successfully!',
+        'accepted': 'Interest accepted successfully!'
+      };
+      
+      Alert.alert('Success', statusMessages[newStatus.toLowerCase() as keyof typeof statusMessages] || `Interest status updated to ${newStatus}`);
     } catch (error: any) {
       console.error('Error updating interest status:', error);
       Alert.alert('Error', 'Failed to update interest status. Please try again.');
@@ -149,7 +177,6 @@ export function SellerInterestDetail() {
     switch (status.toLowerCase()) {
       case 'pending': return '#F59E0B';
       case 'confirmed': return '#10B981';
-      case 'negotiating': return '#3B82F6';
       case 'accepted': return '#059669';
       case 'rejected': return '#EF4444';
       case 'expired': return '#6B7280';
@@ -177,9 +204,8 @@ export function SellerInterestDetail() {
 
   const getAvailableStatuses = (currentStatus: string) => {
     const statusFlow = {
-      'pending': ['confirmed', 'negotiating', 'rejected'],
-      'confirmed': ['accepted', 'rejected'],
-      'negotiating': ['accepted', 'rejected'],
+      'pending': ['confirmed', 'rejected', 'cancelled'],
+      'confirmed': ['accepted', 'rejected', 'cancelled'],
       'accepted': [],
       'rejected': [],
       'expired': [],
@@ -222,9 +248,17 @@ export function SellerInterestDetail() {
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
           <Text style={styles.errorText}>{error || 'Interest not found'}</Text>
-          <TouchableOpacity onPress={loadInterestDetails} style={styles.retryButton}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
+          <Text style={styles.errorSubtext}>
+            The interest you're looking for may have been deleted or is no longer available.
+          </Text>
+          <View style={styles.errorActions}>
+            <TouchableOpacity onPress={loadInterestDetails} style={styles.retryButton}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backToInterestsButton}>
+              <Text style={styles.backToInterestsButtonText}>Back to Interests</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -266,11 +300,24 @@ export function SellerInterestDetail() {
                   {availableStatuses.map((status) => (
                     <TouchableOpacity
                       key={status}
-                      style={styles.statusButton}
+                      style={[
+                        styles.statusButton,
+                        status === 'confirmed' && styles.confirmButton,
+                        status === 'rejected' && styles.rejectButton,
+                        status === 'cancelled' && styles.cancelButton,
+                      ]}
                       onPress={() => updateInterestStatus(status)}
                     >
-                      <Text style={styles.statusButtonText}>
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      <Text style={[
+                        styles.statusButtonText,
+                        status === 'confirmed' && styles.confirmButtonText,
+                        status === 'rejected' && styles.rejectButtonText,
+                        status === 'cancelled' && styles.cancelButtonText,
+                      ]}>
+                        {status === 'confirmed' ? 'Confirm' : 
+                         status === 'rejected' ? 'Reject' : 
+                         status === 'cancelled' ? 'Cancel' : 
+                         status.charAt(0).toUpperCase() + status.slice(1)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -439,15 +486,41 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     textAlign: 'center',
   },
+  errorSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  errorActions: {
+    marginTop: 24,
+    flexDirection: 'row',
+    gap: 12,
+  },
   retryButton: {
-    marginTop: 16,
+    flex: 1,
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: '#2563EB',
     borderRadius: 8,
+    alignItems: 'center',
   },
   retryButtonText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backToInterestsButton: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  backToInterestsButtonText: {
+    color: '#374151',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -520,6 +593,24 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  confirmButton: {
+    backgroundColor: '#10B981',
+  },
+  confirmButtonText: {
+    color: '#FFFFFF',
+  },
+  rejectButton: {
+    backgroundColor: '#EF4444',
+  },
+  rejectButtonText: {
+    color: '#FFFFFF',
+  },
+  cancelButton: {
+    backgroundColor: '#6B7280',
+  },
+  cancelButtonText: {
+    color: '#FFFFFF',
   },
   customerInfo: {
     gap: 4,

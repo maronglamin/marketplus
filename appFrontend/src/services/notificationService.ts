@@ -195,6 +195,31 @@ class NotificationService {
   async requestPermissions(): Promise<Notifications.NotificationPermissionsStatus> {
     return await Notifications.requestPermissionsAsync();
   }
+
+  /**
+   * Handle ride token notification and show floating notification
+   */
+  handleRideTokenNotification(notification: Notifications.Notification): void {
+    const data = notification.request.content.data;
+    
+    if (data?.type === 'ride_token') {
+      // Import the token notification context and show the notification
+      // This will be handled by the App component
+      console.log('Ride token notification received:', data);
+      
+      // Dispatch a custom event that the App component can listen to
+      const event = new CustomEvent('rideTokenNotification', {
+        detail: {
+          token: data.token,
+          rideId: data.rideId,
+          driverName: data.driverName,
+        }
+      });
+      
+      // For React Native, we'll use a different approach
+      // The App component will handle this through the notification listener
+    }
+  }
 }
 
 export const notificationService = NotificationService.getInstance(); 

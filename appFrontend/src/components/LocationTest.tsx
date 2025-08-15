@@ -7,7 +7,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import * as Location from 'expo-location';
+// Location functionality removed - using WebView approach instead
 
 export function LocationTest() {
   const [locationData, setLocationData] = useState<any>(null);
@@ -18,48 +18,39 @@ export function LocationTest() {
       setLoading(true);
       console.log('🧪 Starting location test...');
 
-      // Check permission
-      const { status: existingStatus } = await Location.getForegroundPermissionsAsync();
-      console.log('📋 Existing permission status:', existingStatus);
+      // Simulate location test
+      setTimeout(() => {
+        const mockResult = {
+          coords: {
+            latitude: 13.4432 + (Math.random() - 0.5) * 0.01,
+            longitude: -16.5919 + (Math.random() - 0.5) * 0.01,
+            accuracy: 10,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            speed: null,
+          },
+          address: [
+            {
+              street: 'Mock Street',
+              city: 'Banjul',
+              region: 'Gambia',
+              country: 'Gambia',
+              postalCode: '0000',
+              name: 'Mock Location',
+            }
+          ],
+          timestamp: Date.now(),
+        };
 
-      if (existingStatus !== 'granted') {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        console.log('📋 New permission status:', status);
-        
-        if (status !== 'granted') {
-          Alert.alert('Permission denied', 'Location permission is required');
-          return;
-        }
-      }
-
-      // Get current position
-      console.log('📍 Requesting current position...');
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      console.log('📍 Location obtained:', location);
-
-      // Get address
-      console.log('🏠 Requesting address...');
-      const addressResponse = await Location.reverseGeocodeAsync({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      });
-      console.log('🏠 Address response:', addressResponse);
-
-      const result = {
-        coords: location.coords,
-        address: addressResponse,
-        timestamp: location.timestamp,
-      };
-
-      setLocationData(result);
-      console.log('✅ Location test completed:', result);
+        setLocationData(mockResult);
+        console.log('✅ Mock location test completed:', mockResult);
+        setLoading(false);
+      }, 2000);
 
     } catch (error) {
       console.error('❌ Location test error:', error);
       Alert.alert('Error', `Location test failed: ${error}`);
-    } finally {
       setLoading(false);
     }
   };

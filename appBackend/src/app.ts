@@ -9,7 +9,10 @@ import os from 'os';
 import routes from './routes';
 import morgan from 'morgan';
 import uploadRouter from './routes/upload';
+import riderUploadRouter from './routes/riderUpload';
+import driverRouter from './routes/driver';
 import path from 'path';
+import { RideRequestService } from './services/rideRequestService';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -18,6 +21,7 @@ import productRoutes from './routes/products';
 import orderRoutes from './routes/orders';
 import paymentMethodRoutes from './routes/paymentMethods';
 import settlementRoutes from './routes/settlements';
+import rideRequestRoutes from './routes/rideRequest';
 
 const app = express();
 
@@ -102,6 +106,9 @@ app.use('/api/products', productRoutes);
 app.use('/api/payment-methods', paymentMethodRoutes);
 app.use('/api/settlements', settlementRoutes);
 app.use('/api/upload', uploadRouter);
+app.use('/api/rider-upload', riderUploadRouter);
+app.use('/api/ride-requests', rideRequestRoutes);
+app.use('/api/driver', driverRouter);
 
 // Health check endpoint under /api
 app.get('/api/health', (req, res) => {
@@ -115,5 +122,21 @@ app.get('/api/health', (req, res) => {
 
 // Error handling
 app.use(errorHandler);
+
+// Scheduled cleanup job for expired ride requests
+const cleanupExpiredRequests = async () => {
+  try {
+    await RideRequestService.cleanupExpiredRequests();
+    logger.info('✅ Cleaned up expired ride requests');
+  } catch (error) {
+    logger.error('❌ Error cleaning up expired ride requests:', error);
+  }
+};
+
+// Run cleanup every minute
+setInterval(cleanupExpiredRequests, 60 * 1000);
+
+// Run initial cleanup on startup
+cleanupExpiredRequests();
 
 export default app; 

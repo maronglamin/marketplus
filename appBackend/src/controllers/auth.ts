@@ -5,6 +5,7 @@ import { createOTP, verifyOTP } from '../utils/otp';
 import { generateToken } from '../utils/jwt';
 import { sendOTP, sendPIN } from '../services/sms';
 import twilio from 'twilio';
+import { driverService } from '../services/driverService';
 
 const prisma = new PrismaClient();
 
@@ -459,6 +460,16 @@ export const logout = async (req: AuthRequest, res: Response) => {
 
     if (!session) {
       return res.status(401).json({ message: 'Invalid session' });
+    }
+
+    // Set driver status to offline before logout
+    try {
+      console.log('🔄 Setting driver status to offline before logout...');
+      await driverService.updateDriverStatus(session.userId, false);
+      console.log('✅ Driver status set to offline successfully');
+    } catch (error) {
+      console.error('⚠️ Error setting driver status to offline:', error);
+      // Continue with logout even if driver status update fails
     }
 
     // Delete the session

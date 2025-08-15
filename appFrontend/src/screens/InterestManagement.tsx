@@ -26,7 +26,7 @@ import Constants from 'expo-constants';
 import { getImageUrl } from '../config/env';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.137.177';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.199';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type InterestManagementNavigationProp = NativeStackNavigationProp<AppStackParamList, 'InterestManagement'>;
@@ -141,37 +141,7 @@ export function InterestManagement() {
     }
   };
 
-  const handleTabPress = (tab: string) => {
-    switch (tab) {
-      case 'home':
-        navigation.navigate('Home');
-        break;
-      case 'orders':
-        navigation.navigate('CustomerOrders');
-        break;
-      case 'interests':
-        // Already on interests
-        break;
-      case 'account':
-        navigation.navigate('SellerDashboard');
-        break;
-    }
-  };
 
-  const isActiveTab = (tab: string) => {
-    switch (tab) {
-      case 'home':
-        return route.name === 'Home';
-      case 'orders':
-        return route.name === 'CustomerOrders';
-      case 'interests':
-        return route.name === 'InterestManagement';
-      case 'account':
-        return route.name === 'SellerDashboard';
-      default:
-        return false;
-    }
-  };
 
   const handleViewProduct = (productId: string) => {
     navigation.navigate('ProductDetail', { productId });
@@ -453,11 +423,13 @@ export function InterestManagement() {
               <View key={group} style={styles.dateGroup}>
                 <Text style={styles.dateGroupTitle}>{group}</Text>
                 {groupInterests.map((interest) => (
-                  <View key={interest.id} style={styles.interestCard}>
-                    <TouchableOpacity
-                      style={styles.productInfo}
-                      onPress={() => handleViewProduct(interest.productId)}
-                    >
+                  <TouchableOpacity
+                    key={interest.id}
+                    style={styles.interestCard}
+                    onPress={() => handleViewInterestDetails(interest.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.productInfo}>
                       <Image
                         source={{ 
                           uri: interest.product.image 
@@ -482,29 +454,29 @@ export function InterestManagement() {
                           </Text>
                         )}
                       </View>
-                    </TouchableOpacity>
+                    </View>
 
                     <View style={styles.interestInfo}>
                       <View style={styles.interestDetails}>
                         <Text style={styles.date}>{formatDate(interest.createdAt)}</Text>
                       </View>
                       <View style={styles.interestActions}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: `${getStatusColor(interest.status)}20` },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      { color: getStatusColor(interest.status) },
-                    ]}
-                  >
-                    {interest.status.charAt(0).toUpperCase() + interest.status.slice(1)}
-                  </Text>
-                </View>
-                  <TouchableOpacity
+                        <View
+                          style={[
+                            styles.statusBadge,
+                            { backgroundColor: `${getStatusColor(interest.status)}20` },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.statusText,
+                              { color: getStatusColor(interest.status) },
+                            ]}
+                          >
+                            {interest.status.charAt(0).toUpperCase() + interest.status.slice(1)}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
                           style={[
                             styles.conversationButton,
                             {
@@ -520,7 +492,7 @@ export function InterestManagement() {
                                 '#E5E7EB'
                             }
                           ]}
-                    onPress={() => {
+                          onPress={() => {
                             handleViewInterestDetails(interest.id);
                           }}
                         >
@@ -539,25 +511,25 @@ export function InterestManagement() {
                               '#6B7280'
                             } 
                           />
-                  </TouchableOpacity>
+                        </TouchableOpacity>
                       </View>
                     </View>
 
                     {activeTab === 'my-interests' && interest.status === 'pending' && (
                       <View style={styles.actions}>
-                  <TouchableOpacity
+                        <TouchableOpacity
                           style={[styles.actionButton, styles.messageButton]}
-                    onPress={() => {
+                          onPress={() => {
                             handleViewInterestDetails(interest.id);
-                    }}
-                  >
+                          }}
+                        >
                           <Ionicons name="chatbubble-outline" size={16} color="#2563EB" />
                           <Text style={styles.messageButtonText}>Message Seller</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          ))}
+                ))}
               </View>
             ))
           )}
@@ -587,90 +559,7 @@ export function InterestManagement() {
           onClose={() => setShowDatePicker(false)}
         />
 
-        {/* Bottom Navigation */}
-        <SafeAreaView edges={['bottom']} style={styles.bottomNavContainer}>
-          <View style={styles.bottomNav}>
-            <TouchableOpacity
-              style={[styles.navItem, isActiveTab('home') && styles.activeNavItem]}
-              onPress={() => handleTabPress('home')}
-            >
-              <Ionicons
-                name={isActiveTab('home') ? 'home' : 'home-outline'}
-                size={24}
-                color={isActiveTab('home') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('home') && styles.activeNavText,
-                ]}
-              >
-                Home
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navItem, isActiveTab('orders') && styles.activeNavItem]}
-              onPress={() => handleTabPress('orders')}
-            >
-              <Ionicons
-                name={isActiveTab('orders') ? 'bag' : 'bag-outline'}
-                size={24}
-                color={isActiveTab('orders') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('orders') && styles.activeNavText,
-                ]}
-              >
-                Orders
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.navItem,
-                isActiveTab('interests') && styles.activeNavItem,
-              ]}
-              onPress={() => handleTabPress('interests')}
-            >
-              <Ionicons
-                name={
-                  isActiveTab('interests')
-                    ? 'heart'
-                    : 'heart-outline'
-                }
-                size={24}
-                color={isActiveTab('interests') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('interests') && styles.activeNavText,
-                ]}
-              >
-                Interests
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navItem, isActiveTab('account') && styles.activeNavItem]}
-              onPress={() => handleTabPress('account')}
-            >
-              <Ionicons
-                name={isActiveTab('account') ? 'person' : 'person-outline'}
-                size={24}
-                color={isActiveTab('account') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('account') && styles.activeNavText,
-                ]}
-              >
-                Seller
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+
       </View>
     </SafeAreaView>
   );
@@ -878,30 +767,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingVertical: 0,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 5,
-  },
-  activeNavItem: {
-    // Active state styling
-  },
-  navText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  activeNavText: {
-    color: '#2563EB',
-    fontWeight: '500',
-  },
+
   loadingMoreContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -973,7 +839,5 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 4,
   },
-  bottomNavContainer: {
-    backgroundColor: '#FFFFFF',
-  },
+
 }); 

@@ -18,32 +18,42 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'com.snap.app'
+    bundleIdentifier: 'com.snap.app',
+    config: {
+      googleMapsApiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo'
+    }
   },
   android: {
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#ffffff'
     },
-    package: 'com.snap.app'
+    package: 'com.snap.app',
+    config: {
+      googleMaps: {
+        apiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo'
+      }
+    }
   },
   web: {
     favicon: './assets/favicon.png'
   },
   extra: {
-    localIp: '192.168.137.177',
+    localIp: '192.168.0.199',
     stripePublishableKey: 'pk_test_51G7XqgIFQtDBTvihaeU6FZCsQuHg1NQIkdd8CTGL0ZulPMIjQZUmFSW80gOzDpGe5UezYoqkc55WmQhpyYtZdLmk00QmAVRon0',
+    googlePlacesApiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo',
     eas: {
       projectId: '04ad20e1-cff1-4422-a7b3-bdb123420968'
     }
   },
   plugins: [
+    "expo-router",
     "expo-localization",
     [
       "@stripe/stripe-react-native",
       {
         enableGooglePay: true,
       },
-    ],
+    ]
   ]
 }); 

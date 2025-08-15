@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Ionicons } from '@expo/vector-icons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useAuth } from '../contexts/AuthContext'
 
 type MenuItem = {
   title: string
@@ -44,6 +45,7 @@ type AccountSettingsNavigationProp = NativeStackNavigationProp<RootStackParamLis
 
 export function AccountSettings() {
   const navigation = useNavigation<AccountSettingsNavigationProp>()
+  const { logout } = useAuth()
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true)
   const [darkModeEnabled, setDarkModeEnabled] = React.useState(false)
 
@@ -61,8 +63,8 @@ export function AccountSettings() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Clear all stored data
-              await AsyncStorage.clear()
+              // Use AuthContext logout which handles driver status
+              await logout()
               // Navigate to login page
               navigation.reset({
                 index: 0,

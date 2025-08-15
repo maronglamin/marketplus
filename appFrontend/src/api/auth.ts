@@ -554,4 +554,15 @@ export const clearAllData = async (): Promise<void> => {
     console.error('Error clearing local data:', error);
     throw new Error('Failed to clear local data');
   }
+};
+
+// Get auth token for WebSocket authentication
+export const getAuthToken = async (): Promise<string | null> => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    return token;
+  } catch (error) {
+    console.error('❌ Error getting auth token:', error);
+    return null;
+  }
 }; 

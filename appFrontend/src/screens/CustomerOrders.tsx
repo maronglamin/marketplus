@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -25,10 +26,116 @@ import { kycService } from '../services/kycService';
 import Constants from 'expo-constants';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.137.177';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.199';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type CustomerOrdersNavigationProp = NativeStackNavigationProp<AppStackParamList, 'CustomerOrders'>;
+
+// Rate limiting configuration
+const RATE_LIMIT_CONFIG = {
+  maxRequests: 10, // Maximum requests per window
+  windowMs: 60000, // 1 minute window
+  retryDelay: 1000, // Base delay for retries (1 second)
+  maxRetries: 3, // Maximum number of retries
+  backoffMultiplier: 2, // Exponential backoff multiplier
+};
+
+// Request queue and rate limiting state
+interface RequestQueueItem {
+  id: string;
+  execute: () => Promise<any>;
+  resolve: (value: any) => void;
+  reject: (error: any) => void;
+  retryCount: number;
+  timestamp: number;
+}
+
+class RateLimiter {
+  private requestQueue: RequestQueueItem[] = [];
+  private requestHistory: number[] = [];
+  private isProcessing = false;
+  private currentRetryDelay = RATE_LIMIT_CONFIG.retryDelay;
+
+  private cleanupOldRequests() {
+    const now = Date.now();
+    this.requestHistory = this.requestHistory.filter(
+      timestamp => now - timestamp < RATE_LIMIT_CONFIG.windowMs
+    );
+  }
+
+  private canMakeRequest(): boolean {
+    this.cleanupOldRequests();
+    return this.requestHistory.length < RATE_LIMIT_CONFIG.maxRequests;
+  }
+
+  private addRequestToHistory() {
+    this.requestHistory.push(Date.now());
+  }
+
+  private async processQueue() {
+    if (this.isProcessing || this.requestQueue.length === 0) return;
+
+    this.isProcessing = true;
+
+    while (this.requestQueue.length > 0) {
+      if (!this.canMakeRequest()) {
+        // Wait before processing next request
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+
+      const request = this.requestQueue.shift();
+      if (!request) continue;
+
+      try {
+        this.addRequestToHistory();
+        const result = await request.execute();
+        request.resolve(result);
+      } catch (error: any) {
+        if (error.response?.status === 429 && request.retryCount < RATE_LIMIT_CONFIG.maxRetries) {
+          // Rate limited - retry with exponential backoff
+          request.retryCount++;
+          const delay = this.currentRetryDelay * Math.pow(RATE_LIMIT_CONFIG.backoffMultiplier, request.retryCount - 1);
+          
+          console.log(`Rate limited. Retrying request ${request.id} in ${delay}ms (attempt ${request.retryCount})`);
+          
+          setTimeout(() => {
+            this.requestQueue.unshift(request);
+          }, delay);
+        } else {
+          request.reject(error);
+        }
+      }
+    }
+
+    this.isProcessing = false;
+  }
+
+  async executeRequest<T>(executeFn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const requestId = Math.random().toString(36).substr(2, 9);
+      const queueItem: RequestQueueItem = {
+        id: requestId,
+        execute: executeFn,
+        resolve,
+        reject,
+        retryCount: 0,
+        timestamp: Date.now(),
+      };
+
+      this.requestQueue.push(queueItem);
+      this.processQueue();
+    });
+  }
+
+  clearQueue() {
+    this.requestQueue = [];
+    this.requestHistory = [];
+  }
+}
+
+// Global rate limiter instance
+const rateLimiter = new RateLimiter();
 
 export function CustomerOrders() {
   const navigation = useNavigation<CustomerOrdersNavigationProp>();
@@ -48,11 +155,31 @@ export function CustomerOrders() {
     endDate: new Date(),
   });
   const [exporting, setExporting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   
   // Tab switching state
   const [activeTab, setActiveTab] = useState<'my-orders' | 'customer-orders'>('my-orders');
   const [hasKyc, setHasKyc] = useState(false);
   const [kycLoading, setKycLoading] = useState(true);
+
+  // Refs for optimization
+  const scrollViewRef = useRef<ScrollView>(null);
+  const lastScrollY = useRef(0);
+  const scrollThrottleTimeout = useRef<number | null>(null);
+  const loadMoreTimeout = useRef<number | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollThrottleTimeout.current) {
+        clearTimeout(scrollThrottleTimeout.current);
+      }
+      if (loadMoreTimeout.current) {
+        clearTimeout(loadMoreTimeout.current);
+      }
+      rateLimiter.clearQueue();
+    };
+  }, []);
 
   useEffect(() => {
     checkKycStatus();
@@ -64,10 +191,10 @@ export function CustomerOrders() {
     }
   }, [activeTab, kycLoading]);
 
-  const checkKycStatus = async () => {
+  const checkKycStatus = useCallback(async () => {
     try {
       setKycLoading(true);
-      await kycService.getKycStatus();
+      await rateLimiter.executeRequest(() => kycService.getKycStatus());
       setHasKyc(true);
     } catch (error: any) {
       if (error.response?.status === 404) {
@@ -79,9 +206,9 @@ export function CustomerOrders() {
     } finally {
       setKycLoading(false);
     }
-  };
+  }, []);
 
-  const loadOrders = async (isLoadMore: boolean = false) => {
+  const loadOrders = useCallback(async (isLoadMore: boolean = false) => {
     try {
       if (isLoadMore) {
         setLoadingMore(true);
@@ -96,9 +223,13 @@ export function CustomerOrders() {
       
       let response;
       if (activeTab === 'my-orders') {
-        response = await orderService.getMyOrders(currentPage, 6);
+        response = await rateLimiter.executeRequest(() => 
+          orderService.getMyOrders(currentPage, 6)
+        );
       } else {
-        response = await orderService.getCustomerOrders(currentPage, 6);
+        response = await rateLimiter.executeRequest(() => 
+          orderService.getCustomerOrders(currentPage, 6)
+        );
       }
       
       if (isLoadMore) {
@@ -112,65 +243,54 @@ export function CustomerOrders() {
       }
     } catch (error: any) {
       console.error('Error loading orders:', error);
-      setError('Failed to load orders');
-      if (!isLoadMore) {
-        Alert.alert('Error', 'Failed to load orders. Please try again.');
+      
+      if (error.response?.status === 429) {
+        setError('Too many requests. Please wait a moment and try again.');
+      } else {
+        setError('Failed to load orders');
+        if (!isLoadMore) {
+          Alert.alert('Error', 'Failed to load orders. Please try again.');
+        }
       }
     } finally {
       setLoading(false);
       setLoadingMore(false);
       setIsInitialLoad(false);
     }
-  };
+  }, [activeTab, page]);
 
-  const handleLoadMore = () => {
-    if (!loadingMore && hasMore) {
-      loadOrders(true);
+  const handleLoadMore = useCallback(() => {
+    if (!loadingMore && hasMore && !loadMoreTimeout.current) {
+      loadMoreTimeout.current = setTimeout(() => {
+        loadOrders(true);
+        loadMoreTimeout.current = null;
+      }, 500); // Debounce load more requests
     }
-  };
+  }, [loadingMore, hasMore, loadOrders]);
 
-  const handleScroll = (event: any) => {
+  const handleScroll = useCallback((event: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const paddingToBottom = 20;
-    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= 
-      contentSize.height - paddingToBottom;
+    const currentScrollY = contentOffset.y;
     
-    if (isCloseToBottom && !loadingMore && hasMore) {
-      handleLoadMore();
+    // Throttle scroll events
+    if (scrollThrottleTimeout.current) {
+      clearTimeout(scrollThrottleTimeout.current);
     }
-  };
+    
+    scrollThrottleTimeout.current = setTimeout(() => {
+      const paddingToBottom = 20;
+      const isCloseToBottom = layoutMeasurement.height + currentScrollY >= 
+        contentSize.height - paddingToBottom;
+      
+      if (isCloseToBottom && !loadingMore && hasMore) {
+        handleLoadMore();
+      }
+      
+      lastScrollY.current = currentScrollY;
+    }, 100); // Throttle to 100ms
+  }, [loadingMore, hasMore, handleLoadMore]);
 
-  const handleTabPress = (tab: string) => {
-    switch (tab) {
-      case 'home':
-        navigation.navigate('Home');
-        break;
-      case 'orders':
-        // Already on orders
-        break;
-      case 'interests':
-        navigation.navigate('InterestManagement');
-        break;
-      case 'account':
-        navigation.navigate('SellerDashboard');
-        break;
-    }
-  };
 
-  const isActiveTab = (tab: string) => {
-    switch (tab) {
-      case 'home':
-        return route.name === 'Home';
-      case 'orders':
-        return route.name === 'CustomerOrders';
-      case 'interests':
-        return route.name === 'InterestManagement';
-      case 'account':
-        return route.name === 'SellerDashboard';
-      default:
-        return false;
-    }
-  };
 
   const handleViewProduct = (productId: string) => {
     navigation.navigate('ProductDetail', { productId });
@@ -279,7 +399,7 @@ export function CustomerOrders() {
     return groups;
   };
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = useCallback(async () => {
     try {
       setExporting(true);
       
@@ -294,7 +414,7 @@ export function CustomerOrders() {
         return;
       }
 
-      await generateAndSharePDF({
+      await rateLimiter.executeRequest(() => generateAndSharePDF({
         type: 'orders',
         data: filteredOrders,
         dateRange: {
@@ -306,20 +426,33 @@ export function CustomerOrders() {
           lastName: user?.lastName || '',
           email: user?.email,
         },
-      });
+      }));
 
       Alert.alert('Success', 'PDF exported successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Export error:', error);
-      Alert.alert('Export Failed', 'Failed to generate PDF. Please try again.');
+      if (error.response?.status === 429) {
+        Alert.alert('Export Failed', 'Too many requests. Please wait a moment and try again.');
+      } else {
+        Alert.alert('Export Failed', 'Failed to generate PDF. Please try again.');
+      }
     } finally {
       setExporting(false);
     }
-  };
+  }, [orders, exportDateRange, user]);
 
   const handleDateRangeChange = (startDate: Date, endDate: Date) => {
     setExportDateRange({ startDate, endDate });
   };
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadOrders();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadOrders]);
 
   if (loading || kycLoading) {
     return (
@@ -385,10 +518,15 @@ export function CustomerOrders() {
               )}
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => loadOrders()}
+              onPress={handleRefresh}
               style={styles.refreshButton}
+              disabled={refreshing}
             >
-              <Ionicons name="refresh" size={24} color="#2563EB" />
+              {refreshing ? (
+                <ActivityIndicator size="small" color="#2563EB" />
+              ) : (
+                <Ionicons name="refresh" size={24} color="#2563EB" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -432,7 +570,20 @@ export function CustomerOrders() {
           </Text>
         </View>
 
-        <ScrollView style={styles.content} onScroll={handleScroll} scrollEventThrottle={16}>
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.content} 
+          onScroll={handleScroll} 
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#2563EB']}
+              tintColor="#2563EB"
+            />
+          }
+        >
           {error ? (
             <View style={styles.errorContainer}>
               <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
@@ -597,90 +748,7 @@ export function CustomerOrders() {
           )}
         </ScrollView>
 
-        {/* Bottom Navigation */}
-        <SafeAreaView edges={['bottom']} style={styles.bottomNavContainer}>
-          <View style={styles.bottomNav}>
-            <TouchableOpacity
-              style={[styles.navItem, isActiveTab('home') && styles.activeNavItem]}
-              onPress={() => handleTabPress('home')}
-            >
-              <Ionicons
-                name={isActiveTab('home') ? 'home' : 'home-outline'}
-                size={24}
-                color={isActiveTab('home') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('home') && styles.activeNavText,
-                ]}
-              >
-                Home
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navItem, isActiveTab('orders') && styles.activeNavItem]}
-              onPress={() => handleTabPress('orders')}
-            >
-              <Ionicons
-                name={isActiveTab('orders') ? 'bag' : 'bag-outline'}
-                size={24}
-                color={isActiveTab('orders') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('orders') && styles.activeNavText,
-                ]}
-              >
-                Orders
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.navItem,
-                isActiveTab('interestmanagement') && styles.activeNavItem,
-              ]}
-              onPress={() => handleTabPress('interests')}
-            >
-              <Ionicons
-                name={
-                  isActiveTab('interestmanagement')
-                    ? 'heart'
-                    : 'heart-outline'
-                }
-                size={24}
-                color={isActiveTab('interestmanagement') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('interestmanagement') && styles.activeNavText,
-                ]}
-              >
-                Interests
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.navItem, isActiveTab('sellerdashboard') && styles.activeNavItem]}
-              onPress={() => handleTabPress('account')}
-            >
-              <Ionicons
-                name={isActiveTab('sellerdashboard') ? 'person' : 'person-outline'}
-                size={24}
-                color={isActiveTab('sellerdashboard') ? '#2563EB' : '#6B7280'}
-              />
-              <Text
-                style={[
-                  styles.navText,
-                  isActiveTab('sellerdashboard') && styles.activeNavText,
-                ]}
-              >
-                Seller
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+
 
         {/* Date Range Picker Modal */}
         <DateRangePicker
@@ -911,30 +979,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingVertical: 0,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 5,
-  },
-  activeNavItem: {
-    // Active state styling
-  },
-  navText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  activeNavText: {
-    color: '#2563EB',
-    fontWeight: '500',
-  },
   loadingMoreContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1040,7 +1084,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  bottomNavContainer: {
-    backgroundColor: '#FFFFFF',
-  },
+
 }); 

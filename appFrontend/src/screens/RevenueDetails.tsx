@@ -112,7 +112,7 @@ export function RevenueDetails() {
         <ScrollView style={styles.content}>
           <TouchableOpacity 
             style={styles.summaryCard}
-            onPress={() => navigation.navigate('SettlementRequest')}
+            onPress={() => navigation.navigate('SettlementHistory')}
           >
             <Text style={styles.summaryTitle}>Revenue Breakdown</Text>
             <Text style={styles.summarySubtitle}>

@@ -4,7 +4,7 @@ import { Home } from '../screens/Home';
 import { Settings } from '../screens/Settings';
 import { Notifications } from '../screens/Notifications';
 import { AccountSettings } from '../screens/AccountSettings';
-import { ProductDetail } from '../screens/ProductDetail';
+import { ProductDetail } from '../screens/products/buyer/ProductDetail';
 import { SellerDashboard } from '../screens/SellerDashboard';
 import { AddProduct } from '../screens/add-product';
 import { InterestManagement } from '../screens/InterestManagement';
@@ -16,7 +16,7 @@ import { SellerKycAddress } from '../screens/SellerKycAddress';
 import { SellerKycVerification } from '../screens/SellerKycVerification';
 import { SellerKycConfirmation } from '../screens/SellerKycConfirmation';
 import { SellerKycResponse } from '../services/kycService';
-import { ProductListing } from '../screens/ProductListing';
+import { ProductListing } from '../screens/products/buyer/ProductListing';
 import { SellerProductDetail } from '../screens/SellerProductDetail';
 import { UpdateStock } from '../screens/UpdateStock';
 import { DeliveryOptions } from '../screens/DeliveryOptions';
@@ -26,20 +26,33 @@ import { TransactionDetail } from '../screens/transactions/TransactionDetail';
 import { SettlementRequest } from '../screens/transactions/SettlementRequest';
 import { SettlementHistory } from '../screens/transactions/SettlementHistory';
 import { SettlementDetail } from '../screens/transactions/SettlementDetail';
+import { RideSettlementRequest } from '../screens/transactions/RideSettlementRequest';
 import { CustomerOrders } from '../screens/CustomerOrders';
 import { OrderDetails } from '../screens/OrderDetails';
 import { SellerInterestDetail } from '../screens/SellerInterestDetail';
 import { RideRequest } from '../screens/RideRequest';
+import { FeaturedProducts } from '../screens/products/buyer/FeaturedProducts';
+import { ChatList } from '../screens/ChatList';
+import { BecomeRider } from '../screens/riders/BecomeRider';
+import { DriverDashboard } from '../screens/DriverDashboard';
+import { DriverRequests } from '../screens/DriverRequests';
+import { DriverEarnings } from '../screens/DriverEarnings';
+import { JourneyMapView } from '../screens/JourneyMapView';
+import { CustomerRides } from '../screens/CustomerRides';
+import { CustomerRideHistory } from '../screens/CustomerRideHistory';
+import { RideTracking } from '../screens/RideTracking';
+import { TokenNotificationCard } from '../components/TokenNotificationCard';
+import { View } from 'react-native';
 
 export type AppStackParamList = {
-  Home: undefined;
+  Home: { openSearch?: boolean } | undefined;
   Settings: undefined;
   Notifications: undefined;
   AccountSettings: undefined;
   ProductDetail: { productId: string };
   SellerDashboard: undefined;
   AddProduct: { productId?: string };
-  ProductListing: undefined;
+  ProductListing: { searchQuery?: string; filteredProducts?: any[] } | undefined;
   SellerProductDetail: { productId: string };
   InterestManagement: undefined;
   CustomerOrders: undefined;
@@ -47,7 +60,26 @@ export type AppStackParamList = {
   Order: { productId: string };
   OrderDetails: { orderId: string };
   SellerInterestDetail: { interestId: string };
-  RideRequest: undefined;
+  ChatList: undefined;
+  RideRequest: {
+    showRoute?: boolean;
+    pickupLocation?: {
+      latitude: number;
+      longitude: number;
+      address: string;
+    };
+    destinationLocation?: {
+      latitude: number;
+      longitude: number;
+      address: string;
+    };
+    routeData?: {
+      distance: number;
+      duration: number;
+      price: number;
+    };
+  } | undefined;
+  FeaturedProducts: undefined;
   SellerKycForm: undefined | {
     businessData?: {
       businessName: string;
@@ -113,13 +145,67 @@ export type AppStackParamList = {
   SettlementRequest: undefined;
   SettlementHistory: undefined;
   SettlementDetail: { settlementId: string; currency: string; currencySymbol: string };
+  RideSettlementRequest: undefined;
+  BecomeRider: { 
+    type: 'driver' | 'motorcycle' | 'bicycle';
+    existingData?: any;
+  };
+  DriverDashboard: undefined;
+  DriverRequests: undefined;
+  DriverEarnings: undefined;
+  JourneyMapView: {
+    rideId: string;
+    pickupLocation: {
+      latitude: number;
+      longitude: number;
+      address: string;
+    };
+    destinationLocation: {
+      latitude: number;
+      longitude: number;
+      address: string;
+    };
+    customerName: string;
+    estimatedDuration: string;
+    estimatedDistance: string;
+    totalFare: number;
+    currencySymbol: string;
+  };
+  CustomerRides: undefined;
+  CustomerRideHistory: undefined;
+  RideTracking: {
+    rideId: string;
+    requestId: string;
+    pickupLocation: {
+      latitude: number;
+      longitude: number;
+      address: string;
+    };
+    destinationLocation: {
+      latitude: number;
+      longitude: number;
+      address: string;
+    };
+    driver?: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      rating?: number;
+      vehicleInfo?: {
+        model?: string;
+        color?: string;
+        plateNumber?: string;
+      };
+    };
+  };
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
 const AppNavigator = () => {
   return (
-    <Stack.Navigator
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator
       screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
@@ -128,7 +214,14 @@ const AppNavigator = () => {
         gestureDirection: 'horizontal',
       }}
     >
-      <Stack.Screen name="Home" component={Home} />
+      <Stack.Screen 
+        name="Home" 
+        component={Home}
+        options={{
+          gestureEnabled: false, // Disable swipe back gesture
+        }}
+      />
+      <Stack.Screen name="SellerInterestDetail" component={SellerInterestDetail} />
       <Stack.Screen name="Settings" component={Settings} />
       <Stack.Screen name="Notifications" component={Notifications} />
       <Stack.Screen name="AccountSettings" component={AccountSettings} />
@@ -136,6 +229,7 @@ const AppNavigator = () => {
       <Stack.Screen name="SellerDashboard" component={SellerDashboard} />
       <Stack.Screen name="AddProduct" component={AddProduct} />
       <Stack.Screen name="ProductListing" component={ProductListing} />
+      <Stack.Screen name="FeaturedProducts" component={FeaturedProducts} />
       <Stack.Screen name="SellerProductDetail" component={SellerProductDetail} />
       <Stack.Screen name="InterestManagement" component={InterestManagement} />
       <Stack.Screen name="CustomerOrders" component={CustomerOrders} />
@@ -184,10 +278,65 @@ const AppNavigator = () => {
       <Stack.Screen name="SettlementRequest" component={SettlementRequest} />
       <Stack.Screen name="SettlementHistory" component={SettlementHistory} />
       <Stack.Screen name="SettlementDetail" component={SettlementDetail} />
+      <Stack.Screen name="RideSettlementRequest" component={RideSettlementRequest} />
       <Stack.Screen name="OrderDetails" component={OrderDetails} />
-      <Stack.Screen name="SellerInterestDetail" component={SellerInterestDetail} />
-      <Stack.Screen name="RideRequest" component={RideRequest} />
-    </Stack.Navigator>
+              <Stack.Screen name="ChatList" component={ChatList} />
+        <Stack.Screen name="RideRequest" component={RideRequest} />
+        <Stack.Screen name="BecomeRider" component={BecomeRider} />
+        <Stack.Screen 
+          name="DriverDashboard" 
+          component={DriverDashboard}
+          options={{
+            gestureEnabled: true, // Allow swipe back gesture to go to Home
+          }}
+        />
+        <Stack.Screen 
+          name="DriverRequests" 
+          component={DriverRequests}
+          options={{
+            gestureEnabled: true,
+          }}
+        />
+        <Stack.Screen 
+          name="DriverEarnings" 
+          component={DriverEarnings}
+          options={{
+            gestureEnabled: true,
+          }}
+        />
+        <Stack.Screen 
+          name="JourneyMapView" 
+          component={JourneyMapView}
+          options={{
+            gestureEnabled: true,
+          }}
+        />
+        <Stack.Screen 
+          name="CustomerRides" 
+          component={CustomerRides}
+          options={{
+            gestureEnabled: true,
+          }}
+        />
+        <Stack.Screen 
+          name="CustomerRideHistory" 
+          component={CustomerRideHistory}
+          options={{
+            gestureEnabled: true,
+          }}
+        />
+        <Stack.Screen 
+          name="RideTracking" 
+          component={RideTracking}
+          options={{
+            gestureEnabled: true,
+          }}
+        />
+      </Stack.Navigator>
+      
+      {/* Global Token Notification Card */}
+      <TokenNotificationCard />
+    </View>
   );
 };
 

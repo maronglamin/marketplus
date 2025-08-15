@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,244 +8,406 @@ import {
   Image,
   StatusBar,
   Platform,
-  ActivityIndicator,
+  TextInput,
   Alert,
+  Modal,
+  Keyboard,
+  TouchableWithoutFeedback,
+  Animated,
+  BackHandler,
   RefreshControl,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import type { AppStackParamList } from '../navigation/AppNavigator';
-import { productService, type CustomerProduct } from '../services/productService';
-import { interestService } from '../services/interestService';
 import { useAuth } from '../contexts/AuthContext';
-import Constants from 'expo-constants';
+import { RiderApplicationService, RiderApplication } from '../services/riderApplicationService';
+import { RideRequestService, RecentDestination } from '../services/rideRequestService';
+import { api } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
+import { useTokenNotification } from '../contexts/TokenNotificationContext';
 
-// Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.208.48';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+const { height: screenHeight } = Dimensions.get('window');
 
 type HomeNavigationProp = NativeStackNavigationProp<AppStackParamList, 'Home'>;
 
 export function Home() {
   const navigation = useNavigation<HomeNavigationProp>();
   const route = useRoute();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, logout } = useAuth();
+  const { checkActiveTokens } = useTokenNotification();
   
-  // Bottom sheet refs and state
-  const rideBottomSheetRef = useRef<BottomSheetModal>(null);
-  const [isRideBottomSheetOpen, setIsRideBottomSheetOpen] = useState(false);
-  const [isDriverMode, setIsDriverMode] = useState(false);
-  const [imageError, setImageError] = useState(false);
+  // Search modal state
+  const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
   
-  // Bottom sheet snap points
-  const rideSnapPoints = useMemo(() => ['90%'], []);
-  
-  console.log('Home component render - auth state:', { 
-    hasUser: !!user, 
-    userId: user?.id,
-    userFirstName: user?.firstName,
-    authLoading
-  });
-  
-  const [featuredProducts, setFeaturedProducts] = useState<CustomerProduct[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [productInterests, setProductInterests] = useState<{ [productId: string]: { exists: boolean; interestId?: string } }>({});
-  const [lastRefreshTime, setLastRefreshTime] = useState(0);
+  // Rider application state
+  const [riderApplication, setRiderApplication] = useState<RiderApplication | null>(null);
+  const [isLoadingRiderStatus, setIsLoadingRiderStatus] = useState(true);
 
-  const categories = [
-    { id: '1', name: 'Electronics', icon: '📱' },
-    { id: '2', name: 'Fashion', icon: '👕' },
-    { id: '3', name: 'Home', icon: '🏠' },
-    { id: '4', name: 'Beauty', icon: '💄' },
-    { id: '5', name: 'Sports', icon: '⚽' },
-    { id: '6', name: 'Groceries', icon: '🛒' },
-  ];
+  // Recent destinations state
+  const [recentDestinations, setRecentDestinations] = useState<RecentDestination[]>([]);
+  const [isLoadingDestinations, setIsLoadingDestinations] = useState(true);
 
-  const popularSellers = [
-    {
-      id: '1',
-      name: 'TechGadgets',
-      rating: 4.8,
-      products: 42,
-      image: 'https://images.unsplash.com/photo-1560250097-0b93528c311a',
-    },
-    {
-      id: '2',
-      name: 'LeatherCrafts',
-      rating: 4.5,
-      products: 28,
-      image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2',
-    },
-    {
-      id: '3',
-      name: 'EcoFriendly',
-      rating: 4.7,
-      products: 36,
-      image: 'https://images.unsplash.com/photo-1566492031773-4f4e44671857',
-    },
-  ];
+  const [searchText, setSearchText] = useState('');
+  const searchInputRef = useRef<TextInput>(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  // Check rider application status on component mount
   useEffect(() => {
-    console.log('Main useEffect triggered - loading featured products');
-    
-    // Test AsyncStorage directly
-    console.log('Testing AsyncStorage...');
-    AsyncStorage.getItem('token').then(token => {
-      console.log('AsyncStorage token:', token ? 'Found' : 'Not found');
-    });
-    AsyncStorage.getItem('user').then(user => {
-      console.log('AsyncStorage user:', user ? JSON.parse(user) : 'Not found');
-    });
-    
-    // Test API connection
-    console.log('Testing API connection...');
-    fetch(`${API_URL}/api/products/test`)
-      .then(response => response.json())
-      .then(data => console.log('API test response:', data))
-      .catch(error => console.error('API test error:', error));
-    
-    loadFeaturedProducts();
+    checkRiderApplicationStatus();
+    loadRecentDestinations();
+    // Check for active tokens when component mounts
+    checkActiveTokens();
   }, []);
 
-  // Decode JWT token to get user info
-  const decodeToken = (token: string) => {
+
+
+
+
+
+  // Handle back button press to prevent navigation to login screen
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        // Show confirmation dialog when back button is pressed
+        Alert.alert(
+          'Exit App',
+          'What would you like to do?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+            {
+              text: 'Logout',
+              style: 'default',
+              onPress: async () => {
+                try {
+                  // Properly logout and destroy auth state
+                  await logout();
+                  // Navigate to login screen after logout
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Login' as any }],
+                  });
+                } catch (error) {
+                  console.error('Error during logout:', error);
+                  // Force close app if logout fails
+                  BackHandler.exitApp();
+                }
+              },
+            },
+            {
+              text: 'Exit App',
+              style: 'destructive',
+              onPress: () => {
+                // Force close the app
+                BackHandler.exitApp();
+              },
+            },
+          ],
+          { cancelable: false }
+        );
+        return true; // Prevent default back behavior
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => subscription?.remove();
+    }, [logout, navigation])
+  );
+
+  const checkRiderApplicationStatus = async () => {
     try {
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-      }).join(''));
-      return JSON.parse(jsonPayload);
-    } catch (error) {
-      console.error('Error decoding token:', error);
-      return null;
-    }
-  };
-
-  // Manual interest checking with user data
-  const checkProductInterestsWithUser = async (userData: any) => {
-    try {
-      console.log('Checking product interests for user:', userData.id);
-      console.log('Products to check:', featuredProducts.length);
+      setIsLoadingRiderStatus(true);
+      const result = await RiderApplicationService.checkExistingApplication();
       
-      const interestPromises = featuredProducts.map(async (product) => {
-        try {
-          console.log(`Checking interest for product ${product.id}...`);
-          const result = await interestService.checkInterest(product.id);
-          console.log(`Interest result for product ${product.id}:`, result);
-          return {
-            productId: product.id,
-            exists: result.exists,
-            interestId: result.interest?.id
-          };
-        } catch (error) {
-          console.error(`Error checking interest for product ${product.id}:`, error);
-          return {
-            productId: product.id,
-            exists: false
-          };
-        }
-      });
-
-      const results = await Promise.all(interestPromises);
-      const interestsMap: { [productId: string]: { exists: boolean; interestId?: string } } = {};
-      
-      results.forEach(result => {
-        interestsMap[result.productId] = {
-          exists: result.exists,
-          interestId: result.interestId
-        };
-      });
-
-      console.log('Final interests map:', interestsMap);
-      setProductInterests(interestsMap);
-    } catch (error) {
-      console.error('Error checking product interests:', error);
-    }
-  };
-
-  const loadFeaturedProducts = async (isLoadMore: boolean = false) => {
-    // Simple rate limiting - prevent refreshing more than once every 3 seconds
-    const now = Date.now();
-    if (!isLoadMore && now - lastRefreshTime < 3000) {
-      console.log('Skipping refresh - too soon since last refresh');
-      return;
-    }
-    
-    try {
-      console.log('loadFeaturedProducts called:', { isLoadMore, page });
-      
-      if (isLoadMore) {
-        setLoadingMore(true);
+      if (result.success && result.data?.hasExisting && result.data.application) {
+        setRiderApplication(result.data.application);
       } else {
-        setLoading(true);
-        setPage(1);
-        setHasMore(true);
-        setLastRefreshTime(now);
-      }
-      setError(null);
-      
-      const currentPage = isLoadMore ? page + 1 : 1;
-      console.log('Making API call to getFeaturedProducts:', { currentPage, limit: 6 });
-      
-      const products = await productService.getFeaturedProducts(6, currentPage);
-      
-      console.log('Featured products response:', { 
-        count: products.products.length, 
-        hasMore: products.hasMore,
-        total: products.total 
-      });
-      
-      if (isLoadMore) {
-        setFeaturedProducts(prev => [...prev, ...products.products]);
-        setPage(currentPage);
-        setHasMore(products.hasMore);
-      } else {
-        setFeaturedProducts(products.products);
-        setPage(1);
-        setHasMore(products.hasMore);
+        setRiderApplication(null);
       }
     } catch (error) {
-      console.error('Error loading featured products:', error);
-      setError('Failed to load featured products');
-      if (!isLoadMore) {
-        Alert.alert('Error', 'Failed to load featured products. Please try again.');
-      }
+      console.error('Error checking rider application status:', error);
+      setRiderApplication(null);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setIsInitialLoad(false);
+      setIsLoadingRiderStatus(false);
     }
   };
 
-  const handleLoadMore = () => {
-    if (!loadingMore && hasMore) {
-      loadFeaturedProducts(true);
+  const loadRecentDestinations = async () => {
+    try {
+      setIsLoadingDestinations(true);
+      const destinations = await RideRequestService.getRecentDestinations(3);
+      setRecentDestinations(destinations);
+    } catch (error) {
+      console.error('Error loading recent destinations:', error);
+      setRecentDestinations([]);
+    } finally {
+      setIsLoadingDestinations(false);
     }
   };
 
-  const handleScroll = (event: any) => {
-    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
-    const paddingToBottom = 20;
-    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= 
-      contentSize.height - paddingToBottom;
+  // Get status-specific content
+  const getRiderStatusContent = () => {
+    if (isLoadingRiderStatus) {
+      return {
+        title: 'Checking Application Status...',
+        subtitle: 'Please wait while we check your rider application',
+        icon: 'hourglass-outline',
+        iconColor: '#6B7280',
+        buttonText: 'Loading...',
+        buttonDisabled: true,
+        showBenefits: false,
+        showRiderTypes: false,
+      };
+    }
+
+    if (!riderApplication) {
+      return {
+        title: 'Become a Rider',
+        subtitle: 'Join our community of drivers and earn money on your own schedule',
+        icon: 'car-sport-outline',
+        iconColor: '#1E40AF',
+        buttonText: 'Start Earning Today',
+        buttonDisabled: false,
+        showBenefits: true,
+        showRiderTypes: true,
+      };
+    }
+
+    switch (riderApplication.status) {
+      case 'PENDING':
+        return {
+          title: 'Application Pending',
+          subtitle: 'Your rider application is being reviewed. We\'ll notify you soon!',
+          icon: 'time-outline',
+          iconColor: '#F59E0B',
+          buttonText: 'View Application',
+          buttonDisabled: false,
+          showBenefits: false,
+          showRiderTypes: false,
+          statusBadge: 'PENDING',
+          statusColor: '#F59E0B',
+        };
+      
+      case 'UNDER_REVIEW':
+        return {
+          title: 'Application Under Review',
+          subtitle: 'Our team is carefully reviewing your application. This usually takes 2-3 business days.',
+          icon: 'search-outline',
+          iconColor: '#3B82F6',
+          buttonText: 'View Application',
+          buttonDisabled: false,
+          showBenefits: false,
+          showRiderTypes: false,
+          statusBadge: 'UNDER REVIEW',
+          statusColor: '#3B82F6',
+        };
+      
+      case 'APPROVED':
+        return {
+          title: 'Welcome to Snap Driver! 🎉',
+          subtitle: 'Your application has been approved. You can now start earning as a driver.',
+          icon: 'car-sport',
+          iconColor: '#10B981',
+          buttonText: 'Go to Driver Dashboard',
+          buttonDisabled: false,
+          showBenefits: false,
+          showRiderTypes: false,
+          statusBadge: 'APPROVED',
+          statusColor: '#10B981',
+          showApprovedContent: true,
+        };
+      
+      case 'REJECTED':
+        return {
+          title: 'Application Not Approved',
+          subtitle: riderApplication.rejectionReason || 'Your application was not approved at this time.',
+          icon: 'close-circle-outline',
+          iconColor: '#EF4444',
+          buttonText: 'Reapply with Updates',
+          buttonDisabled: false,
+          showBenefits: false,
+          showRiderTypes: false,
+          statusBadge: 'REJECTED',
+          statusColor: '#EF4444',
+          showRejectedContent: true,
+        };
+      
+      case 'SUSPENDED':
+        return {
+          title: 'Account Suspended',
+          subtitle: 'Your rider account has been suspended. Please contact support for more information.',
+          icon: 'warning-outline',
+          iconColor: '#EF4444',
+          buttonText: 'Contact Support',
+          buttonDisabled: false,
+          showBenefits: false,
+          showRiderTypes: false,
+          statusBadge: 'SUSPENDED',
+          statusColor: '#EF4444',
+          showSuspendedContent: true,
+        };
+      
+      default:
+        return {
+          title: 'Become a Rider',
+          subtitle: 'Join our community of drivers and earn money on your own schedule',
+          icon: 'car-sport-outline',
+          iconColor: '#1E40AF',
+          buttonText: 'Start Earning Today',
+          buttonDisabled: false,
+          showBenefits: true,
+          showRiderTypes: true,
+        };
+    }
+  };
+
+  const handleRiderButtonPress = () => {
+    const statusContent = getRiderStatusContent();
     
-    if (isCloseToBottom && !loadingMore && hasMore) {
-      handleLoadMore();
+    if (statusContent.buttonDisabled) return;
+
+    if (riderApplication) {
+      switch (riderApplication.status) {
+        case 'APPROVED':
+          // Navigate to driver dashboard
+          navigation.navigate('DriverDashboard');
+          break;
+        case 'REJECTED':
+          // Navigate to reapply screen with existing data
+          navigation.navigate('BecomeRider', { 
+            type: 'driver',
+            existingData: riderApplication
+          });
+          break;
+        case 'SUSPENDED':
+          // Show contact support alert
+          Alert.alert(
+            'Contact Support',
+            'Please contact our support team to resolve your account suspension.\n\nEmail: support@snap.com\nPhone: +220 123 4567',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Copy Email', onPress: () => console.log('Copy email to clipboard') }
+            ]
+          );
+          break;
+        case 'PENDING':
+        case 'UNDER_REVIEW':
+          // Show application status info
+          Alert.alert(
+            'Application Status',
+            `Your application is currently ${riderApplication.status.toLowerCase().replace('_', ' ')}. We'll notify you once the review is complete.`,
+            [{ text: 'OK' }]
+          );
+          break;
+        default:
+          navigation.navigate('BecomeRider', { type: 'driver' });
+      }
+    } else {
+      // Navigate to new application
+      navigation.navigate('BecomeRider', { type: 'driver' });
     }
   };
 
-  const handleProductPress = (productId: string) => {
-    navigation.navigate('ProductDetail', { productId });
+  // Mock data
+  const quickActions = [
+    { icon: 'time-outline', label: 'My Rides' },
+    { icon: 'car-outline', label: 'Ride Request' },
+    { icon: 'bag-outline', label: 'My Orders' },
+    { icon: 'heart-outline', label: 'Interest' },
+    { icon: 'pricetag-outline', label: 'Promotions' },
+  ];
+
+
+
+  const categories = [
+    { icon: 'phone-portrait-outline', name: 'Electronics' },
+    { icon: 'shirt-outline', name: 'Fashion' },
+    { icon: 'home-outline', name: 'Home' },
+    { icon: 'flash-outline', name: 'Popular' },
+  ];
+
+  const promotions = [
+    {
+      title: 'Morning Special',
+      subtitle: 'Save 10% on Morning Rides',
+      description: 'Valid 6AM - 10AM daily',
+      gradient: ['#14B8A6', '#0D9488'],
+      buttonText: 'Book Now'
+    },
+    {
+      title: 'Flash Sale',
+      subtitle: 'Electronics Sale!',
+      description: 'Up to 30% off selected items',
+      gradient: ['#FB923C', '#F97316'],
+      buttonText: 'Shop Now'
+    },
+    {
+      title: 'Holiday Special',
+      subtitle: 'Festival Discounts',
+      description: 'Special offers all weekend',
+      gradient: ['#6366F1', '#8B5CF6'],
+      buttonText: 'View Deals'
+    },
+  ];
+
+  const activities = [
+    { message: 'Abdou just booked a ride near you', time: '2 mins ago' },
+    { message: 'Fatou sold a phone in your area', time: '5 mins ago' },
+  ];
+
+  // Search modal functions
+  const openSearchModal = () => {
+    if (!isSearchModalVisible) {
+      setIsSearchModalVisible(true);
+      // Focus the input after modal is shown
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 300);
+    }
+  };
+
+  const closeSearchModal = () => {
+    setIsSearchModalVisible(false);
+    setSearchText('');
+    Keyboard.dismiss();
+  };
+
+  const handleSearchSubmit = () => {
+    // Handle search submission here
+    console.log('Searching for:', searchText);
+    closeSearchModal();
+  };
+
+  const handleQuickActionPress = (action: string) => {
+    switch (action) {
+      case 'My Rides':
+        navigation.navigate('RideRequest');
+        break;
+      case 'My Orders':
+        navigation.navigate('CustomerOrders');
+        break;
+      case 'Interest':
+        navigation.navigate('InterestManagement');
+        break;
+      case 'Promotions':
+        // Handle promotions navigation
+        console.log('Promotions pressed');
+        break;
+      case 'Ride Request':
+        navigation.navigate('CustomerRides');
+        break;
+      default:
+        console.log('Unknown action:', action);
+    }
   };
 
   const handleTabPress = (tab: string) => {
@@ -253,13 +415,16 @@ export function Home() {
       case 'home':
         // Already on home
         break;
-      case 'orders':
-        navigation.navigate('CustomerOrders');
+      case 'rides':
+        navigation.navigate('RideRequest');
         break;
-      case 'interests':
-        navigation.navigate('InterestManagement');
+      case 'shop':
+        navigation.navigate('FeaturedProducts');
         break;
-      case 'account':
+      case 'messages':
+        navigation.navigate('ChatList');
+        break;
+      case 'profile':
         navigation.navigate('SellerDashboard');
         break;
     }
@@ -269,560 +434,633 @@ export function Home() {
     switch (tab) {
       case 'home':
         return route.name === 'Home';
-      case 'orders':
-        return route.name === 'CustomerOrders';
-      case 'interests':
-        return route.name === 'InterestManagement';
-      case 'account':
+      case 'rides':
+        return route.name === 'RideRequest';
+      case 'shop':
+        return route.name === 'ProductListing';
+      case 'messages':
+        return route.name === 'ChatList';
+      case 'profile':
         return route.name === 'SellerDashboard';
       default:
         return false;
     }
   };
 
-  const getStockStatus = (stock: number) => {
-    if (stock > 10) return { text: 'In Stock', color: '#059669' };
-    if (stock > 0) return { text: `Only ${stock} left`, color: '#D97706' };
-    return { text: 'Out of Stock', color: '#DC2626' };
-  };
 
-  const formatPrice = (price: number, currencyCode: string) => {
-    const currencySymbols: { [key: string]: string } = {
-      USD: '$',
-      EUR: '€',
-      GBP: '£',
-      JPY: '¥',
-      CAD: 'C$',
-    };
-    const symbol = currencySymbols[currencyCode] || currencyCode;
+
+
+
     
-    // Format with thousand separators
-    const formattedPrice = price.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-    
-    return `${symbol}${formattedPrice}`;
-  };
-
-  const truncateText = (text: string, maxLength: number) => {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
-  };
-
-  // Check interests when products are loaded
-  useEffect(() => {
-    if (featuredProducts.length > 0) {
-      // Try to get user data from AsyncStorage or decode from token
-      AsyncStorage.getItem('user').then(userData => {
-        if (userData) {
-          const user = JSON.parse(userData);
-          console.log('Found user data, checking interests for:', user.id);
-          checkProductInterestsWithUser(user);
-        } else {
-          // Try to get user info from token
-          AsyncStorage.getItem('token').then(token => {
-            if (token) {
-              const decodedToken = decodeToken(token);
-              if (decodedToken && decodedToken.userId) {
-                console.log('Decoded user from token, checking interests for:', decodedToken.userId);
-                const user = { id: decodedToken.userId };
-                checkProductInterestsWithUser(user);
-              }
-            }
-          });
-        }
-      });
-    }
-  }, [featuredProducts]);
-
-  const handleRideCardPress = useCallback(() => {
-    console.log('Ride card pressed!');
-    console.log('Bottom sheet ref:', rideBottomSheetRef.current);
-    rideBottomSheetRef.current?.present();
-  }, []);
-
-  const handleRideBottomSheetClose = useCallback(() => {
-    rideBottomSheetRef.current?.dismiss();
-  }, []);
-
-  const handleRideServicePress = (serviceType: string) => {
-    console.log('Selected ride service:', serviceType);
-    // Handle different ride services here
-    handleRideBottomSheetClose();
-    
-    if (serviceType === 'getRide') {
-      navigation.navigate('RideRequest');
-    }
-  };
-
-  const handleDriverModeToggle = () => {
-    setIsDriverMode(!isDriverMode);
-  };
-
-  if (loading && isInitialLoad) {
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#2563EB" />
-            <Text style={styles.loadingText}>Loading featured products...</Text>
-          </View>
-        </SafeAreaView>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor="#FFFFFF"
-        translucent
-      />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.mainContent}>
-          {/* Fixed Header */}
-          <View style={styles.fixedHeader}>
-            <View style={styles.headerLogo}>
-              {imageError ? (
-                <View style={styles.logoFallback}>
-                  <Text style={styles.logoText}>SNAP</Text>
-                </View>
-              ) : (
-                <Image
-                  source={require('../../assets/icon.png')}
-                  style={styles.logo}
-                  resizeMode="contain"
-                  onError={(error) => {
-                    console.error('Failed to load logo:', error.nativeEvent.error);
-                    setImageError(true);
-                  }}
-                />
-              )}
-              <Text style={styles.logoLabel}>SNAP</Text>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.logo}></Text>
+          </View>
+          <View style={styles.headerRight}>
+            <View style={styles.locationContainer}>
+              <Ionicons name="location-outline" size={16} color="#6B7280" />
+              <Text style={styles.locationText}>You're in Banjul</Text>
             </View>
-            <View style={styles.headerIcons}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Notifications')}
-                style={styles.iconButton}
+            <TouchableOpacity 
+              style={styles.notificationButton}
+              onPress={() => navigation.navigate('Notifications')}
+            >
+              <Ionicons name="notifications-outline" size={24} color="#6B7280" />
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>2</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('AccountSettings')}
+            >
+              <Ionicons name="person-outline" size={20} color="#6B7280" />
+            </TouchableOpacity>
+
+          </View>
+        </View>
+
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBar}>
+              <Ionicons name="search-outline" size={20} color="#6B7280" />
+              <TouchableOpacity 
+                style={styles.searchInput}
+                onPress={openSearchModal}
+                activeOpacity={0.7}
               >
-                <Ionicons name="notifications-outline" size={24} color="#111827" />
+                <Text style={styles.searchPlaceholder}>
+                  Search products or destinations...
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('AccountSettings')}
-                style={styles.iconButton}
-              >
-                <Ionicons name="person-outline" size={24} color="#111827" />
+              <TouchableOpacity onPress={openSearchModal}>
+                <Ionicons name="mic-outline" size={20} color="#14B8A6" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Riders Card (Uber-style) */}
-          <TouchableOpacity style={styles.ridersCard} onPress={handleRideCardPress}>
-            <View style={styles.ridersIconContainer}>
-              <Ionicons name="car-outline" size={32} color="#2563EB" />
+          {/* Welcome Banner */}
+          <View style={styles.welcomeBanner}>
+            <Text style={styles.welcomeTitle}>
+              Hello, {user?.firstName || 'Modou'} 👋
+            </Text>
+            <Text style={styles.welcomeSubtitle}>What would you like to do today?</Text>
+            
+            <View style={styles.welcomeButtons}>
+              <TouchableOpacity 
+                style={styles.rideButton}
+                onPress={() => navigation.navigate('RideRequest')}
+              >
+                <Ionicons name="car-outline" size={36} color="#1E40AF" />
+                <Text style={styles.rideButtonTitle}>Book a Ride</Text>
+                <Text style={styles.rideButtonSubtitle}>Fast and reliable rides near you</Text>
+                <View style={styles.rideButtonAction}>
+                  <Text style={styles.rideButtonActionText}>Find a Ride</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.shopButton}
+                onPress={() => navigation.navigate('FeaturedProducts')}
+              >
+                <Ionicons name="bag-outline" size={36} color="#3B82F6" />
+                <Text style={styles.shopButtonTitle}>Shop Online</Text>
+                <Text style={styles.shopButtonSubtitle}>Buy and sell from trusted sellers</Text>
+                <View style={styles.shopButtonAction}>
+                  <Text style={styles.shopButtonActionText}>Start Shopping</Text>
+                </View>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.ridersLabel}>Riders</Text>
-          </TouchableOpacity>
+          </View>
 
-          {/* Scrollable Content */}
-          <ScrollView 
-            style={styles.content} 
-            showsVerticalScrollIndicator={false} 
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            refreshControl={
-              <RefreshControl
-                refreshing={loading}
-                onRefresh={() => loadFeaturedProducts()}
-              />
-            }
-          >
-            {/* <View style={styles.welcomeCard}>
-              <Text style={styles.welcomeTitle}>
-                Hello, {user?.firstName || 'User'}!
-              </Text>
-              <Text style={styles.welcomeSubtitle}>
-                Find amazing products from sellers.
-              </Text>
-            </View> */}
+          {/* Quick Actions */}
+          <View style={styles.quickActionsContainer}>
+            <Text style={styles.sectionTitle}>Quick Access</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {quickActions.map((action, index) => (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.quickActionItem}
+                  onPress={() => handleQuickActionPress(action.label)}
+                >
+                  <View style={styles.quickActionIcon}>
+                    <Ionicons name={action.icon as any} size={24} color="#14B8A6" />
+                  </View>
+                  <Text style={styles.quickActionLabel}>{action.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
 
-            <View style={styles.categoriesContainer}>
+          {/* Service Section */}
+          <View style={styles.serviceSection}>
+            {/* Ride Service */}
+            <View style={styles.serviceBlock}>
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceTitleContainer}>
+                  <Text style={styles.serviceTitle}>Ride Service</Text>
+                  <View style={styles.serviceBadge}>
+                    <Text style={styles.serviceBadgeText}>Personalized</Text>
+                  </View>
+                </View>
+
+              </View>
+              
+              <View style={styles.rideServiceCard}>
+                <View style={styles.recentDestinationsHeader}>
+                  <View style={styles.recentTitleContainer}>
+                    <Ionicons name="time-outline" size={20} color="#0EA5E9" />
+                    <Text style={styles.recentTitle}>Recent Destinations</Text>
+                  </View>
+                  <TouchableOpacity 
+                    style={styles.viewAllButton}
+                    onPress={() => navigation.navigate('CustomerRideHistory')}
+                  >
+                    <Text style={styles.viewAllText}>View All</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#0EA5E9" />
+                  </TouchableOpacity>
+                </View>
+                
+                {isLoadingDestinations ? (
+                  <View style={styles.destinationLoadingContainer}>
+                    <ActivityIndicator size="small" color="#0EA5E9" />
+                    <Text style={styles.destinationLoadingText}>Loading your recent rides...</Text>
+                  </View>
+                ) : recentDestinations.length > 0 ? (
+                  <View style={styles.destinationsList}>
+                    {recentDestinations.map((destination, index) => (
+                      <View 
+                        key={destination.id} 
+                        style={styles.destinationCard}
+                      >
+                        <View style={styles.destinationIconContainer}>
+                          <Ionicons name="location" size={18} color="#FFFFFF" />
+                        </View>
+                        <View style={styles.destinationContent}>
+                          <Text style={styles.destinationName} numberOfLines={1}>
+                            {destination.destinationLocation.address || 'Recent Destination'}
+                          </Text>
+                          <Text style={styles.destinationDate}>
+                            {new Date(destination.completedAt).toLocaleDateString('en-US', { 
+                              month: 'short', 
+                              day: 'numeric' 
+                            })}
+                          </Text>
+                        </View>
+                        <View style={styles.destinationPriceContainer}>
+                          <View style={styles.priceBadge}>
+                            <Text style={styles.destinationPrice}>
+                              {destination.currencySymbol}{destination.totalFare.toLocaleString()}
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.emptyDestinationsContainer}>
+                    <View style={styles.emptyDestinationsIcon}>
+                      <Ionicons name="car-outline" size={32} color="#9CA3AF" />
+                    </View>
+                    <Text style={styles.emptyDestinationsTitle}>No recent rides</Text>
+                    <Text style={styles.emptyDestinationsSubtitle}>
+                      Book your first ride to see your destinations here
+                    </Text>
+                    <TouchableOpacity 
+                      style={styles.bookFirstRideButton}
+                      onPress={() => navigation.navigate('RideRequest')}
+                    >
+                      <Text style={styles.bookFirstRideButtonText}>Book a Ride</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                
+                <View style={styles.nearestDriverCard}>
+                  <View style={styles.nearestDriverInfo}>
+                    <Ionicons name="time-outline" size={20} color="#14B8A6" />
+                    <Text style={styles.nearestDriverText}>
+                      Nearest driver: <Text style={styles.nearestDriverTime}>3 mins away</Text>
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.bookNowButton}>
+                    <Text style={styles.bookNowButtonText}>Book Now</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {/* Shop Online */}
+            <View style={styles.serviceBlock}>
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceTitleContainer}>
+                  <Text style={styles.serviceTitle}>Shop Online</Text>
+                  <View style={[styles.serviceBadge, styles.blueBadge]}>
+                    <Text style={[styles.serviceBadgeText, styles.blueBadgeText]}>Near You</Text>
+                  </View>
+                </View>
+                <TouchableOpacity>
+                  <Text style={[styles.viewAllText, styles.blueText]}>View All</Text>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.shopGrid}>
+                <View style={styles.shopCard}>
+                  <Text style={styles.shopCardTitle}>🔥 POPULAR</Text>
+                  <Text style={styles.shopCardSubtitle}>Products</Text>
+                  <TouchableOpacity style={styles.shopCardButton}>
+                    <Text style={styles.shopCardButtonText}>Explore</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.shopCard}>
+                  <Text style={styles.shopCardTitle}>✨ New Arrivals</Text>
+                  <Text style={styles.shopCardSubtitle}>Just Added</Text>
+                  <TouchableOpacity style={styles.shopCardButton}>
+                    <Text style={styles.shopCardButtonText}>See New</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              <Text style={styles.categoriesTitle}>Categories</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {categories.map((category) => (
-                  <View key={category.id} style={styles.categoryItem}>
+                {categories.map((category, index) => (
+                  <View key={index} style={styles.categoryItem}>
                     <View style={styles.categoryIcon}>
-                      <Text style={styles.categoryEmoji}>{category.icon}</Text>
+                      <Ionicons name={category.icon as any} size={20} color="#3B82F6" />
                     </View>
                     <Text style={styles.categoryName}>{category.name}</Text>
                   </View>
                 ))}
               </ScrollView>
-            </View>
-
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Featured Products</Text>
-                <View style={styles.sectionActions}>
-                  <TouchableOpacity 
-                    onPress={() => loadFeaturedProducts()}
-                    style={styles.reloadButton}
-                    disabled={loading}
-                  >
-                    <Ionicons 
-                      name="refresh" 
-                      size={16} 
-                      color={loading ? "#9CA3AF" : "#2563EB"} 
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity>
-                    <Text style={styles.seeAllButton}>See All</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
               
-              {error ? (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{error}</Text>
-                  <TouchableOpacity onPress={() => loadFeaturedProducts()} style={styles.retryButton}>
-                    <Text style={styles.retryButtonText}>Retry</Text>
-                  </TouchableOpacity>
+              <View style={styles.sellCard}>
+                <View style={styles.sellCardHeader}>
+                  <Ionicons name="add-circle-outline" size={20} color="#3B82F6" />
+                  <Text style={styles.sellCardTitle}>Have something to sell?</Text>
                 </View>
-              ) : featuredProducts.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="bag-outline" size={48} color="#9CA3AF" />
-                  <Text style={styles.emptyText}>No featured products available</Text>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.productsGrid}>
-                    {featuredProducts.map((product) => (
-                      <TouchableOpacity
-                        key={product.id}
-                        style={styles.productCard}
-                        onPress={() => handleProductPress(product.id)}
-                      >
-                        <View style={styles.productImageContainer}>
-                          <Image
-                            source={{ 
-                              uri: product.image 
-                                ? `${API_URL}${product.image}`
-                                : 'https://via.placeholder.com/160x160?text=No+Image'
-                            }}
-                            style={styles.productImage}
-                          />
-                          <View style={styles.favoriteButton}>
-                            <Ionicons 
-                              name={productInterests[product.id]?.exists ? "heart" : "heart-outline"} 
-                              size={20} 
-                              color={productInterests[product.id]?.exists ? "#2563EB" : "#6B7280"} 
-                            />
-                          </View>
-                        </View>
-                        <View style={styles.productInfo}>
-                          <Text style={styles.productName} numberOfLines={2} ellipsizeMode="tail">
-                            {truncateText(product.name, 50)}
-                          </Text>
-                          <Text style={styles.productPrice}>
-                            {formatPrice(product.price, product.currencyCode)}
-                          </Text>
-                          <View style={styles.productDetails}>
-                            <Text
-                              style={[
-                                styles.stockText,
-                                { color: getStockStatus(product.stock).color },
-                              ]}
-                            >
-                              {getStockStatus(product.stock).text}
-                            </Text>
-                            <Text style={styles.sellerName} numberOfLines={1} ellipsizeMode="tail">
-                              {truncateText(product.seller, 15)}
-                            </Text>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                  
-                  {/* Loading more indicator */}
-                  {loadingMore && (
-                    <View style={styles.loadingMoreContainer}>
-                      <ActivityIndicator size="small" color="#2563EB" />
-                      <Text style={styles.loadingMoreText}>Loading more products...</Text>
-                    </View>
-                  )}
-                  
-                  {/* End of list indicator */}
-                  {!hasMore && featuredProducts.length > 0 && (
-                    <View style={styles.endOfListContainer}>
-                      <Text style={styles.endOfListText}>No more products to load</Text>
-                    </View>
-                  )}
-                </>
-              )}
-            </View>
-
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Popular Sellers</Text>
-                <TouchableOpacity>
-                  <Text style={styles.seeAllButton}>See All</Text>
+                <TouchableOpacity style={styles.sellButton}>
+                  <Text style={styles.sellButtonText}>Post an Item for Sale</Text>
                 </TouchableOpacity>
               </View>
-              <View style={styles.sellersList}>
-                {popularSellers.map((seller) => (
-                  <TouchableOpacity key={seller.id} style={styles.sellerCard}>
-                    <Image
-                      source={{ uri: seller.image }}
-                      style={styles.sellerImage}
-                    />
-                    <View style={styles.sellerInfo}>
-                      <Text style={styles.sellerName}>{seller.name}</Text>
-                      <View style={styles.sellerStats}>
-                        <Ionicons name="star" size={16} color="#F59E0B" />
-                        <Text style={styles.sellerRating}>
-                          {seller.rating.toFixed(1)}
-                        </Text>
-                        <Text style={styles.sellerProducts}>
-                          {seller.products} products
+            </View>
+          </View>
+
+          {/* Promotions */}
+          <View style={styles.promotionsContainer}>
+            <View style={styles.promotionsHeader}>
+              <Text style={styles.promotionsTitle}>Promotions</Text>
+              <View style={styles.promotionsControls}>
+                <TouchableOpacity style={styles.promotionControl}>
+                  <Ionicons name="chevron-back-outline" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.promotionControl}>
+                  <Ionicons name="chevron-forward-outline" size={20} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {promotions.map((promo, index) => (
+                <View key={index} style={[styles.promotionCard, { backgroundColor: promo.gradient[0] }]}>
+                  <View style={styles.promotionContent}>
+                    <Text style={styles.promotionLabel}>{promo.title}</Text>
+                    <Text style={styles.promotionTitle}>{promo.subtitle}</Text>
+                    <Text style={styles.promotionDescription}>{promo.description}</Text>
+                  </View>
+                  <TouchableOpacity style={styles.promotionButton}>
+                    <Text style={styles.promotionButtonText}>{promo.buttonText}</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+            
+            <View style={styles.securityCard}>
+              <Ionicons name="shield-checkmark-outline" size={16} color="#14B8A6" />
+              <Text style={styles.securityText}>Secure Payments & Verified Drivers/Sellers</Text>
+            </View>
+          </View>
+
+          {/* Live Activity */}
+          <View style={styles.activityContainer}>
+            <View style={styles.activityHeader}>
+              <Ionicons name="pulse-outline" size={20} color="#EF4444" />
+              <Text style={styles.activityTitle}>Live Activity</Text>
+            </View>
+            {activities.map((activity, index) => (
+              <View key={index} style={styles.activityItem}>
+                <Text style={styles.activityMessage}>{activity.message}</Text>
+                <Text style={styles.activityTime}>{activity.time}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Become a Rider Section */}
+          <View style={styles.becomeRiderContainer}>
+            {(() => {
+              const statusContent = getRiderStatusContent();
+              return (
+                <>
+                  <View style={styles.becomeRiderHeader}>
+                    <Ionicons name={statusContent.icon as any} size={24} color={statusContent.iconColor} />
+                    <Text style={styles.becomeRiderTitle}>{statusContent.title}</Text>
+                    {statusContent.statusBadge && (
+                      <View style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 12,
+                        marginLeft: 8,
+                        backgroundColor: `${statusContent.statusColor}20`
+                      }}>
+                        <Text style={{
+                          fontSize: 12,
+                          fontWeight: '500',
+                          color: statusContent.statusColor
+                        }}>
+                          {statusContent.statusBadge}
                         </Text>
                       </View>
+                    )}
+                  </View>
+                  <Text style={styles.becomeRiderSubtitle}>
+                    {statusContent.subtitle}
+                  </Text>
+                  
+                  {statusContent.showRiderTypes && !statusContent.showRejectedContent && !statusContent.showSuspendedContent && (
+                    <View style={styles.riderTypesContainer}>
+                      <TouchableOpacity 
+                        style={styles.riderTypeCard}
+                        onPress={() => navigation.navigate('BecomeRider', { type: 'driver' })}
+                      >
+                        <View style={styles.riderTypeIcon}>
+                          <Ionicons name="car-outline" size={32} color="#0EA5E9" />
+                        </View>
+                        <Text style={styles.riderTypeTitle}>Car Driver</Text>
+                        <Text style={styles.riderTypeDescription}>Drive passengers in your car</Text>
+                        <View style={styles.riderTypeBadge}>
+                          <Text style={styles.riderTypeBadgeText}>Most Popular</Text>
+                        </View>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.riderTypeCard}
+                        onPress={() => navigation.navigate('BecomeRider', { type: 'motorcycle' })}
+                      >
+                        <View style={styles.riderTypeIcon}>
+                          <Ionicons name="bicycle-outline" size={32} color="#0EA5E9" />
+                        </View>
+                        <Text style={styles.riderTypeTitle}>Motorcycle</Text>
+                        <Text style={styles.riderTypeDescription}>Deliver packages and food</Text>
+                        <View style={styles.riderTypeBadge}>
+                          <Text style={styles.riderTypeBadgeText}>Fast Delivery</Text>
+                        </View>
+                      </TouchableOpacity>
+                      
+
                     </View>
+                  )}
+                  
+                  {statusContent.showBenefits && !statusContent.showRejectedContent && !statusContent.showSuspendedContent && (
+                    <View style={styles.becomeRiderBenefits}>
+                      <Text style={styles.benefitsTitle}>Why Join Us?</Text>
+                      <View style={styles.benefitItem}>
+                        <Ionicons name="cash-outline" size={20} color="#0EA5E9" />
+                        <Text style={styles.benefitText}>Earn per request ride</Text>
+                      </View>
+                      <View style={styles.benefitItem}>
+                        <Ionicons name="time-outline" size={20} color="#0EA5E9" />
+                        <Text style={styles.benefitText}>Flexible working hours</Text>
+                      </View>
+                      <View style={styles.benefitItem}>
+                        <Ionicons name="shield-checkmark-outline" size={20} color="#0EA5E9" />
+                        <Text style={styles.benefitText}>Insurance coverage included</Text>
+                      </View>
+                      <View style={styles.benefitItem}>
+                        <Ionicons name="trending-up-outline" size={20} color="#0EA5E9" />
+                        <Text style={styles.benefitText}>Request settlement any time</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {statusContent.showApprovedContent && (
+                    <View style={styles.approvedContent}>
+                      <View style={styles.approvedCard}>
+                        <View style={styles.approvedHeader}>
+                          <Ionicons name="checkmark-circle" size={32} color="#10B981" />
+                          <Text style={styles.approvedTitle}>You're All Set!</Text>
+                        </View>
+                        <Text style={styles.approvedDescription}>
+                          Your driver account is active and ready. Start earning by going online and accepting ride requests.
+                        </Text>
+                        <View style={styles.approvedFeatures}>
+                          <View style={styles.approvedFeature}>
+                            <Ionicons name="location" size={20} color="#10B981" />
+                            <Text style={styles.approvedFeatureText}>Real-time location tracking</Text>
+                          </View>
+                          <View style={styles.approvedFeature}>
+                            <Ionicons name="shield-checkmark" size={20} color="#10B981" />
+                            <Text style={styles.approvedFeatureText}>Verified driver status</Text>
+                          </View>
+                          <View style={styles.approvedFeature}>
+                            <Ionicons name="cash" size={20} color="#10B981" />
+                            <Text style={styles.approvedFeatureText}>Instant earnings</Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+
+                  {statusContent.showRejectedContent && (
+                    <View style={styles.rejectedContent}>
+                      <View style={styles.rejectedCard}>
+                        <View style={styles.rejectedHeader}>
+                          <Ionicons name="information-circle" size={24} color="#EF4444" />
+                          <Text style={styles.rejectedTitle}>Application Feedback</Text>
+                        </View>
+                        <Text style={styles.rejectedDescription}>
+                          We've reviewed your application and found some areas that need attention. Please update your information and try again.
+                        </Text>
+                        {riderApplication?.rejectionReason && (
+                          <View style={styles.rejectionReason}>
+                            <Text style={styles.rejectionReasonTitle}>Reason:</Text>
+                            <Text style={styles.rejectionReasonText}>{riderApplication.rejectionReason}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  )}
+
+                  {statusContent.showSuspendedContent && (
+                    <View style={styles.suspendedContent}>
+                      <View style={styles.suspendedCard}>
+                        <View style={styles.suspendedHeader}>
+                          <Ionicons name="warning" size={24} color="#EF4444" />
+                          <Text style={styles.suspendedTitle}>Account Suspended</Text>
+                        </View>
+                        <Text style={styles.suspendedDescription}>
+                          Your driver account has been temporarily suspended. Please contact our support team to resolve this issue.
+                        </Text>
+                        <View style={styles.suspendedContact}>
+                          <Text style={styles.suspendedContactTitle}>Contact Support:</Text>
+                          <Text style={styles.suspendedContactText}>Email: support@snap.com</Text>
+                          <Text style={styles.suspendedContactText}>Phone: +220 123 4567</Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+                  
+                  <TouchableOpacity 
+                    style={[
+                      styles.becomeRiderButton,
+                      statusContent.buttonDisabled && { backgroundColor: '#9CA3AF' }
+                    ]}
+                    onPress={handleRiderButtonPress}
+                    disabled={statusContent.buttonDisabled}
+                  >
+                    <Text style={styles.becomeRiderButtonText}>
+                      {statusContent.buttonText}
+                    </Text>
+                    {!statusContent.buttonDisabled && (
+                      <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+                    )}
                   </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </ScrollView>
+                </>
+              );
+            })()}
+          </View>
+        </ScrollView>
 
-          {/* Fixed Bottom Navigation */}
-          <SafeAreaView edges={['bottom']} style={styles.bottomNavContainer}>
-            <View style={styles.bottomNav}>
-              <TouchableOpacity
-                style={[styles.navItem, isActiveTab('home') && styles.activeNavItem]}
-                onPress={() => handleTabPress('home')}
-              >
-                <Ionicons
-                  name={isActiveTab('home') ? 'home' : 'home-outline'}
-                  size={24}
-                  color={isActiveTab('home') ? '#2563EB' : '#6B7280'}
-                />
-                <Text
-                  style={[
-                    styles.navText,
-                    isActiveTab('home') && styles.activeNavText,
-                  ]}
-                >
-                  Home
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.navItem, isActiveTab('orders') && styles.activeNavItem]}
-                onPress={() => handleTabPress('orders')}
-              >
-                <Ionicons
-                  name={isActiveTab('orders') ? 'bag' : 'bag-outline'}
-                  size={24}
-                  color={isActiveTab('orders') ? '#2563EB' : '#6B7280'}
-                />
-                <Text
-                  style={[
-                    styles.navText,
-                    isActiveTab('orders') && styles.activeNavText,
-                  ]}
-                >
-                  Orders
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.navItem,
-                  isActiveTab('interestmanagement') && styles.activeNavItem,
-                ]}
-                onPress={() => handleTabPress('interests')}
-              >
-                <Ionicons
-                  name={
-                    isActiveTab('interestmanagement')
-                      ? 'heart'
-                      : 'heart-outline'
-                  }
-                  size={24}
-                  color={isActiveTab('interestmanagement') ? '#2563EB' : '#6B7280'}
-                />
-                <Text
-                  style={[
-                    styles.navText,
-                    isActiveTab('interestmanagement') && styles.activeNavText,
-                  ]}
-                >
-                  Interests
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.navItem,
-                  isActiveTab('accountsettings') && styles.activeNavItem,
-                ]}
-                onPress={() => handleTabPress('account')}
-              >
-                <Ionicons
-                  name={
-                    isActiveTab('accountsettings')
-                      ? 'person'
-                      : 'person-outline'
-                  }
-                  size={24}
-                  color={isActiveTab('accountsettings') ? '#2563EB' : '#6B7280'}
-                />
-                <Text
-                  style={[
-                    styles.navText,
-                    isActiveTab('accountsettings') && styles.activeNavText,
-                  ]}
-                >
-                  Seller
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </View>
-      </SafeAreaView>
-
-      {/* Ride Services Bottom Sheet */}
-      <BottomSheetModal
-        ref={rideBottomSheetRef}
-        index={0}
-        snapPoints={rideSnapPoints}
-        enablePanDownToClose={true}
-        onDismiss={() => setIsRideBottomSheetOpen(false)}
-        backgroundStyle={styles.bottomSheetBackground}
-        handleIndicatorStyle={styles.bottomSheetIndicator}
-      >
-        <BottomSheetView style={styles.rideBottomSheetContent}>
-          {/* Header */}
-          <View style={styles.rideBottomSheetHeader}>
-            <Text style={styles.rideBottomSheetTitle}>Choose Your Ride</Text>
-            <TouchableOpacity onPress={handleRideBottomSheetClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#6B7280" />
+        {/* Bottom Navigation */}
+        <SafeAreaView edges={['bottom']} style={styles.bottomNavContainer}>
+          <View style={styles.bottomNav}>
+            <TouchableOpacity
+              style={[styles.navItem, isActiveTab('home') && styles.activeNavItem]}
+              onPress={() => handleTabPress('home')}
+            >
+              <Ionicons
+                name={isActiveTab('home') ? 'home' : 'home-outline'}
+                size={24}
+                color={isActiveTab('home') ? '#14B8A6' : '#6B7280'}
+              />
+              <Text style={[styles.navText, isActiveTab('home') && styles.activeNavText]}>
+                Home
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, isActiveTab('rides') && styles.activeNavItem]}
+              onPress={() => handleTabPress('rides')}
+            >
+              <Ionicons
+                name={isActiveTab('rides') ? 'car' : 'car-outline'}
+                size={24}
+                color={isActiveTab('rides') ? '#14B8A6' : '#6B7280'}
+              />
+              <Text style={[styles.navText, isActiveTab('rides') && styles.activeNavText]}>
+                Rides
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, isActiveTab('shop') && styles.activeNavItem]}
+              onPress={() => handleTabPress('shop')}
+            >
+              <Ionicons
+                name={isActiveTab('shop') ? 'bag' : 'bag-outline'}
+                size={24}
+                color={isActiveTab('shop') ? '#14B8A6' : '#6B7280'}
+              />
+              <Text style={[styles.navText, isActiveTab('shop') && styles.activeNavText]}>
+                Shop
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, isActiveTab('messages') && styles.activeNavItem]}
+              onPress={() => handleTabPress('messages')}
+            >
+              <Ionicons
+                name={isActiveTab('messages') ? 'chatbubbles' : 'chatbubbles-outline'}
+                size={24}
+                color={isActiveTab('messages') ? '#14B8A6' : '#6B7280'}
+              />
+              <Text style={[styles.navText, isActiveTab('messages') && styles.activeNavText]}>
+                Messages
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.navItem, isActiveTab('profile') && styles.activeNavItem]}
+              onPress={() => handleTabPress('profile')}
+            >
+              <Ionicons
+                name={isActiveTab('profile') ? 'storefront' : 'storefront-outline'}
+                size={24}
+                color={isActiveTab('profile') ? '#14B8A6' : '#6B7280'}
+              />
+              <Text style={[styles.navText, isActiveTab('profile') && styles.activeNavText]}>
+                Seller
+              </Text>
             </TouchableOpacity>
           </View>
+        </SafeAreaView>
+      </SafeAreaView>
 
-          {/* Car Icon */}
-          <View style={styles.carIconContainer}>
-            <View style={styles.carIconBackground}>
-              <Ionicons name="car" size={48} color="#2563EB" />
-            </View>
-          </View>
-
-          {/* Service Options */}
-          <View style={styles.serviceOptionsContainer}>
-            {!isDriverMode ? (
-              <>
-                <TouchableOpacity 
-                  style={styles.serviceOption}
-                  onPress={() => handleRideServicePress('getRide')}
-                >
-                  <View style={styles.serviceIconContainer}>
-                    <Ionicons name="flash" size={24} color="#2563EB" />
+      {/* Search Modal */}
+      <Modal
+        visible={isSearchModalVisible}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={closeSearchModal}
+        statusBarTranslucent={true}
+      >
+        <View style={styles.searchModalContainer}>
+          <SafeAreaView edges={['top']} style={styles.searchModalContent}>
+                <View style={styles.searchModalHeader}>
+                  <TouchableOpacity onPress={closeSearchModal} style={styles.closeButton}>
+                    <Ionicons name="arrow-back" size={24} color="#6B7280" />
+                  </TouchableOpacity>
+                  <View style={styles.searchModalInputContainer}>
+                    <Ionicons name="search-outline" size={20} color="#6B7280" />
+                    <TextInput
+                      ref={searchInputRef}
+                      style={styles.searchModalInput}
+                      placeholder="Search products or destinations..."
+                      placeholderTextColor="#9CA3AF"
+                      value={searchText}
+                      onChangeText={setSearchText}
+                      onSubmitEditing={handleSearchSubmit}
+                      returnKeyType="search"
+                      autoFocus={true}
+                    />
+                    {searchText.length > 0 && (
+                      <TouchableOpacity onPress={() => setSearchText('')}>
+                        <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+                      </TouchableOpacity>
+                    )}
                   </View>
-                  <View style={styles.serviceContent}>
-                    <Text style={styles.serviceTitle}>Get a Ride</Text>
-                    <Text style={styles.serviceDescription}>Request a ride now and get picked up in minutes</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.serviceOption}
-                  onPress={() => handleRideServicePress('scheduleRide')}
-                >
-                  <View style={styles.serviceIconContainer}>
-                    <Ionicons name="time" size={24} color="#059669" />
-                  </View>
-                  <View style={styles.serviceContent}>
-                    <Text style={styles.serviceTitle}>Schedule a Ride</Text>
-                    <Text style={styles.serviceDescription}>Book a ride for a specific time today</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={styles.serviceOption}
-                  onPress={() => handleRideServicePress('futureTrip')}
-                >
-                  <View style={styles.serviceIconContainer}>
-                    <Ionicons name="calendar" size={24} color="#DC2626" />
-                  </View>
-                  <View style={styles.serviceContent}>
-                    <Text style={styles.serviceTitle}>Future Trip</Text>
-                    <Text style={styles.serviceDescription}>Plan and book rides for upcoming trips</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-                </TouchableOpacity>
-              </>
-            ) : (
-              <View style={styles.driverModeContainer}>
-                <View style={styles.driverModeIcon}>
-                  <Ionicons name="car-sport" size={48} color="#2563EB" />
                 </View>
-                <Text style={styles.driverModeTitle}>Driver Mode</Text>
-                <Text style={styles.driverModeDescription}>
-                  You're now in driver mode. Switch back to rider mode to book rides.
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Footer with Driver Mode Toggle */}
-          <View style={styles.rideBottomSheetFooter}>
-            <View style={styles.modeToggleContainer}>
-              <View style={styles.modeToggle}>
-                <TouchableOpacity 
-                  style={[
-                    styles.modeButton, 
-                    !isDriverMode && styles.activeModeButton
-                  ]}
-                  onPress={() => setIsDriverMode(false)}
-                >
-                  <Ionicons 
-                    name="person" 
-                    size={16} 
-                    color={!isDriverMode ? "#FFFFFF" : "#6B7280"} 
-                  />
-                  <Text style={[
-                    styles.modeButtonText,
-                    !isDriverMode && styles.activeModeButtonText
-                  ]}>
-                    Rider
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[
-                    styles.modeButton, 
-                    isDriverMode && styles.activeModeButton
-                  ]}
-                  onPress={() => setIsDriverMode(true)}
-                >
-                  <Ionicons 
-                    name="car-sport" 
-                    size={16} 
-                    color={isDriverMode ? "#FFFFFF" : "#6B7280"} 
-                  />
-                  <Text style={[
-                    styles.modeButtonText,
-                    isDriverMode && styles.activeModeButtonText
-                  ]}>
-                    Driver
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                
+                {/* Search suggestions can be added here */}
+                <View style={styles.searchSuggestions}>
+                  <Text style={styles.suggestionsTitle}>Recent Searches</Text>
+                  <TouchableOpacity style={styles.suggestionItem}>
+                    <Ionicons name="time-outline" size={16} color="#6B7280" />
+                    <Text style={styles.suggestionText}>iPhone 13</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.suggestionItem}>
+                    <Ionicons name="time-outline" size={16} color="#6B7280" />
+                    <Text style={styles.suggestionText}>Laptop</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.suggestionItem}>
+                    <Ionicons name="time-outline" size={16} color="#6B7280" />
+                    <Text style={styles.suggestionText}>Home delivery</Text>
+                  </TouchableOpacity>
+                </View>
+              </SafeAreaView>
             </View>
-            <Text style={styles.footerText}>All rides are subject to availability and pricing</Text>
-          </View>
-        </BottomSheetView>
-      </BottomSheetModal>
+          </Modal>
     </View>
   );
 }
@@ -836,399 +1074,338 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-  mainContent: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  fixedHeader: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
     marginTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
-  headerLogo: {
-    flexDirection: 'column', // Changed to column
+  headerLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
   },
   logo: {
-    width: 40,
-    height: 40,
-    marginBottom: 4, // Added margin bottom
-  },
-  logoFallback: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#2563EB',
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4, // Added margin bottom
-  },
-  logoText: {
-    fontSize: 12,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#14B8A6',
   },
-  logoLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827', // Changed to black
-  },
-  headerIcons: {
+  headerRight: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
   },
-  iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  notificationButton: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#F97316',
+    borderRadius: 8,
+    width: 16,
+    height: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  profileButton: {
+    width: 32,
+    height: 32,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  errorContainer: {
+  welcomeBanner: {
     padding: 16,
-    alignItems: 'center',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#DC2626',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  retryButton: {
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    padding: 32,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#9CA3AF',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  welcomeCard: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    padding: 16,
-    margin: 16,
+    backgroundColor: '#FFFFFF',
   },
   welcomeTitle: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 4,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginBottom: 8,
   },
   welcomeSubtitle: {
-    fontSize: 14,
-    color: '#EFF6FF',
-  },
-  categoriesContainer: {
-    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#6B7280',
     marginBottom: 16,
   },
-  categoryItem: {
-    alignItems: 'center',
-    marginRight: 16,
+  welcomeButtons: {
+    flexDirection: 'column',
+    gap: 12,
   },
-  categoryIcon: {
-    width: 56,
-    height: 56,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  categoryEmoji: {
-    fontSize: 24,
-  },
-  categoryName: {
-    fontSize: 12,
-    color: '#374151',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  seeAllButton: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#2563EB',
-  },
-  productsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 8,
-  },
-  productCard: {
-    width: '50%',
-    padding: 8,
-  },
-  productImageContainer: {
-    position: 'relative',
-  },
-  productImage: {
-    width: '100%',
-    height: 160,
-    borderRadius: 8,
-  },
-  favoriteButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#FFFFFF',
+  rideButton: {
+    flex: 1,
+    backgroundColor: '#E6F3FF',
     borderRadius: 12,
-    padding: 4,
-  },
-  productInfo: {
-    padding: 8,
-  },
-  productName: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  productPrice: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2563EB',
-    flex: 1,
-  },
-  productDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  stockText: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  sellerName: {
-    fontSize: 12,
-    color: '#6B7280',
-    flex: 1,
-    textAlign: 'right',
-  },
-  sellersList: {
-    paddingHorizontal: 16,
-  },
-  sellerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  sellerImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-  },
-  sellerInfo: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  sellerStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  sellerRating: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  sellerProducts: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    paddingBottom: 0,
-    paddingTop: 0,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 5,
-  },
-  activeNavItem: {
-    // Add any active state styles if needed
-  },
-  navText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  activeNavText: {
-    color: '#2563EB',
-  },
-  loadingMoreContainer: {
     padding: 16,
     alignItems: 'center',
   },
-  loadingMoreText: {
+  rideButtonTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1E40AF',
     marginTop: 8,
-    fontSize: 14,
-    color: '#6B7280',
   },
-  endOfListContainer: {
-    padding: 16,
-    alignItems: 'center',
-  },
-  endOfListText: {
-    fontSize: 14,
-    color: '#6B7280',
+  rideButtonSubtitle: {
+    fontSize: 12,
+    color: '#1E3A8A',
+    marginTop: 4,
     textAlign: 'center',
   },
-  sectionActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  rideButtonAction: {
+    backgroundColor: '#1E40AF',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginTop: 12,
   },
-  reloadButton: {
-    padding: 4,
+  rideButtonActionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#FFFFFF',
   },
-  bottomNavContainer: {
-    backgroundColor: '#FFFFFF',
-  },
-  ridersCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+  shopButton: {
+    flex: 1,
+    backgroundColor: '#F0F4FF',
     borderRadius: 12,
     padding: 16,
-    margin: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    alignItems: 'center',
   },
-  ridersIconContainer: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 24,
-    padding: 12,
-    marginRight: 16,
+  shopButtonTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#3B82F6',
+    marginTop: 8,
   },
-  ridersLabel: {
-    fontSize: 18,
-    fontWeight: '600',
+  shopButtonSubtitle: {
+    fontSize: 12,
     color: '#2563EB',
+    marginTop: 4,
+    textAlign: 'center',
   },
-  bottomSheetBackground: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+  shopButtonAction: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginTop: 12,
+  },
+  shopButtonActionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
   },
-  bottomSheetIndicator: {
-    backgroundColor: '#E5E7EB',
-    width: 40,
-    height: 4,
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 25,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  rideBottomSheetContent: {
+  searchInput: {
     flex: 1,
-    padding: 20,
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#1F2937',
+    justifyContent: 'center',
   },
-  rideBottomSheetHeader: {
+  searchPlaceholder: {
+    fontSize: 16,
+    color: '#9CA3AF',
+  },
+  quickActionsContainer: {
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  quickActionItem: {
+    alignItems: 'center',
+    marginLeft: 16,
+    minWidth: 70,
+  },
+  quickActionIcon: {
+    width: 56,
+    height: 56,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  quickActionLabel: {
+    fontSize: 12,
+    color: '#374151',
+    textAlign: 'center',
+  },
+  serviceSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    backgroundColor: '#FFFFFF',
+  },
+  serviceBlock: {
+    marginBottom: 24,
+  },
+  serviceHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-    paddingTop: 8,
+    marginBottom: 16,
   },
-  rideBottomSheetTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#111827',
+  serviceTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+  serviceTitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  serviceBadge: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  serviceBadgeText: {
+    fontSize: 12,
+    color: '#0F766E',
+  },
+  orangeBadge: {
+    backgroundColor: '#FED7AA',
+  },
+  orangeBadgeText: {
+    color: '#C2410C',
+  },
+  blueBadge: {
+    backgroundColor: '#BFDBFE',
+  },
+  blueBadgeText: {
+    color: '#1E40AF',
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#14B8A6',
+  },
+  orangeText: {
+    color: '#F97316',
+  },
+  blueText: {
+    color: '#3B82F6',
+  },
+  rideServiceCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+  },
+  recentTitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  destinationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  destinationInfo: {
+    marginLeft: 12,
+  },
+  destinationName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  destinationAddress: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  destinationPrice: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  // Enhanced Recent Destinations Styles
+  recentDestinationsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recentTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F0F9FF',
+  },
+  destinationLoadingContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 20,
   },
-  carIconContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
+  destinationLoadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
   },
-  carIconBackground: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 40,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#DBEAFE',
-    width: '100%',
-    alignItems: 'center',
+  destinationsList: {
+    gap: 8,
   },
-  serviceOptionsContainer: {
-    flex: 1,
-  },
-  serviceOption: {
+  destinationCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     shadowColor: '#000',
@@ -1237,96 +1414,1188 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  serviceIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F8FAFC',
+  destinationIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#0EA5E9',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    marginRight: 12,
   },
-  serviceContent: {
+  destinationContent: {
     flex: 1,
   },
-  serviceTitle: {
-    fontSize: 18,
+  destinationDate: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  destinationPriceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  priceBadge: {
+    backgroundColor: '#0EA5E9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  emptyDestinationsContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+  },
+  emptyDestinationsIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyDestinationsTitle: {
+    fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: '#374151',
     marginBottom: 4,
   },
-  serviceDescription: {
+  emptyDestinationsSubtitle: {
     fontSize: 14,
     color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 16,
     lineHeight: 20,
   },
-  rideBottomSheetFooter: {
+  bookFirstRideButton: {
+    backgroundColor: '#0EA5E9',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  bookFirstRideButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  nearestDriverCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 16,
+    justifyContent: 'space-between',
+    backgroundColor: '#CCFBF1',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    borderRadius: 8,
+    padding: 12,
+  },
+  nearestDriverInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  nearestDriverText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+  nearestDriverTime: {
+    color: '#14B8A6',
+  },
+  bookNowButton: {
+    backgroundColor: '#14B8A6',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  bookNowButtonText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  shopGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  shopCard: {
+    flex: 1,
+    backgroundColor: '#E6F3FF',
+    borderRadius: 12,
+    padding: 12,
+    minHeight: 120,
+    justifyContent: 'space-between',
+  },
+  shopCardTitle: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#1E40AF',
+    textAlign: 'center',
+  },
+  shopCardSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  shopCardButton: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  shopCardButtonText: {
+    fontSize: 12,
+    color: '#1E40AF',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  categoriesTitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  categoryItem: {
+    alignItems: 'center',
+    marginRight: 16,
+    minWidth: 60,
+  },
+  categoryIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#F0F4FF',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  categoryName: {
+    fontSize: 12,
+    color: '#374151',
+    textAlign: 'center',
+  },
+  sellCard: {
+    backgroundColor: '#F0F4FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 16,
+  },
+  sellCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sellCardTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+  sellButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  sellButtonText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '500',
+  },
+  promotionsContainer: {
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  promotionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  promotionsTitle: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  promotionsControls: {
+    flexDirection: 'row',
+  },
+  promotionControl: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promotionCard: {
+    width: 280,
+    height: 128,
+    borderRadius: 12,
+    padding: 16,
+    marginLeft: 16,
+    justifyContent: 'space-between',
+  },
+  promotionContent: {
+    flex: 1,
+  },
+  promotionLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  promotionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginTop: 4,
+  },
+  promotionDescription: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 4,
+  },
+  promotionButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  promotionButtonText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#14B8A6',
+  },
+  securityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 8,
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  securityText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 8,
+  },
+  activityContainer: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  activityTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+  activityItem: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  activityMessage: {
+    fontSize: 14,
+    color: '#1F2937',
+  },
+  activityTime: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  bottomNavContainer: {
+    backgroundColor: '#FFFFFF',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingVertical: 4,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  activeNavItem: {
+    // Active state styling
+  },
+  navText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  activeNavText: {
+    color: '#14B8A6',
+  },
+  // Search Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalKeyboardAvoidingView: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  searchModalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  searchModalContent: {
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+  },
+  searchModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  searchModalInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 25,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  searchModalInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  searchSuggestions: {
+    padding: 16,
+  },
+  suggestionsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  suggestionText: {
+    fontSize: 16,
+    color: '#374151',
+    marginLeft: 12,
+  },
+  // Become Rider Section Styles
+  becomeRiderContainer: {
+    padding: 20,
+    backgroundColor: '#FFFFFF',
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  becomeRiderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  becomeRiderTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginLeft: 8,
+  },
+
+  becomeRiderSubtitle: {
+    fontSize: 15,
+    color: '#475569',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  riderTypesContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  riderTypeCard: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  riderTypeIcon: {
+    width: 64,
+    height: 64,
+    backgroundColor: '#E0F2FE',
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#0EA5E9',
+  },
+  riderTypeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  riderTypeDescription: {
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  riderTypeBadge: {
+    backgroundColor: '#0EA5E9',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  riderTypeBadgeText: {
+    fontSize: 11,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  becomeRiderBenefits: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E0F2FE',
+  },
+  benefitsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  benefitItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  benefitText: {
+    fontSize: 15,
+    color: '#334155',
+    marginLeft: 12,
+    fontWeight: '500',
+  },
+  becomeRiderButton: {
+    backgroundColor: '#0EA5E9',
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0EA5E9',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+
+  becomeRiderButtonText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginRight: 10,
+  },
+  // Approved Content Styles
+  approvedContent: {
+    marginBottom: 20,
+  },
+  approvedCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 12,
+    padding: 16,
+  },
+  approvedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  approvedTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#166534',
+    marginLeft: 8,
+  },
+  approvedDescription: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  approvedFeatures: {
+    gap: 8,
+  },
+  approvedFeature: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  approvedFeatureText: {
+    fontSize: 14,
+    color: '#374151',
+    marginLeft: 8,
+  },
+  // Rejected Content Styles
+  rejectedContent: {
+    marginBottom: 20,
+  },
+  rejectedCard: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 12,
+    padding: 16,
+  },
+  rejectedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  rejectedTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginLeft: 8,
+  },
+  rejectedDescription: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  rejectionReason: {
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  rejectionReasonTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginBottom: 4,
+  },
+  rejectionReasonText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+  },
+  // Suspended Content Styles
+  suspendedContent: {
+    marginBottom: 20,
+  },
+  suspendedCard: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 12,
+    padding: 16,
+  },
+  suspendedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  suspendedTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginLeft: 8,
+  },
+  suspendedDescription: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  suspendedContact: {
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  suspendedContactTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#DC2626',
+    marginBottom: 4,
+  },
+  suspendedContactText: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+  },
+  // Ride Requests Modal Styles
+  rideRequestsModalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  rideRequestsModalContent: {
+    backgroundColor: '#FFFFFF',
+    flex: 1,
+  },
+  rideRequestsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  rideRequestsTitleContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  rideRequestsTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  rideRequestsSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  refreshButton: {
+    padding: 8,
+  },
+  rideRequestsContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  rideRequestCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  rideRequestHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  rideRequestInfo: {
+    flex: 1,
+  },
+  rideRequestId: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  rideRequestDate: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
+  routeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  routePoint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pickupIcon: {
+    width: 24,
+    height: 24,
+    backgroundColor: '#E6F3FF',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  destinationIcon: {
+    width: 24,
+    height: 24,
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  routeInfo: {
+    flex: 1,
+  },
+  routeLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  routeAddress: {
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+  },
+  routeLine: {
+    width: 1,
+    height: '100%',
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 12,
+  },
+  tripDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  tripDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tripDetailText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  driverContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  driverInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  driverAvatar: {
+    width: 32,
+    height: 32,
+    backgroundColor: '#14B8A6',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  driverDetails: {
+    flex: 1,
+  },
+  driverName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  driverRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  driverRatingText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  vehicleInfo: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+  },
+  contactDriverButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E6F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  contactDriverText: {
+    fontSize: 14,
+    color: '#14B8A6',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 12,
+  },
+  rateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  rateButtonText: {
+    fontSize: 14,
+    color: '#DC2626',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    color: '#EF4444',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  detailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E6F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  detailsButtonText: {
+    fontSize: 14,
+    color: '#14B8A6',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#F9FAFB',
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 16,
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  bookRideButton: {
+    backgroundColor: '#14B8A6',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    marginTop: 20,
+  },
+  bookRideButtonText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  mapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E6F3FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  mapButtonText: {
+    fontSize: 14,
+    color: '#10B981',
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  loadingMoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
   },
-  footerText: {
+  loadingMoreText: {
     fontSize: 12,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    lineHeight: 16,
+    color: '#6B7280',
+    marginLeft: 8,
   },
-  driverModeContainer: {
+  endOfDataContainer: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  endOfDataText: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  availablePaymentMethodsTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 20,
+    letterSpacing: -0.4,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
+  },
+  noPaymentMethodsContainer: {
     alignItems: 'center',
     paddingVertical: 20,
+    backgroundColor: '#FFFFFF',
   },
-  driverModeIcon: {
-    backgroundColor: '#EFF6FF',
-    borderRadius: 40,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#DBEAFE',
-    marginBottom: 16,
-  },
-  driverModeTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  driverModeDescription: {
-    fontSize: 14,
+  noPaymentMethodsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#6B7280',
+    marginBottom: 10,
+  },
+  noPaymentMethodsSubtitle: {
+    fontSize: 14,
+    color: '#374151',
     textAlign: 'center',
-    lineHeight: 20,
+    paddingHorizontal: 20,
   },
-  modeToggleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginBottom: 16,
+  addPaymentMethodButton: {
+    backgroundColor: '#1E40AF',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignItems: 'center',
   },
-  modeToggle: {
-    flexDirection: 'row',
-    backgroundColor: '#E5E7EB',
-    borderRadius: 20,
-    padding: 2,
+  addPaymentMethodButtonText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
-  modeButton: {
+  paymentMethodItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 18,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-  activeModeButton: {
-    backgroundColor: '#2563EB',
+  selectedPaymentMethodItem: {
+    backgroundColor: '#F0F9FF',
+    borderColor: '#0EA5E9',
+    shadowColor: '#0EA5E9',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  modeButtonText: {
-    fontSize: 14,
+  defaultPaymentMethodItem: {
+    backgroundColor: '#F8FAFC',
+  },
+  paymentMethodItemIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  paymentMethodItemDetails: {
+    flex: 1,
+  },
+  paymentMethodItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  paymentMethodItemProvider: {
+    fontSize: 16,
     fontWeight: '600',
+    color: '#0F172A',
+  },
+  paymentMethodItemMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  defaultBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
     marginLeft: 8,
-    color: '#6B7280',
   },
-  activeModeButtonText: {
+  defaultBadgeText: {
+    fontSize: 10,
     color: '#FFFFFF',
+    fontWeight: '500',
   },
-}); 
+  paymentMethodItemAccount: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 4,
+  },
+  paymentMethodItemArrow: {
+    width: 16,
+    height: 16,
+    backgroundColor: '#CCCCCC',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentActionButtons: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
+    paddingBottom: 28,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
+  },
+  proceedToCheckoutButton: {
+    backgroundColor: '#0EA5E9',
+    borderRadius: 20,
+    paddingVertical: 18,
+    paddingHorizontal: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0EA5E9',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  proceedToCheckoutButtonText: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    fontWeight: '800',
+    marginLeft: 10,
+    letterSpacing: -0.4,
+  },
+  disabledButton: {
+    backgroundColor: '#CCCCCC',
+  },
+  // Simple modal styles
+  simpleModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  simpleModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    margin: 20,
+    minWidth: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  simpleModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  simpleModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  simpleCloseButton: {
+    padding: 5,
+  },
+  simpleModalBody: {
+    marginBottom: 20,
+  },
+  simpleModalText: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 10,
+  },
+  simpleModalButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+  },
+  simpleModalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

@@ -92,8 +92,14 @@ export function SellerDashboard() {
     
     try {
       setInterestsLoading(true)
-      const response = await interestService.getCustomerInterests(1, 10) // Show latest 10 interests
-      setCustomerInterests(response.interests)
+      const response = await interestService.getCustomerInterests(1, 20) // Get more to filter
+      
+      // Filter out rejected and cancelled interests
+      const filteredInterests = response.interests.filter(interest => 
+        interest.status === 'PENDING'
+      )
+      
+      setCustomerInterests(filteredInterests.slice(0, 10)) // Show only first 10 after filtering
     } catch (error) {
       console.error('Error loading customer interests:', error)
     } finally {
@@ -179,9 +185,45 @@ export function SellerDashboard() {
     return currencySymbols[currencyCode] || currencyCode;
   }
 
+  const getStatusColor = (status: string) => {
+    switch (status.toUpperCase()) {
+      case 'PENDING': return '#F59E0B';
+      case 'CONFIRMED': return '#10B981';
+      case 'ACCEPTED': return '#059669';
+      case 'REJECTED': return '#EF4444';
+      case 'CANCELLED': return '#6B7280';
+      case 'EXPIRED': return '#6B7280';
+      default: return '#6B7280';
+    }
+  }
+
+  const getStatusDisplayName = (status: string) => {
+    switch (status.toUpperCase()) {
+      case 'PENDING': return 'Pending';
+      case 'CONFIRMED': return 'Confirmed';
+      case 'ACCEPTED': return 'Accepted';
+      case 'REJECTED': return 'Rejected';
+      case 'CANCELLED': return 'Cancelled';
+      case 'EXPIRED': return 'Expired';
+      default: return status;
+    }
+  }
+
 
   const handleChatPress = (interestId: string) => {
-    navigation.navigate('SellerInterestDetail', { interestId })
+    console.log('=== NAVIGATION DEBUG ===');
+    console.log('Navigating to SellerInterestDetail with interestId:', interestId);
+    console.log('Navigation object:', navigation);
+    console.log('Current route:', navigation.getState().routes);
+    
+    try {
+      // Explicitly navigate to SellerInterestDetail with the correct parameters
+      // This should be the same navigation that works for the chat icon
+      navigation.navigate('SellerInterestDetail', { interestId });
+      console.log('Navigation call completed successfully');
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
   }
 
   const handleViewAllInterests = () => {
@@ -210,9 +252,22 @@ export function SellerDashboard() {
   if (kycStatus?.status === 'PENDING') {
     return (
       <SafeAreaView style={styles.safeArea}>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor="#FFFFFF"
+          translucent={false}
+        />
         <View style={styles.container}>
           <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color="#111827" />
+            </TouchableOpacity>
             <Text style={styles.title}>Seller Verification</Text>
+            <View style={styles.placeholder} />
           </View>
           <ScrollView style={styles.content}>
             <View style={styles.kycContainer}>
@@ -240,9 +295,22 @@ export function SellerDashboard() {
   if (kycStatus?.status === 'REJECTED') {
     return (
       <SafeAreaView style={styles.safeArea}>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor="#FFFFFF"
+          translucent={false}
+        />
         <View style={styles.container}>
           <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color="#111827" />
+            </TouchableOpacity>
             <Text style={styles.title}>Seller Verification</Text>
+            <View style={styles.placeholder} />
           </View>
           <ScrollView style={styles.content}>
             <View style={styles.kycContainer}>
@@ -272,7 +340,7 @@ export function SellerDashboard() {
         <StatusBar
           barStyle="dark-content"
           backgroundColor="#FFFFFF"
-          translucent
+          translucent={false}
         />
         <View style={styles.container}>
           <View style={styles.header}>
@@ -374,7 +442,7 @@ export function SellerDashboard() {
             {/* Customer Interests Section */}
             <View style={styles.interestsSection}>
               <View style={styles.interestsHeader}>
-                <Text style={styles.interestsTitle}>Customer Interests</Text>
+                <Text style={styles.interestsTitle}>Active Interests</Text>
                 <TouchableOpacity
                   style={styles.viewAllButton}
                   onPress={handleViewAllInterests}
@@ -395,8 +463,12 @@ export function SellerDashboard() {
               <TouchableOpacity
                       key={interest.id}
                       style={styles.interestCard}
-                      onPress={() => handleChatPress(interest.id)}
+                      onPress={() => {
+                        console.log('Interest card pressed, calling handleChatPress with interestId:', interest.id);
+                        handleChatPress(interest.id);
+                      }}
                       activeOpacity={0.7}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
                       <View style={styles.interestProductInfo}>
                         <Image
@@ -423,9 +495,22 @@ export function SellerDashboard() {
                           </Text>
                         </View>
                       </View>
-                      <View style={styles.chatButton}>
-                        <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
-                        <Text style={styles.chatButtonText}>Chat</Text>
+                      <View style={styles.rightColumn}>
+                        <View style={styles.chatButton}>
+                          <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
+                          <Text style={styles.chatButtonText}>Chat</Text>
+                        </View>
+                        <View style={[
+                          styles.statusBadge, 
+                          { backgroundColor: `${getStatusColor(interest.status)}20` }
+                        ]}>
+                          <Text style={[
+                            styles.statusText, 
+                            { color: getStatusColor(interest.status) }
+                          ]}>
+                            {getStatusDisplayName(interest.status)}
+                          </Text>
+                        </View>
                       </View>
               </TouchableOpacity>
                   ))}
@@ -433,9 +518,9 @@ export function SellerDashboard() {
               ) : (
                 <View style={styles.noInterestsContainer}>
                   <Ionicons name="heart-outline" size={48} color="#D1D5DB" />
-                  <Text style={styles.noInterestsText}>No customer interests yet</Text>
+                  <Text style={styles.noInterestsText}>No active interests</Text>
                   <Text style={styles.noInterestsSubtext}>
-                    When customers show interest in your products, they'll appear here
+                    Active customer interests will appear here. Rejected and cancelled interests are hidden.
                   </Text>
                 </View>
               )}
@@ -505,6 +590,12 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 20,
@@ -752,6 +843,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
     marginBottom: 4,
+  },
+  rightColumn: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'center',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   interestCustomerName: {
     fontSize: 14,

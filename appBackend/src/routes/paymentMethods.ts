@@ -44,7 +44,8 @@ router.get('/', authenticate, async (req: AuthenticatedRequest, res) => {
     });
 
     res.json({
-      paymentMethods: paymentMethods.map(method => ({
+      success: true,
+      data: paymentMethods.map(method => ({
         id: method.id,
         type: method.type,
         provider: method.provider,

@@ -1,4 +1,7 @@
 import { messaging } from '../config/firebase';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export interface NotificationData {
   title: string;
@@ -16,9 +19,6 @@ export interface FCMToken {
   updatedAt: Date;
 }
 
-// In-memory storage for FCM tokens (replace with database later)
-const fcmTokens = new Map<string, FCMToken>();
-
 // Check if Firebase is properly configured
 const isFirebaseConfigured = () => {
   return process.env.FIREBASE_PROJECT_ID && 
@@ -31,30 +31,34 @@ class NotificationService {
    * Save FCM token for a user
    */
   async saveFCMToken(userId: string, token: string, deviceType: string): Promise<FCMToken> {
-    const tokenId = `${userId}_${deviceType}`;
-    const existingToken = fcmTokens.get(tokenId);
+    try {
+      // Check if token already exists for this user and device type
+      const existingToken = await prisma.$queryRaw`
+        SELECT * FROM fcm_tokens 
+        WHERE "userId" = ${userId} AND "deviceType" = ${deviceType}
+        LIMIT 1
+      `;
 
-    if (existingToken) {
-      // Update existing token
-      const updatedToken: FCMToken = {
-        ...existingToken,
-        token,
-        updatedAt: new Date(),
-      };
-      fcmTokens.set(tokenId, updatedToken);
-      return updatedToken;
-    } else {
-      // Create new token
-      const newToken: FCMToken = {
-        id: tokenId,
-        userId,
-        token,
-        deviceType: deviceType as 'ios' | 'android' | 'web',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      fcmTokens.set(tokenId, newToken);
-      return newToken;
+      if (existingToken && Array.isArray(existingToken) && existingToken.length > 0) {
+        // Update existing token
+        const updatedToken = await prisma.$executeRaw`
+          UPDATE fcm_tokens 
+          SET token = ${token}, "updatedAt" = NOW()
+          WHERE "userId" = ${userId} AND "deviceType" = ${deviceType}
+        `;
+        return existingToken[0];
+      } else {
+        // Create new token
+        const newToken = await prisma.$queryRaw`
+          INSERT INTO fcm_tokens (id, "userId", token, "deviceType", "createdAt", "updatedAt")
+          VALUES (gen_random_uuid(), ${userId}, ${token}, ${deviceType}, NOW(), NOW())
+          RETURNING *
+        `;
+        return Array.isArray(newToken) ? newToken[0] : newToken;
+      }
+    } catch (error) {
+      console.error('Error saving FCM token:', error);
+      throw error;
     }
   }
 
@@ -62,11 +66,12 @@ class NotificationService {
    * Remove FCM token
    */
   async removeFCMToken(token: string): Promise<void> {
-    for (const [key, value] of fcmTokens.entries()) {
-      if (value.token === token) {
-        fcmTokens.delete(key);
-        break;
-      }
+    try {
+      await prisma.$executeRaw`
+        DELETE FROM fcm_tokens WHERE token = ${token}
+      `;
+    } catch (error) {
+      console.error('Error removing FCM token:', error);
     }
   }
 
@@ -74,7 +79,15 @@ class NotificationService {
    * Get all FCM tokens for a user
    */
   async getUserFCMTokens(userId: string): Promise<FCMToken[]> {
-    return Array.from(fcmTokens.values()).filter(token => token.userId === userId);
+    try {
+      const tokens = await prisma.$queryRaw`
+        SELECT * FROM fcm_tokens WHERE "userId" = ${userId}
+      `;
+      return Array.isArray(tokens) ? tokens : [];
+    } catch (error) {
+      console.error('Error getting user FCM tokens:', error);
+      return [];
+    }
   }
 
   /**
@@ -294,6 +307,29 @@ class NotificationService {
     };
 
     return await this.sendNotificationToUser(buyerId, notification);
+  }
+
+  /**
+   * Send ride token notification to customer
+   */
+  async sendRideTokenNotificationToCustomer(
+    customerId: string,
+    driverName: string,
+    token: string,
+    rideId: string
+  ): Promise<boolean> {
+    const notification: NotificationData = {
+      title: 'Ride Token Generated',
+      body: `${driverName} has generated a 6-digit token for your ride. Please provide this token to start your journey.`,
+      data: {
+        type: 'ride_token',
+        rideId,
+        token,
+        driverName,
+      },
+    };
+
+    return await this.sendNotificationToUser(customerId, notification);
   }
 }
 

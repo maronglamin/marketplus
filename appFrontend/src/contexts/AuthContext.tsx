@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../api/api';
+import { driverService } from '../services/driverService';
 
 interface AuthContextType {
   user: any | null;
@@ -104,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback(async (phoneNumber: string, deviceInfo: any) => {
     setIsLoading(true);
     try {
-      const response = await api.post('/auth/initiate-login', {
+      const response = await api.post('/api/auth/initiate-login', {
         phoneNumber,
         deviceInfo,
       });
@@ -117,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const verifyOTP = useCallback(async (phoneNumber: string, code: string, deviceInfo: any) => {
     setIsLoading(true);
     try {
-      const response = await api.post('/auth/verify-otp', {
+      const response = await api.post('/api/auth/verify-otp', {
         phoneNumber,
         code,
         deviceInfo,
@@ -137,7 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = useCallback(async (userData: any) => {
     setIsLoading(true);
     try {
-      const response = await api.post('/auth/register', userData);
+      const response = await api.post('/api/auth/register', userData);
       if (response.data.token) {
         await AsyncStorage.setItem('token', response.data.token);
         await AsyncStorage.setItem('user', JSON.stringify(response.data.user));
@@ -153,7 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithPin = useCallback(async (deviceId: string, pin: string, deviceInfo: any) => {
     setIsLoading(true);
     try {
-      const response = await api.post('/auth/login', {
+      const response = await api.post('/api/auth/login', {
         deviceId,
         pin,
         deviceInfo,
@@ -173,7 +174,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = useCallback(async () => {
     setIsLoading(true);
     try {
-      await api.post('/auth/logout');
+      // Set driver status to offline before logging out
+      try {
+        console.log('🔄 Setting driver status to offline before logout...');
+        await driverService.updateDriverStatus(false);
+        console.log('✅ Driver status set to offline successfully');
+      } catch (error) {
+        console.error('⚠️ Error setting driver status to offline:', error);
+        // Continue with logout even if driver status update fails
+      }
+
+      await api.post('/api/auth/logout');
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
       setToken(null);
@@ -186,7 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const changePin = useCallback(async (currentPin: string, newPin: string) => {
     setIsLoading(true);
     try {
-      await api.post('/auth/change-pin', {
+      await api.post('/api/auth/change-pin', {
         currentPin,
         newPin,
       });

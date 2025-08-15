@@ -353,6 +353,7 @@ router.post('/payment-success', authenticate, async (req, res) => {
           gatewayTransactionId: paymentIntent.id,
           paymentReference: paymentIntent.id,
           appTransactionId: appTransactionId,
+          appService: 'ECOMMERCE', // Set app service to ECOMMERCE for ecommerce payments
           transactionType: 'ORIGINAL',
           amount: originalAmount,
           currencyCode: paymentIntent.currency.toUpperCase(),
@@ -375,6 +376,7 @@ router.post('/payment-success', authenticate, async (req, res) => {
           gatewayTransactionId: `${paymentIntent.id}-fee`,
           paymentReference: paymentIntent.id,
           appTransactionId: appTransactionId, // Same app transaction ID
+          appService: 'ECOMMERCE', // Set app service to ECOMMERCE for ecommerce payments
           transactionType: 'FEE',
           amount: gatewayChargeFees,
           currencyCode: paymentIntent.currency.toUpperCase(),
@@ -404,6 +406,7 @@ router.post('/payment-success', authenticate, async (req, res) => {
           gatewayTransactionId: `${paymentIntent.id}-servicefee`,
           paymentReference: paymentIntent.id,
           appTransactionId: appTransactionId, // Same app transaction ID
+          appService: 'ECOMMERCE', // Set app service to ECOMMERCE for ecommerce payments
           transactionType: 'SERVICE_FEE' as TransactionType,
           amount: serviceFeeAmount,
           currencyCode: paymentIntent.currency.toUpperCase(),

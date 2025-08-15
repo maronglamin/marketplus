@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
-// Get available revenue for settlement
+// Get available revenue for settlement (ecommerce)
 export const getAvailableRevenue = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user?.id) {
@@ -112,6 +112,107 @@ export const getAvailableRevenue = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// Get available ride earnings for settlement (rides)
+export const getAvailableRideEarnings = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    logger.info('Fetching available ride earnings for settlement:', { userId: req.user.id });
+
+    // Get driver record
+    const driver = await prisma.driver.findUnique({
+      where: { userId: req.user.id }
+    });
+
+    if (!driver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+
+    // Get all completed rides with pending settlement
+    const availableRides = await prisma.ride.findMany({
+      where: {
+        driverId: driver.id,
+        status: 'COMPLETED',
+        paymentStatus: 'PAID',
+        settlementStatus: 'PENDING'
+      },
+      select: {
+        id: true,
+        rideId: true,
+        rideRequest: {
+          select: {
+            requestId: true,
+            currency: true
+          }
+        },
+        driverEarnings: true,
+        totalFare: true,
+        platformFee: true,
+        createdAt: true,
+        completedAt: true
+      },
+      orderBy: {
+        completedAt: 'asc'
+      }
+    });
+
+    // Group by currency (using GMD as default for rides)
+    const earningsByCurrency = new Map<string, { amount: number; rides: any[] }>();
+    
+    availableRides.forEach(ride => {
+      const currency = ride.rideRequest?.currency || 'GMD'; // Get currency from rideRequest or default to GMD
+      const earnings = parseFloat(ride.driverEarnings.toString());
+      
+      if (!earningsByCurrency.has(currency)) {
+        earningsByCurrency.set(currency, { amount: 0, rides: [] });
+      }
+      
+      const currencyData = earningsByCurrency.get(currency)!;
+      currencyData.amount += earnings;
+      currencyData.rides.push({
+        id: ride.id,
+        rideId: ride.rideId,
+        requestId: ride.rideRequest?.requestId,
+        driverEarnings: earnings,
+        totalFare: parseFloat(ride.totalFare.toString()),
+        platformFee: parseFloat(ride.platformFee.toString()),
+        createdAt: ride.createdAt,
+        completedAt: ride.completedAt
+      });
+    });
+
+    // Convert to array format
+    const earnings = Array.from(earningsByCurrency.entries())
+      .map(([currency, data]) => ({
+        currency,
+        amount: Math.round(data.amount * 100) / 100,
+        currencySymbol: getCurrencySymbol(currency),
+        ridesCount: data.rides.length,
+        rides: data.rides
+      }));
+
+    logger.info('Available ride earnings calculated successfully:', { 
+      userId: req.user.id,
+      driverId: driver.id,
+      earnings: earnings.map(e => ({ currency: e.currency, amount: e.amount, ridesCount: e.ridesCount }))
+    });
+
+    res.json({
+      earnings,
+      count: earnings.length,
+      totalRides: availableRides.length
+    });
+  } catch (error) {
+    logger.error('Error getting available ride earnings:', error);
+    res.status(500).json({ 
+      message: 'Failed to get available ride earnings',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
 // Get seller's bank accounts
 export const getBankAccounts = async (req: AuthRequest, res: Response) => {
   try {
@@ -209,7 +310,7 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
-    const { amount, currency, type, bankAccountId, walletId } = req.body;
+    const { amount, currency, type, bankAccountId, walletId, channel = 'ECOMMERCE' } = req.body;
 
     // Validate required fields
     if (!amount || !currency || !type) {
@@ -232,6 +333,13 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
       });
     }
 
+    // Validate channel
+    if (!['ECOMMERCE', 'RIDES'].includes(channel)) {
+      return res.status(400).json({
+        message: 'Invalid channel. Must be ECOMMERCE or RIDES'
+      });
+    }
+
     // Validate payment method selection
     if (type === 'BANK_TRANSFER' && !bankAccountId) {
       return res.status(400).json({
@@ -250,12 +358,18 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
       amount,
       currency,
       type,
+      channel,
       bankAccountId,
       walletId
     });
 
-    // Enhanced financial integrity check
-    const settlementData = await calculateSettlementData(req.user.id, currency, amount);
+    // Calculate settlement data based on channel
+    let settlementData;
+    if (channel === 'ECOMMERCE') {
+      settlementData = await calculateEcommerceSettlementData(req.user.id, currency, amount);
+    } else {
+      settlementData = await calculateRidesSettlementData(req.user.id, currency, amount);
+    }
     
     if (!settlementData.isValid) {
       return res.status(400).json({
@@ -264,7 +378,7 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
     }
 
     // Generate unique reference
-    const reference = `SETTLE-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const reference = `SETTLE-${channel}-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
     // Create settlement record with enhanced tracking
     const settlement = await prisma.settlement.create({
@@ -274,21 +388,26 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
         currency,
         status: 'PENDING',
         type,
+        channel,
         reference,
         bankAccountId: type === 'BANK_TRANSFER' ? bankAccountId : null,
         walletId: type === 'WALLET_TRANSFER' ? walletId : null,
-        includedOrderIds: settlementData.includedOrderIds || [],
-        totalOrdersCount: settlementData.totalOrdersCount || 0,
+        includedOrderIds: channel === 'ECOMMERCE' ? settlementData.includedOrderIds : null,
+        includedRideIds: channel === 'RIDES' ? settlementData.includedRideIds : null,
+        totalOrdersCount: channel === 'ECOMMERCE' ? settlementData.totalOrdersCount : 0,
+        totalRidesCount: channel === 'RIDES' ? settlementData.totalRidesCount : 0,
         serviceFeesDeducted: settlementData.serviceFeesDeducted || 0,
         netAmountBeforeFees: settlementData.grossAmount || 0,
         metadata: {
           requestedAt: new Date().toISOString(),
           requestSource: 'mobile_app',
+          channel,
           calculationDetails: {
             grossAmount: settlementData.grossAmount,
             serviceFees: settlementData.serviceFeesDeducted,
             netAmount: settlementData.netAmount,
-            ordersIncluded: settlementData.includedOrderIds
+            ordersIncluded: channel === 'ECOMMERCE' ? settlementData.includedOrderIds : null,
+            ridesIncluded: channel === 'RIDES' ? settlementData.includedRideIds : null
           }
         }
       },
@@ -298,16 +417,20 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
       }
     });
 
-    // Update orders to SETTLED status to prevent double-counting
-    if (settlementData.includedOrderIds && settlementData.includedOrderIds.length > 0) {
+    // Update orders/rides to SETTLED status to prevent double-counting
+    if (channel === 'ECOMMERCE' && settlementData.includedOrderIds && settlementData.includedOrderIds.length > 0) {
       await updateOrdersToSettled(settlementData.includedOrderIds);
+    } else if (channel === 'RIDES' && settlementData.includedRideIds && settlementData.includedRideIds.length > 0) {
+      await updateRidesToSettled(settlementData.includedRideIds);
     }
 
     logger.info('Settlement request created successfully:', { 
       userId: req.user.id,
       settlementId: settlement.id,
       reference: settlement.reference,
-      ordersUpdated: settlementData.totalOrdersCount
+      channel,
+      ordersUpdated: channel === 'ECOMMERCE' ? settlementData.totalOrdersCount : 0,
+      ridesUpdated: channel === 'RIDES' ? settlementData.totalRidesCount : 0
     });
 
     res.status(201).json({
@@ -333,17 +456,56 @@ export const getSettlementHistory = async (req: AuthRequest, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = (page - 1) * limit;
+    const channel = req.query.channel as string; // Optional filter by channel
+    const period = req.query.period as string; // Optional filter by period: today, week, month, all
 
     logger.info('Fetching settlement history:', { 
       userId: req.user.id,
       page,
-      limit
+      limit,
+      channel,
+      period
     });
+
+    // Build where clause
+    const whereClause: any = { userId: req.user.id };
+    
+    // Add channel filter
+    if (channel && ['ECOMMERCE', 'RIDES'].includes(channel)) {
+      whereClause.channel = channel;
+    }
+
+    // Add date filter based on period
+    if (period && period !== 'all') {
+      const now = new Date();
+      let startDate: Date;
+
+      switch (period) {
+        case 'today':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'week':
+          const weekStart = new Date(now);
+          weekStart.setDate(now.getDate() - now.getDay());
+          weekStart.setHours(0, 0, 0, 0);
+          startDate = weekStart;
+          break;
+        case 'month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        default:
+          startDate = new Date(0); // Beginning of time
+      }
+
+      whereClause.createdAt = {
+        gte: startDate
+      };
+    }
 
     // Get settlements with pagination
     const [settlements, totalCount] = await Promise.all([
       prisma.settlement.findMany({
-        where: { userId: req.user.id },
+        where: whereClause,
         include: {
           bankAccount: true,
           wallet: true
@@ -353,14 +515,15 @@ export const getSettlementHistory = async (req: AuthRequest, res: Response) => {
         take: limit
       }),
       prisma.settlement.count({
-        where: { userId: req.user.id }
+        where: whereClause
       })
     ]);
 
     logger.info('Settlement history fetched successfully:', { 
       userId: req.user.id,
       count: settlements.length,
-      totalCount
+      totalCount,
+      period
     });
 
     res.json({
@@ -620,7 +783,7 @@ export const createWallet = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Get settlement details with included orders
+// Get settlement details with included orders/rides
 export const getSettlementDetails = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user?.id) {
@@ -654,10 +817,10 @@ export const getSettlementDetails = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: 'Settlement not found' });
     }
 
-    // Get included orders with order numbers
     let includedOrders: Array<{ id: string; orderNumber: string; createdAt: Date; totalAmount: number; currencyCode: string }> = [];
+    let includedRides: Array<{ id: string; rideId: string; createdAt: Date; driverEarnings: number; totalFare: number; currency: string }> = [];
     
-    if (settlement.includedOrderIds && Array.isArray(settlement.includedOrderIds)) {
+    if (settlement.channel === 'ECOMMERCE' && settlement.includedOrderIds && Array.isArray(settlement.includedOrderIds)) {
       const orderIds = settlement.includedOrderIds as string[];
       
       if (orderIds.length > 0) {
@@ -683,17 +846,53 @@ export const getSettlementDetails = async (req: AuthRequest, res: Response) => {
           totalAmount: parseFloat(order.totalAmount.toString())
         }));
       }
+    } else if (settlement.channel === 'RIDES' && settlement.includedRideIds && Array.isArray(settlement.includedRideIds)) {
+      const rideIds = settlement.includedRideIds as string[];
+      
+      if (rideIds.length > 0) {
+        const rides = await prisma.ride.findMany({
+          where: {
+            id: { in: rideIds }
+          },
+          select: {
+            id: true,
+            rideId: true,
+            createdAt: true,
+            driverEarnings: true,
+            totalFare: true,
+            rideRequest: {
+              select: {
+                currency: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        });
+
+        // Convert Decimal to number and extract currency from rideRequest
+        includedRides = rides.map(ride => ({
+          ...ride,
+          driverEarnings: parseFloat(ride.driverEarnings.toString()),
+          totalFare: parseFloat(ride.totalFare.toString()),
+          currency: ride.rideRequest?.currency || 'GMD'
+        }));
+      }
     }
 
     logger.info('Settlement details fetched successfully:', { 
       userId: req.user.id,
       settlementId,
-      includedOrdersCount: includedOrders.length
+      channel: settlement.channel,
+      includedOrdersCount: includedOrders.length,
+      includedRidesCount: includedRides.length
     });
 
     res.json({
       settlement,
-      includedOrders
+      includedOrders,
+      includedRides
     });
   } catch (error) {
     logger.error('Error getting settlement details:', error);
@@ -704,10 +903,10 @@ export const getSettlementDetails = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Helper function to calculate settlement data with enhanced financial integrity
-async function calculateSettlementData(userId: string, currency: string, requestedAmount: number) {
+// Helper function to calculate ecommerce settlement data
+async function calculateEcommerceSettlementData(userId: string, currency: string, requestedAmount: number) {
   try {
-    logger.info('Starting settlement calculation:', {
+    logger.info('Starting ecommerce settlement calculation:', {
       userId,
       currency,
       requestedAmount
@@ -873,7 +1072,203 @@ async function calculateSettlementData(userId: string, currency: string, request
       orderDetails: includedOrders
     };
   } catch (error) {
-    logger.error('Error calculating settlement data:', error);
+    logger.error('Error calculating ecommerce settlement data:', error);
+    return {
+      isValid: false,
+      error: 'Failed to calculate settlement data'
+    };
+  }
+}
+
+// Helper function to calculate rides settlement data
+async function calculateRidesSettlementData(userId: string, currency: string, requestedAmount: number) {
+  try {
+    logger.info('Starting rides settlement calculation:', {
+      userId,
+      currency,
+      requestedAmount
+    });
+
+    // Get driver record
+    const driver = await prisma.driver.findUnique({
+      where: { userId }
+    });
+
+    if (!driver) {
+      return {
+        isValid: false,
+        error: 'Driver not found'
+      };
+    }
+
+    // Get all completed rides with pending settlement
+    const availableRides = await prisma.ride.findMany({
+      where: {
+        driverId: driver.id,
+        status: 'COMPLETED',
+        paymentStatus: 'PAID',
+        settlementStatus: 'PENDING'
+      },
+      select: {
+        id: true,
+        rideId: true,
+        driverEarnings: true,
+        totalFare: true,
+        platformFee: true,
+        createdAt: true,
+        completedAt: true,
+        rideRequest: {
+          select: {
+            id: true
+          }
+        }
+      },
+      orderBy: {
+        completedAt: 'asc' // Process oldest rides first (FIFO)
+      }
+    });
+
+    logger.info('Available rides found:', {
+      count: availableRides.length,
+      rides: availableRides.map(r => ({ id: r.id, earnings: r.driverEarnings.toString() }))
+    });
+
+    if (availableRides.length === 0) {
+      return {
+        isValid: false,
+        error: 'No available rides for settlement in this currency'
+      };
+    }
+
+    // Get service fees for these specific ride requests
+    const rideRequestIds = availableRides.map(ride => ride.rideRequest.id);
+    const serviceFees = await prisma.externalTransaction.findMany({
+      where: {
+        rideRequestId: { in: rideRequestIds },
+        transactionType: 'SERVICE_FEE',
+        status: 'SUCCESS',
+        appService: 'RIDES'
+      },
+      select: {
+        rideRequestId: true,
+        amount: true,
+        currencyCode: true
+      }
+    });
+
+    logger.info('Service fees found for rides:', {
+      count: serviceFees.length,
+      fees: serviceFees.map(f => ({ rideRequestId: f.rideRequestId, amount: f.amount.toString() }))
+    });
+
+    // Calculate total available earnings and service fees
+    let totalEarnings = 0;
+    let totalServiceFees = 0;
+    const rideDetails: any[] = [];
+
+    for (const ride of availableRides) {
+      const earnings = parseFloat(ride.driverEarnings.toString());
+      const rideServiceFees = serviceFees
+        .filter(fee => fee.rideRequestId === ride.rideRequest.id)
+        .reduce((sum, fee) => sum + parseFloat(fee.amount.toString()), 0);
+      
+      totalEarnings += earnings;
+      totalServiceFees += rideServiceFees;
+      
+      rideDetails.push({
+        rideId: ride.id,
+        rideRequestId: ride.rideId,
+        earnings: earnings,
+        totalFare: parseFloat(ride.totalFare.toString()),
+        platformFee: parseFloat(ride.platformFee.toString()),
+        serviceFees: rideServiceFees
+      });
+    }
+
+    // Round to 2 decimal places
+    const roundedAvailableAmount = Math.round(totalEarnings * 100) / 100;
+    const roundedRequestedAmount = Math.round(requestedAmount * 100) / 100;
+
+    logger.info('Calculation summary:', {
+      totalEarnings,
+      totalServiceFees,
+      roundedAvailableAmount,
+      roundedRequestedAmount,
+      difference: roundedRequestedAmount - roundedAvailableAmount
+    });
+
+    // Check if requested amount is available
+    if (roundedRequestedAmount > roundedAvailableAmount) {
+      return {
+        isValid: false,
+        error: `Insufficient available earnings. Available: ${roundedAvailableAmount.toFixed(2)}, Requested: ${roundedRequestedAmount.toFixed(2)}`
+      };
+    }
+
+    // If requested amount equals available amount, include all rides
+    if (Math.abs(roundedRequestedAmount - roundedAvailableAmount) < 0.01) {
+      logger.info('Requested amount equals available amount, including all rides');
+      return {
+        isValid: true,
+        includedRideIds: rideDetails.map(ride => ride.rideId),
+        totalRidesCount: rideDetails.length,
+        grossAmount: totalEarnings,
+        serviceFeesDeducted: totalServiceFees,
+        netAmount: roundedAvailableAmount,
+        rideDetails: rideDetails
+      };
+    }
+
+    // If requested amount is less than available, select rides to match exactly
+    let remainingAmount = roundedRequestedAmount;
+    let includedRides: any[] = [];
+    let includedEarnings = 0;
+
+    for (const rideDetail of rideDetails) {
+      if (rideDetail.earnings <= remainingAmount) {
+        // Include this entire ride
+        includedRides.push(rideDetail);
+        includedEarnings += rideDetail.earnings;
+        remainingAmount -= rideDetail.earnings;
+        
+        if (remainingAmount <= 0.01) break; // Allow for small rounding differences
+      } else {
+        // This ride would exceed the requested amount, so we can't include it
+        break;
+      }
+    }
+
+    if (includedRides.length === 0) {
+      return {
+        isValid: false,
+        error: 'No suitable rides found for the requested settlement amount'
+      };
+    }
+
+    const roundedFinalAmount = Math.round(includedEarnings * 100) / 100;
+
+    // Calculate service fees for included rides
+    const includedServiceFees = includedRides.reduce((sum, ride) => sum + ride.serviceFees, 0);
+    
+    logger.info('Final settlement calculation:', {
+      includedRidesCount: includedRides.length,
+      includedEarnings,
+      includedServiceFees,
+      roundedFinalAmount,
+      remainingAmount
+    });
+    
+    return {
+      isValid: true,
+      includedRideIds: includedRides.map(ride => ride.rideId),
+      totalRidesCount: includedRides.length,
+      grossAmount: includedEarnings,
+      serviceFeesDeducted: includedServiceFees,
+      netAmount: roundedFinalAmount,
+      rideDetails: includedRides
+    };
+  } catch (error) {
+    logger.error('Error calculating rides settlement data:', error);
     return {
       isValid: false,
       error: 'Failed to calculate settlement data'
@@ -903,6 +1298,32 @@ async function updateOrdersToSettled(orderIds: string[]) {
     return result.count;
   } catch (error) {
     logger.error('Error updating orders to SETTLED status:', error);
+    throw error;
+  }
+}
+
+// Helper function to update rides to SETTLED status
+async function updateRidesToSettled(rideIds: string[]) {
+  try {
+    const result = await prisma.ride.updateMany({
+      where: {
+        id: { in: rideIds },
+        settlementStatus: 'PENDING' // Only update PENDING rides to prevent double updates
+      },
+      data: {
+        settlementStatus: 'SETTLED',
+        updatedAt: new Date()
+      }
+    });
+
+    logger.info('Rides updated to SETTLED status:', {
+      rideIds,
+      updatedCount: result.count
+    });
+
+    return result.count;
+  } catch (error) {
+    logger.error('Error updating rides to SETTLED status:', error);
     throw error;
   }
 }

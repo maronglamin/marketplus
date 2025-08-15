@@ -3,11 +3,11 @@ import Constants from 'expo-constants';
 // Centralized environment configuration
 export const ENV_CONFIG = {
   // API Configuration
-  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || `http://192.168.137.177:3000`,
+  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || `http://192.168.0.199:3000`,
   API_TIMEOUT: 10000,
   
   // Local IP for development
-  LOCAL_IP: Constants.expoConfig?.extra?.localIp || '192.168.137.177',
+  LOCAL_IP: Constants.expoConfig?.extra?.localIp || '192.168.0.199',
   
   // App Configuration
   APP_NAME: 'SNAP',

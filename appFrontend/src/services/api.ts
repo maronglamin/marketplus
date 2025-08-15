@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ENV_CONFIG } from '../config/env';
+import { rateLimitedFetch, rateLimiter } from '../utils/rateLimiter';
 
 console.log('Initializing API with URL:', ENV_CONFIG.API_BASE_URL);
 
@@ -32,6 +33,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     console.log('Response received:', response.status, response.config.url);
+    // Record successful request for rate limiting
+    if (response.config.url) {
+      rateLimiter.recordSuccess(response.config.url);
+    }
     return response;
   },
   async (error) => {
@@ -43,6 +48,12 @@ api.interceptors.response.use(
     if (!error.response) {
       console.error('Network error:', error.config.url);
       throw new Error('Network error. Please check your connection and try again.');
+    }
+    
+    // Handle 429 rate limit errors
+    if (error.response.status === 429) {
+      console.warn('Rate limit exceeded for:', error.config.url);
+      // The rate limiter will handle retry logic
     }
     
     console.error('Response error:', {

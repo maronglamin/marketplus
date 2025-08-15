@@ -15,6 +15,7 @@ export interface Interest {
   paymentMethod?: string;
   paymentStatus?: string;
   createdAt: string;
+  updatedAt: string;
   expiresAt?: string;
   product: {
     id: string;
@@ -22,6 +23,12 @@ export interface Interest {
     price: number;
     currencyCode: string;
     image?: string;
+    seller?: {
+      id: string;
+      name: string;
+      businessName?: string;
+      image?: string;
+    };
   };
   customer?: {
     id: string;
@@ -46,6 +53,11 @@ export const interestService = {
 
   async getCustomerInterests(page: number = 1, limit: number = 6): Promise<InterestListResponse> {
     const response = await api.get(`/api/products/interests/customer?page=${page}&limit=${limit}`);
+    return response.data;
+  },
+
+  async getChatListInterests(page: number = 1, limit: number = 50): Promise<InterestListResponse> {
+    const response = await api.get(`/api/products/interests/chat-list?page=${page}&limit=${limit}`);
     return response.data;
   },
 

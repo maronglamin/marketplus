@@ -17,9 +17,20 @@ if (result.error) {
 import { logger } from './utils/logger';
 import app from './app';
 import { PrismaClient } from '@prisma/client';
+import { createServer } from 'http';
+import { WebSocketService } from './services/websocketService';
 
 // Initialize Prisma client
 const prisma = new PrismaClient();
+
+// Create HTTP server
+const server = createServer(app);
+
+// Initialize WebSocket service
+const webSocketService = new WebSocketService(server);
+
+// Make WebSocket service available globally for other services
+(global as any).webSocketService = webSocketService;
 
 // Handle graceful shutdown
 async function shutdown(signal: string) {
@@ -30,8 +41,11 @@ async function shutdown(signal: string) {
     await prisma.$disconnect();
     logger.info('Database connection closed');
     
-    // Exit process
-    process.exit(0);
+    // Close server
+    server.close(() => {
+      logger.info('Server closed');
+      process.exit(0);
+    });
   } catch (error) {
     logger.error('Error during shutdown:', error);
     process.exit(1);
@@ -44,8 +58,9 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Start server
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
-  logger.info(`Server is running on port ${PORT}`);
+server.listen(PORT, () => {
+  logger.info(`🚀 Server is running on port ${PORT}`);
+  logger.info(`🔌 WebSocket service is ready for real-time updates`);
 });
 
 // Handle unhandled promise rejections

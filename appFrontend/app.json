@@ -20,7 +20,7 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to location to show your current location on the map and provide ride services."
       },
       "config": {
-        "googleMapsApiKey": "YOUR_IOS_GOOGLE_MAPS_API_KEY"
+        "googleMapsApiKey": "AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo"
       }
     },
     "android": {
@@ -37,7 +37,7 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
+          "apiKey": "AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo"
         }
       }
     },
@@ -45,9 +45,9 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "localIp": "192.168.137.177",
+      "localIp": "192.168.0.199",
       "stripePublishableKey": "pk_test_51G7XqgIFQtDBTvihaeU6FZCsQuHg1NQIkdd8CTGL0ZulPMIjQZUmFSW80gOzDpGe5UezYoqkc55WmQhpyYtZdLmk00QmAVRon0",
-      "googlePlacesApiKey": "YOUR_GOOGLE_PLACES_API_KEY",
+      "googlePlacesApiKey": "AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo",
       "eas": {
         "projectId": "04ad20e1-cff1-4422-a7b3-bdb123420968"
       }
@@ -63,7 +63,7 @@
       [
         "react-native-maps",
         {
-          "googleMapsApiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
+          "googleMapsApiKey": "AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo"
         }
       ]
     ],

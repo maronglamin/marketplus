@@ -34,6 +34,7 @@ export interface SettlementRequest {
   currency: string;
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
   type: 'BANK_TRANSFER' | 'WALLET_TRANSFER';
+  channel: 'ECOMMERCE' | 'RIDES';
   reference: string;
   bankAccountId?: string;
   walletId?: string;
@@ -43,7 +44,9 @@ export interface SettlementRequest {
   bankAccount?: BankAccount;
   wallet?: Wallet;
   includedOrderIds?: string[];
+  includedRideIds?: string[];
   totalOrdersCount?: number;
+  totalRidesCount?: number;
   serviceFeesDeducted?: number;
   netAmountBeforeFees?: number;
   metadata?: any;
@@ -57,9 +60,19 @@ export interface IncludedOrder {
   currencyCode: string;
 }
 
+export interface IncludedRide {
+  id: string;
+  rideId: string;
+  createdAt: string;
+  driverEarnings: number;
+  totalFare: number;
+  currency: string;
+}
+
 export interface SettlementDetails {
   settlement: SettlementRequest;
   includedOrders: IncludedOrder[];
+  includedRides: IncludedRide[];
 }
 
 export interface AvailableRevenue {
@@ -68,16 +81,36 @@ export interface AvailableRevenue {
   currencySymbol: string;
 }
 
+export interface RideDetail {
+  id: string;
+  rideId: string;
+  requestId?: string;
+  driverEarnings: number;
+  totalFare: number;
+  platformFee: number;
+  createdAt: string;
+  completedAt: string;
+}
+
+export interface AvailableRideEarnings {
+  currency: string;
+  amount: number;
+  currencySymbol: string;
+  ridesCount: number;
+  rides: RideDetail[];
+}
+
 export interface SettlementRequestData {
   amount: number;
   currency: string;
   type: 'BANK_TRANSFER' | 'WALLET_TRANSFER';
+  channel?: 'ECOMMERCE' | 'RIDES';
   bankAccountId?: string;
   walletId?: string;
 }
 
 class SettlementService {
-  // Get available revenue for settlement
+  // Get available revenue for settlement (ecommerce)
   async getAvailableRevenue(): Promise<AvailableRevenue[]> {
     try {
       const response = await api.get('/api/settlements/available-revenue');
@@ -88,6 +121,21 @@ class SettlementService {
         throw new Error(error.response.data.message);
       } else {
         throw new Error('Failed to fetch available revenue');
+      }
+    }
+  }
+
+  // Get available ride earnings for settlement (rides)
+  async getAvailableRideEarnings(): Promise<AvailableRideEarnings[]> {
+    try {
+      const response = await api.get('/api/settlements/available-ride-earnings');
+      return response.data.earnings;
+    } catch (error: any) {
+      console.error('Error fetching available ride earnings:', error);
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      } else {
+        throw new Error('Failed to fetch available ride earnings');
       }
     }
   }
@@ -176,7 +224,7 @@ class SettlementService {
   }
 
   // Get settlement history
-  async getSettlementHistory(page: number = 1, limit: number = 20): Promise<{
+  async getSettlementHistory(page: number = 1, limit: number = 20, channel?: 'ECOMMERCE' | 'RIDES', period?: 'today' | 'week' | 'month' | 'all'): Promise<{
     settlements: SettlementRequest[];
     totalCount: number;
     currentPage: number;
@@ -184,7 +232,17 @@ class SettlementService {
     hasMore: boolean;
   }> {
     try {
-      const response = await api.get(`/api/settlements/history?page=${page}&limit=${limit}`);
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      params.append('limit', limit.toString());
+      if (channel) {
+        params.append('channel', channel);
+      }
+      if (period) {
+        params.append('period', period);
+      }
+      
+      const response = await api.get(`/api/settlements/history?${params.toString()}`);
       return response.data;
     } catch (error: any) {
       console.error('Error fetching settlement history:', error);

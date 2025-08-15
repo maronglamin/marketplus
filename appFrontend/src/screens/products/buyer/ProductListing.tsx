@@ -17,14 +17,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import type { AppStackParamList } from '../navigation/AppNavigator';
-import { productService, type Product } from '../services/productService';
+import type { AppStackParamList } from '../../../navigation/AppNavigator';
+import { productService, type Product } from '../../../services/productService';
 import { format, differenceInHours, differenceInDays, differenceInWeeks, differenceInMonths } from 'date-fns';
 import Constants from 'expo-constants';
-import { getImageUrl } from '../config/env';
+import { getImageUrl } from '../../../config/env';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.137.177';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.199';
 
 type ProductListingNavigationProp = NativeStackNavigationProp<AppStackParamList, 'ProductListing'>;
 

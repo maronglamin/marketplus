@@ -942,7 +942,7 @@ router.get('/:productId', authenticate, async (req: AuthRequest, res) => {
       ratingCount: product.ratingCount,
       description: `Experience premium quality with this ${product.title}. Perfect for your needs.\n\n${product.description || ''}`,
       images: product.images.length > 0 
-        ? product.images.map(img => `http://192.168.137.177:3000${img.imageUrl}`)
+        ? product.images.map(img => `http://192.168.0.199:3000${img.imageUrl}`)
         : ['https://via.placeholder.com/400x300?text=No+Image'],
       seller: {
         name: product.seller.sellerKyc?.businessName || `${product.seller.firstName} ${product.seller.lastName}`,
@@ -1270,6 +1270,121 @@ router.get('/interests/user', authenticate, async (req: AuthRequest, res) => {
     logger.error('Error fetching user product interests:', error);
     res.status(500).json({ 
       error: 'Failed to fetch product interests',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get all interests for chat list (with seller information)
+router.get('/interests/chat-list', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const skip = (page - 1) * limit;
+
+    logger.info('Fetching interests for chat list:', { 
+      userId: req.user.id,
+      page,
+      limit
+    });
+
+    const [interests, total] = await Promise.all([
+      prisma.productOrderInterest.findMany({
+        where: {
+          userId: req.user.id
+        },
+        include: {
+          product: {
+            select: {
+              id: true,
+              title: true,
+              price: true,
+              currencyCode: true,
+              images: {
+                where: { isPrimary: true },
+                take: 1
+              },
+                              seller: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    sellerKyc: {
+                      select: {
+                        businessName: true
+                      }
+                    }
+                  }
+                }
+            }
+          }
+        },
+        orderBy: {
+          updatedAt: 'desc'
+        },
+        skip,
+        take: limit
+      }),
+      prisma.productOrderInterest.count({
+        where: {
+          userId: req.user.id
+        }
+      })
+    ]);
+
+    const transformedInterests = interests.map(interest => ({
+      id: interest.id,
+      productId: interest.productId,
+      quantity: interest.quantity,
+      originalPrice: parseFloat(interest.originalPrice.toString()),
+      discountPrice: interest.discountPrice ? parseFloat(interest.discountPrice.toString()) : null,
+      totalAmount: parseFloat(interest.totalAmount.toString()),
+      currencyCode: interest.currencyCode,
+      status: interest.status,
+      preferredDeliveryDate: interest.preferredDeliveryDate,
+      deliveryAddress: interest.deliveryAddress,
+      contactPhone: interest.contactPhone,
+      paymentMethod: interest.paymentMethod,
+      paymentStatus: interest.paymentStatus,
+      createdAt: interest.createdAt,
+      updatedAt: interest.updatedAt,
+      expiresAt: interest.expiresAt,
+      product: {
+        id: interest.product.id,
+        title: interest.product.title,
+        price: parseFloat(interest.product.price.toString()),
+        currencyCode: interest.product.currencyCode,
+        image: interest.product.images[0]?.imageUrl || null,
+        seller: interest.product.seller ? {
+          id: interest.product.seller.id,
+          name: `${interest.product.seller.firstName} ${interest.product.seller.lastName}`,
+          businessName: interest.product.seller.sellerKyc?.businessName || `${interest.product.seller.firstName} ${interest.product.seller.lastName}`,
+          image: null // No profile image field in User model
+        } : null
+      }
+    }));
+
+    logger.info('Chat list interests fetched successfully:', { 
+      userId: req.user.id,
+      count: transformedInterests.length,
+      total
+    });
+
+    res.json({
+      interests: transformedInterests,
+      total,
+      page,
+      limit,
+      hasMore: skip + transformedInterests.length < total
+    });
+  } catch (error) {
+    logger.error('Error fetching chat list interests:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch chat list interests',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

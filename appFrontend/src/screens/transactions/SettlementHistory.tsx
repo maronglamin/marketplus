@@ -29,10 +29,12 @@ export function SettlementHistory() {
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'all'>('all');
+  const [selectedChannel, setSelectedChannel] = useState<'ECOMMERCE' | 'RIDES'>('ECOMMERCE');
 
   useEffect(() => {
     loadSettlements();
-  }, []);
+  }, [selectedPeriod, selectedChannel]);
 
   const loadSettlements = async (page: number = 1, refresh: boolean = false) => {
     try {
@@ -46,7 +48,7 @@ export function SettlementHistory() {
         setLoadingMore(true);
       }
 
-      const response = await settlementService.getSettlementHistory(page, 20);
+      const response = await settlementService.getSettlementHistory(page, 20, selectedChannel, selectedPeriod);
       
       if (page === 1) {
         setSettlements(response.settlements);
@@ -58,7 +60,7 @@ export function SettlementHistory() {
       setHasMore(response.hasMore);
     } catch (error: any) {
       console.error('Error loading settlements:', error);
-      setError(error.message || 'Failed to load settlement history');
+      setError(error.message || `Failed to load ${selectedChannel === 'ECOMMERCE' ? 'ecommerce' : 'ride'} settlement history`);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -68,6 +70,18 @@ export function SettlementHistory() {
 
   const handleRefresh = () => {
     loadSettlements(1, true);
+  };
+
+  const handlePeriodChange = (period: 'today' | 'week' | 'month' | 'all') => {
+    setSelectedPeriod(period);
+    setCurrentPage(1);
+    setHasMore(true);
+  };
+
+  const handleChannelChange = (channel: 'ECOMMERCE' | 'RIDES') => {
+    setSelectedChannel(channel);
+    setCurrentPage(1);
+    setHasMore(true);
   };
 
   const loadMore = () => {
@@ -261,16 +275,20 @@ export function SettlementHistory() {
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <Ionicons name="receipt-outline" size={64} color="#9CA3AF" />
-      <Text style={styles.emptyStateTitle}>No Settlement History</Text>
+      <Text style={styles.emptyStateTitle}>
+        No {selectedChannel === 'ECOMMERCE' ? 'Ecommerce' : 'Ride'} Settlement History
+      </Text>
       <Text style={styles.emptyStateText}>
-        You haven't made any settlement requests yet. Your settlement history will appear here once you submit requests.
+        You haven't made any {selectedChannel === 'ECOMMERCE' ? 'ecommerce' : 'ride'} settlement requests yet. Your {selectedChannel === 'ECOMMERCE' ? 'ecommerce' : 'ride'} settlement history will appear here once you submit requests.
       </Text>
       <TouchableOpacity
         style={styles.newSettlementButton}
-        onPress={() => navigation.navigate('SettlementRequest')}
+        onPress={() => navigation.navigate(selectedChannel === 'ECOMMERCE' ? 'SettlementRequest' : 'RideSettlementRequest')}
       >
         <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-        <Text style={styles.newSettlementButtonText}>New Settlement Request</Text>
+        <Text style={styles.newSettlementButtonText}>
+          New {selectedChannel === 'ECOMMERCE' ? 'Ecommerce' : 'Ride'} Settlement Request
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -290,7 +308,9 @@ export function SettlementHistory() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
-          <Text style={styles.loadingText}>Loading settlement history...</Text>
+          <Text style={styles.loadingText}>
+            Loading {selectedChannel === 'ECOMMERCE' ? 'ecommerce' : 'ride'} settlement history...
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -307,7 +327,9 @@ export function SettlementHistory() {
             >
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
-            <Text style={styles.title}>Settlement History</Text>
+            <Text style={styles.title}>
+              {selectedChannel === 'ECOMMERCE' ? 'Ecommerce Settlement History' : 'Ride Settlement History'}
+            </Text>
             <View style={styles.placeholder} />
           </View>
           <View style={styles.errorContainer}>
@@ -337,13 +359,123 @@ export function SettlementHistory() {
           >
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.title}>Settlement History</Text>
+          <Text style={styles.title}>
+            {selectedChannel === 'ECOMMERCE' ? 'Ecommerce Settlement History' : 'Ride Settlement History'}
+          </Text>
           <TouchableOpacity
-            onPress={() => navigation.navigate('SettlementRequest')}
+            onPress={() => navigation.navigate(selectedChannel === 'ECOMMERCE' ? 'SettlementRequest' : 'RideSettlementRequest')}
             style={styles.newButton}
           >
             <Ionicons name="add-circle-outline" size={24} color="#2563EB" />
           </TouchableOpacity>
+        </View>
+
+        {/* Channel Filter */}
+        <View style={styles.filterContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScrollContent}
+          >
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                selectedChannel === 'ECOMMERCE' && styles.filterButtonActive
+              ]}
+              onPress={() => handleChannelChange('ECOMMERCE')}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                selectedChannel === 'ECOMMERCE' && styles.filterButtonTextActive
+              ]}>
+                Ecommerce
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                selectedChannel === 'RIDES' && styles.filterButtonActive
+              ]}
+              onPress={() => handleChannelChange('RIDES')}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                selectedChannel === 'RIDES' && styles.filterButtonTextActive
+              ]}>
+                Rides
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        {/* Period Filter */}
+        <View style={styles.filterContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScrollContent}
+          >
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                selectedPeriod === 'today' && styles.filterButtonActive
+              ]}
+              onPress={() => handlePeriodChange('today')}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                selectedPeriod === 'today' && styles.filterButtonTextActive
+              ]}>
+                Today
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                selectedPeriod === 'week' && styles.filterButtonActive
+              ]}
+              onPress={() => handlePeriodChange('week')}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                selectedPeriod === 'week' && styles.filterButtonTextActive
+              ]}>
+                This Week
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                selectedPeriod === 'month' && styles.filterButtonActive
+              ]}
+              onPress={() => handlePeriodChange('month')}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                selectedPeriod === 'month' && styles.filterButtonTextActive
+              ]}>
+                This Month
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.filterButton,
+                selectedPeriod === 'all' && styles.filterButtonActive
+              ]}
+              onPress={() => handlePeriodChange('all')}
+            >
+              <Text style={[
+                styles.filterButtonText,
+                selectedPeriod === 'all' && styles.filterButtonTextActive
+              ]}>
+                All Time
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
 
         {settlements.length === 0 ? (
@@ -405,6 +537,35 @@ const styles = StyleSheet.create({
   },
   newButton: {
     padding: 8,
+  },
+  filterContainer: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  filterScrollContent: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  filterButtonActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  filterButtonTextActive: {
+    color: '#FFFFFF',
   },
   placeholder: {
     width: 40,

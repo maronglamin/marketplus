@@ -141,6 +141,17 @@ class StripeService {
         metadata: metadata
       });
 
+      console.log('Making API request to create payment intent:', {
+        url: '/api/payments/create-payment-intent',
+        data: {
+          amount: amountInSmallestUnit,
+          currency: currency.toLowerCase(),
+          orderId,
+          customerId,
+          metadata
+        }
+      });
+
       const response = await api.post('/api/payments/create-payment-intent', {
         amount: amountInSmallestUnit, // Send the converted amount
         currency: currency.toLowerCase(),
@@ -148,17 +159,34 @@ class StripeService {
         customerId,
         metadata,
       });
+
+      console.log('Payment intent created successfully:', {
+        status: response.status,
+        data: response.data
+      });
+
       return response.data.paymentIntent;
     } catch (error: any) {
-      console.error('Error creating payment intent:', error);
+      console.error('Error creating payment intent:', {
+        error: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        hasResponse: !!error.response,
+        isNetworkError: !error.response,
+        isTimeout: error.code === 'ECONNABORTED'
+      });
       
       // Handle specific error cases
-      if (error.response?.status === 500) {
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timed out. Please check your internet connection and try again.');
+      } else if (error.response?.status === 401) {
+        throw new Error('Authentication failed. Please log in again.');
+      } else if (error.response?.status === 500) {
         throw new Error('Payment service is temporarily unavailable. Please try again later.');
       } else if (error.response?.status === 404) {
         throw new Error('Payment endpoint not found. Please contact support.');
       } else if (!error.response) {
-        throw new Error('Unable to connect to payment service. Please check your internet connection.');
+        throw new Error('Unable to connect to payment service. Please check your internet connection and try again.');
       }
       
       throw new Error(error.response?.data?.message || 'Failed to create payment intent');

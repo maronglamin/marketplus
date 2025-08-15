@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getAvailableRevenue,
+  getAvailableRideEarnings,
   getBankAccounts,
   getWallets,
   createSettlementRequest,
@@ -13,8 +14,11 @@ import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
 
-// Get available revenue for settlement
+// Get available revenue for settlement (ecommerce)
 router.get('/available-revenue', authenticate, getAvailableRevenue);
+
+// Get available ride earnings for settlement (rides)
+router.get('/available-ride-earnings', authenticate, getAvailableRideEarnings);
 
 // Get seller's bank accounts
 router.get('/bank-accounts', authenticate, getBankAccounts);

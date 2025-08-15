@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { Home } from './src/screens/Home';
-import { ProductDetail } from './src/screens/ProductDetail';
+import { ProductDetail } from './src/screens/products/buyer/ProductDetail';
 import { ShowInterest } from './src/screens/ShowInterest';
 import { Onboarding } from './src/screens/Onboarding';
 import { SellerDashboard } from './src/screens/SellerDashboard';
@@ -15,8 +15,12 @@ import { Notifications } from './src/screens/Notifications';
 import { Settings } from './src/screens/Settings';
 import { InterestManagement } from './src/screens/InterestManagement';
 import { AccountSettings } from './src/screens/AccountSettings';
-import { AuthProvider } from './src/contexts/AuthContext';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { TokenNotificationProvider } from './src/contexts/TokenNotificationContext';
+import { useTokenNotification } from './src/contexts/TokenNotificationContext';
 import AuthNavigator from './src/navigation/AuthNavigator';
+import * as ExpoNotifications from 'expo-notifications';
+import { useEffect } from 'react';
 import { Platform, StatusBar, View } from 'react-native';
 import { enableScreens } from 'react-native-screens';
 
@@ -44,6 +48,35 @@ export type MainStackParamList = {
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const MainStack = createNativeStackNavigator<MainStackParamList>();
+
+function NotificationHandler() {
+  const { showTokenNotification } = useTokenNotification();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const subscription = ExpoNotifications.addNotificationReceivedListener((notification: ExpoNotifications.Notification) => {
+      const data = notification.request.content.data as any;
+      
+      if (data?.type === 'ride_token') {
+        console.log('Ride token notification received:', data);
+        
+        // Show the floating notification for the customer
+        showTokenNotification({
+          token: data.token,
+          rideId: data.rideId,
+          customerName: 'You', // This is for the customer
+          customerId: user?.id || 'current-user', // Use actual user ID
+          driverName: data.driverName,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 minutes from now
+        });
+      }
+    });
+
+    return () => subscription.remove();
+  }, [showTokenNotification, user?.id]);
+
+  return null;
+}
 
 function MainNavigator() {
   return (
@@ -80,23 +113,26 @@ export default function App() {
         <BottomSheetModalProvider>
           <SafeAreaProvider>
             <AuthProvider>
-              <NavigationContainer>
-                <RootStack.Navigator
-                  initialRouteName="Onboarding"
-                  screenOptions={{
-                    headerShown: false,
-                    animation: 'slide_from_right',
-                    animationDuration: 200,
-                    contentStyle: {
-                      backgroundColor: '#FFFFFF',
-                    },
-                  }}
-                >
-                  <RootStack.Screen name="Onboarding" component={Onboarding} />
-                  <RootStack.Screen name="Auth" component={AuthNavigator} />
-                  <RootStack.Screen name="Main" component={MainNavigator} />
-                </RootStack.Navigator>
-              </NavigationContainer>
+              <TokenNotificationProvider>
+                <NotificationHandler />
+                <NavigationContainer>
+                  <RootStack.Navigator
+                    initialRouteName="Onboarding"
+                    screenOptions={{
+                      headerShown: false,
+                      animation: 'slide_from_right',
+                      animationDuration: 200,
+                      contentStyle: {
+                        backgroundColor: '#FFFFFF',
+                      },
+                    }}
+                  >
+                    <RootStack.Screen name="Onboarding" component={Onboarding} />
+                    <RootStack.Screen name="Auth" component={AuthNavigator} />
+                    <RootStack.Screen name="Main" component={MainNavigator} />
+                  </RootStack.Navigator>
+                </NavigationContainer>
+              </TokenNotificationProvider>
             </AuthProvider>
           </SafeAreaProvider>
         </BottomSheetModalProvider>

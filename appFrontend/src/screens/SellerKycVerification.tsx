@@ -290,7 +290,7 @@ export function SellerKycVerification() {
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
-        translucent={Platform.OS === 'android'}
+        translucent={false}
       />
       <View style={styles.container}>
         <View style={styles.header}>

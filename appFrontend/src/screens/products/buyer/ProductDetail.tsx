@@ -14,15 +14,16 @@ import {
 import type { ScrollView as ScrollViewType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Header } from '../components/Header';
-import { Button } from '../components/Button';
+import { Header } from '../../../components/Header';
+import { Button } from '../../../components/Button';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import { productService, type ProductDetail } from '../services/productService';
-import { getImageUrl } from '../config/env';
-import { useAuth } from '../contexts/AuthContext';
-import { api } from '../services/api';
+import { productService, type ProductDetail } from '../../../services/productService';
+import { getImageUrl } from '../../../config/env';
+import { useAuth } from '../../../contexts/AuthContext';
+import { api } from '../../../services/api';
+import { TokenNotificationCard } from '../../../components/TokenNotificationCard';
 
 type RootStackParamList = {
   Home: undefined;
@@ -559,6 +560,9 @@ export function ProductDetail() {
           onPress={() => navigation.navigate('Order', { productId: product.id })}
         />
       </View>
+
+      {/* Token Notification Card */}
+      <TokenNotificationCard />
     </SafeAreaView>
   );
 }
