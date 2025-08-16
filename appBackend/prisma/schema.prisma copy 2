@@ -68,31 +68,31 @@ model OperatorEntity {
 }
 
 model User {
-  id                           String                 @id @default(uuid())
-  firstName                    String
-  middleName                   String?
-  lastName                     String
-  phoneNumber                  String                 @unique
-  pin                          String
-  createdAt                    DateTime               @default(now())
-  updatedAt                    DateTime               @updatedAt
-  deliveryAddresses            DeliveryAddress[]
-  devices                      Device[]
-  customerTransactions         ExternalTransaction[]  @relation("CustomerTransactions")
-  sellerTransactions           ExternalTransaction[]  @relation("SellerTransactions")
-  paymentMethods               PaymentMethod[]
-  products                     Product[]
-  sellerKyc                    SellerKyc?
-  sessions                     Session[]
-  settlements                  Settlement[]
-  driver                       Driver?
-  orders_orders_sellerIdToUser orders[]               @relation("orders_sellerIdToUser")
-  orders_orders_userIdToUser   orders[]               @relation("orders_userIdToUser")
-  productOrderInterests        ProductOrderInterest[]
-  productViews                 ProductView[]
-  customerRideRequests         RideRequest[]          @relation("CustomerRideRequests")
-  riderApplications            RiderApplication[]
-  customerRides                Ride[]                 @relation("CustomerRides")
+  id                    String                 @id @default(uuid())
+  firstName             String
+  middleName            String?
+  lastName              String
+  phoneNumber           String                 @unique
+  pin                   String
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  deliveryAddresses     DeliveryAddress[]
+  devices               Device[]
+  customerTransactions  ExternalTransaction[]  @relation("CustomerTransactions")
+  sellerTransactions    ExternalTransaction[]  @relation("SellerTransactions")
+  paymentMethods        PaymentMethod[]
+  products              Product[]
+  sellerKyc             SellerKyc?
+  sessions              Session[]
+  settlements           Settlement[]
+  driver                Driver?
+  sellerOrders          Order[]                @relation("SellerOrders")
+  orders                Order[]
+  productOrderInterests ProductOrderInterest[]
+  productViews          ProductView[]
+  customerRideRequests  RideRequest[]          @relation("CustomerRideRequests")
+  riderApplications     RiderApplication[]
+  customerRides         Ride[]                 @relation("CustomerRides")
 
   @@index([phoneNumber])
   @@index([createdAt])
@@ -475,29 +475,29 @@ model PaymentMethod {
 }
 
 model Settlement {
-  id                  String            @id @default(uuid())
+  id                  String           @id @default(uuid())
   userId              String
-  amount              Decimal           @db.Decimal(10, 2)
-  currency            String            @db.VarChar(3)
-  status              SettlementStatus  @default(PENDING)
+  amount              Decimal          @db.Decimal(10, 2)
+  currency            String           @db.VarChar(3)
+  status              SettlementStatus @default(PENDING)
   type                SettlementType
-  reference           String            @unique
+  channel             SettlementChannel @default(ECOMMERCE)
+  reference           String           @unique
   bankAccountId       String?
   walletId            String?
   metadata            Json?
   processedAt         DateTime?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
   includedOrderIds    Json?
-  netAmountBeforeFees Decimal           @default(0) @db.Decimal(10, 2)
-  serviceFeesDeducted Decimal           @default(0) @db.Decimal(10, 2)
-  totalOrdersCount    Int               @default(0)
-  channel             SettlementChannel @default(ECOMMERCE)
   includedRideIds     Json?
-  totalRidesCount     Int               @default(0)
-  bankAccount         BankAccount?      @relation(fields: [bankAccountId], references: [id])
-  user                User              @relation(fields: [userId], references: [id])
-  wallet              Wallet?           @relation(fields: [walletId], references: [id])
+  netAmountBeforeFees Decimal          @default(0) @db.Decimal(10, 2)
+  serviceFeesDeducted Decimal          @default(0) @db.Decimal(10, 2)
+  totalOrdersCount    Int              @default(0)
+  totalRidesCount     Int              @default(0)
+  bankAccount         BankAccount?     @relation(fields: [bankAccountId], references: [id])
+  user                User             @relation(fields: [userId], references: [id])
+  wallet              Wallet?          @relation(fields: [walletId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -555,6 +555,52 @@ model ProductOrderInterest {
   @@map("product_order_interests")
 }
 
+model Order {
+  id                   String                @id @default(uuid())
+  orderNumber          String                @unique
+  userId               String
+  sellerId             String
+  status               OrderStatus           @default(PENDING)
+  subtotal             Decimal               @db.Decimal(10, 2)
+  taxAmount            Decimal               @default(0) @db.Decimal(10, 2)
+  shippingAmount       Decimal               @default(0) @db.Decimal(10, 2)
+  discountAmount       Decimal               @default(0) @db.Decimal(10, 2)
+  totalAmount          Decimal               @db.Decimal(10, 2)
+  currencyCode         String                @db.VarChar(3)
+  customerName         String
+  customerEmail        String?
+  customerPhone        String
+  shippingAddress      String
+  billingAddress       String?
+  paymentMethod        String?
+  paymentStatus        PaymentStatus         @default(PENDING)
+  paymentReference     String?
+  paidAt               DateTime?
+  shippingMethod       String?
+  trackingNumber       String?
+  shippedAt            DateTime?
+  deliveredAt          DateTime?
+  notes                String?
+  sellerNotes          String?
+  metadata             Json?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  cancelledAt          DateTime?
+  deliveryCurrency     String?               @db.VarChar(3)
+  externalTransactions ExternalTransaction[]
+  orderItems           OrderItem[]
+  seller               User                  @relation("SellerOrders", fields: [sellerId], references: [id])
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sellerId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([orderNumber])
+  @@index([createdAt])
+  @@map("orders")
+}
+
 model OrderItem {
   id              String          @id @default(uuid())
   orderId         String
@@ -566,7 +612,7 @@ model OrderItem {
   status          OrderItemStatus @default(PENDING)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
-  order           orders          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product         Product         @relation(fields: [productId], references: [id])
 
   @@index([orderId])
@@ -601,7 +647,7 @@ model ExternalTransaction {
   appService           AppService        @default(ECOMMERCE)
   rideRequestId        String?
   customer             User              @relation("CustomerTransactions", fields: [customerId], references: [id])
-  order                orders?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order                Order?            @relation(fields: [orderId], references: [id], onDelete: Cascade)
   paymentMethod        PaymentMethod?    @relation(fields: [paymentMethodId], references: [id])
   rideRequest          RideRequest?      @relation(fields: [rideRequestId], references: [id], onDelete: Cascade)
   seller               User              @relation("SellerTransactions", fields: [sellerId], references: [id])
@@ -722,7 +768,6 @@ model Driver {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   rideServiceId      String?
-  updatedBy          String?
   earnings           DriverEarning[]
   locationHistory    DriverLocation[]
   rideService        RideService?     @relation(fields: [rideServiceId], references: [id])
@@ -738,7 +783,6 @@ model Driver {
   @@index([status])
   @@index([isActive])
   @@index([createdAt])
-  @@index([updatedBy])
   @@map("drivers")
 }
 
@@ -824,6 +868,7 @@ model Ride {
   platformFee           Decimal           @db.Decimal(10, 2)
   paymentMethod         RidePaymentMethod @default(CASH)
   paymentStatus         PaymentStatus     @default(PENDING)
+  settlementStatus      PaymentStatus     @default(PENDING)
   status                RideStatus        @default(REQUESTED)
   customerRating        Int?
   driverRating          Int?
@@ -838,7 +883,6 @@ model Ride {
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
   rideServiceId         String?
-  settlementStatus      PaymentStatus     @default(PENDING)
   locationUpdates       RideLocation[]
   rideToken             RideToken?
   customer              User              @relation("CustomerRides", fields: [customerId], references: [id])
@@ -954,51 +998,6 @@ model RideService {
   @@map("ride_services")
 }
 
-model orders {
-  id                         String                @id
-  orderNumber                String                @unique
-  userId                     String
-  sellerId                   String
-  status                     OrderStatus           @default(PENDING)
-  subtotal                   Decimal               @db.Decimal(10, 2)
-  taxAmount                  Decimal               @default(0) @db.Decimal(10, 2)
-  shippingAmount             Decimal               @default(0) @db.Decimal(10, 2)
-  discountAmount             Decimal               @default(0) @db.Decimal(10, 2)
-  totalAmount                Decimal               @db.Decimal(10, 2)
-  currencyCode               String                @db.VarChar(3)
-  customerName               String
-  customerEmail              String?
-  customerPhone              String
-  shippingAddress            String
-  billingAddress             String?
-  paymentMethod              String?
-  paymentStatus              PaymentStatus         @default(PENDING)
-  paymentReference           String?
-  paidAt                     DateTime?
-  shippingMethod             String?
-  trackingNumber             String?
-  shippedAt                  DateTime?
-  deliveredAt                DateTime?
-  notes                      String?
-  sellerNotes                String?
-  metadata                   Json?
-  createdAt                  DateTime              @default(now())
-  updatedAt                  DateTime
-  cancelledAt                DateTime?
-  deliveryCurrency           String?               @db.VarChar(3)
-  externalTransactions       ExternalTransaction[]
-  items                      OrderItem[]
-  User_orders_sellerIdToUser User                  @relation("orders_sellerIdToUser", fields: [sellerId], references: [id])
-  User_orders_userIdToUser   User                  @relation("orders_userIdToUser", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([createdAt])
-  @@index([orderNumber])
-  @@index([paymentStatus])
-  @@index([sellerId])
-  @@index([status])
-  @@index([userId])
-}
-
 enum AdminRole {
   ADMIN
   MANAGER
@@ -1040,10 +1039,6 @@ enum EntityType {
   SNAP_RIDE_DRIVER_MANAGEMENT
   SNAP_RIDE_RIDE_MANAGEMENT
   SNAP_RIDE_ANALYTICS
-  SNAP_RIDE_RIDE_SERVICE
-  SNAP_RIDE_RIDE_SERVICE_TIERS
-  ANALYTICS
-  ANALYTICS_REVENUE
 }
 
 enum ProductCondition {
