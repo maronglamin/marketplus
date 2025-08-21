@@ -498,6 +498,10 @@ export function DriverDashboard() {
     navigation.navigate('DriverEarnings');
   };
 
+  const handleRentals = () => {
+    navigation.navigate('AssetRental');
+  };
+
   const handleSettings = () => {
     Alert.alert('Settings', 'Driver settings coming soon!');
   };
@@ -1154,9 +1158,9 @@ export function DriverDashboard() {
           <Text style={styles.actionButtonText}>Earnings</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.actionButton} onPress={handleCenterMap}>
-          <Ionicons name="locate" size={20} color="#1E3A8A" />
-          <Text style={styles.actionButtonText}>Center Map</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={handleRentals}>
+          <Ionicons name="car-sport" size={20} color="#1E3A8A" />
+          <Text style={styles.actionButtonText}>Rentals</Text>
         </TouchableOpacity>
       </View>
 

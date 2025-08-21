@@ -7,10 +7,7 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
-  TextInput,
-  KeyboardAvoidingView,
   Alert,
-  Image,
 } from 'react-native'
 import { ArrowLeft } from 'lucide-react-native'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
@@ -19,15 +16,14 @@ import { loginWithPin, requestNewPin } from '../api/auth'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getDeviceInfo } from '../api/auth'
 import type { AuthStackParamList } from '../navigation/AuthNavigator'
+import PinInput from '../components/PinInput'
 
 type LoginPinNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'LoginPin'>
 type LoginPinRouteProp = RouteProp<AuthStackParamList, 'LoginPin'>
 
 export function LoginPin() {
-  const [pin, setPin] = useState(['', '', '', ''])
+  const [pin, setPin] = useState('')
   const [loading, setLoading] = useState(false)
-  const [imageError, setImageError] = useState(false)
-  const inputRefs = useRef<Array<TextInput | null>>([])
   const navigation = useNavigation<LoginPinNavigationProp>()
   const route = useRoute<LoginPinRouteProp>()
 
@@ -45,35 +41,9 @@ export function LoginPin() {
     checkAuth()
   }, [])
 
-  const handlePinChange = (text: string, index: number) => {
-    if (text.length > 1) {
-      text = text.slice(0, 1)
-    }
-
-    const newPin = [...pin]
-    newPin[index] = text
-    setPin(newPin)
-
-    if (text && index < 3) {
-      inputRefs.current[index + 1]?.focus()
-    }
-  }
-
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && !pin[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus()
-    }
-  }
-
-  const handleLogin = async () => {
+  const handlePinComplete = async (pinString: string) => {
     // Validate PIN format
-    if (!pin.every(digit => /^\d$/.test(digit))) {
-      Alert.alert('Error', 'Please enter a valid 4-digit PIN')
-      return
-    }
-
-    const pinString = pin.join('')
-    if (pinString.length !== 4) {
+    if (!/^\d{4}$/.test(pinString)) {
       Alert.alert('Error', 'Please enter a valid 4-digit PIN')
       return
     }
@@ -134,8 +104,7 @@ export function LoginPin() {
               text: 'Cancel',
               style: 'cancel',
               onPress: () => {
-                setPin(['', '', '', ''])
-                inputRefs.current[0]?.focus()
+                setPin('')
               }
             },
             {
@@ -152,8 +121,7 @@ export function LoginPin() {
                       {
                         text: 'OK',
                         onPress: () => {
-                          setPin(['', '', '', ''])
-                          inputRefs.current[0]?.focus()
+                          setPin('')
                         }
                       }
                     ]
@@ -176,8 +144,7 @@ export function LoginPin() {
           error.message || 'Please try again'
         )
         // Clear PIN on error
-        setPin(['', '', '', ''])
-        inputRefs.current[0]?.focus()
+        setPin('')
       }
     } finally {
       setLoading(false)
@@ -191,75 +158,31 @@ export function LoginPin() {
         backgroundColor="#FFFFFF"
         translucent
       />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <ArrowLeft size={24} color="#000000" />
-          </TouchableOpacity>
-        </View>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <ArrowLeft size={24} color="#000000" />
+        </TouchableOpacity>
+      </View>
 
-        <View style={styles.content}>
-          <View style={styles.logoContainer}>
-            {imageError ? (
-              <View style={styles.logoFallback}>
-                <Text style={styles.logoText}>SNAP</Text>
-              </View>
-            ) : (
-              <Image
-                source={require('../../assets/icon.png')}
-                style={styles.logo}
-                resizeMode="contain"
-                onError={(error) => {
-                  console.error('Failed to load logo:', error.nativeEvent.error);
-                  setImageError(true);
-                }}
-              />
-            )}
-          </View>
-          
-          <Text style={styles.title}>Enter Your PIN</Text>
-          <Text style={styles.subtitle}>
-            Please enter your 4-digit PIN to continue
-          </Text>
+      <View style={styles.content}>
+        <Text style={styles.title}>Enter Your PIN</Text>
+        <Text style={styles.subtitle}>
+          Please enter your 4-digit PIN to continue
+        </Text>
 
-          <View style={styles.pinContainer}>
-            {pin.map((digit, index) => (
-              <TextInput
-                key={index}
-                ref={(ref) => {
-                  inputRefs.current[index] = ref;
-                }}
-                style={styles.pinInput}
-                value={digit}
-                onChangeText={text => handlePinChange(text, index)}
-                onKeyPress={e => handleKeyPress(e, index)}
-                keyboardType="number-pad"
-                maxLength={1}
-                secureTextEntry
-                editable={!loading}
-              />
-            ))}
-          </View>
+        <View style={styles.pinContainer}>
+          <PinInput
+            value={pin}
+            onChangeText={setPin}
+            maxLength={4}
+            onComplete={handlePinComplete}
+            style={styles.pinInput}
+          />
         </View>
-
-        <View style={styles.footer}>
-          <TouchableOpacity
-            onPress={handleLogin}
-            disabled={loading || pin.some(digit => !digit)}
-            style={[styles.button, (loading || pin.some(digit => !digit)) && styles.buttonDisabled]}
-          >
-            <Text style={styles.buttonText}>
-              {loading ? 'Verifying...' : 'Continue'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   )
 }
@@ -267,92 +190,49 @@ export function LoginPin() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  container: {
-    flex: 1,
+    backgroundColor: '#F9FAFB',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    height: 56,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
     padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
   },
   content: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
-  },
-  logoContainer: {
+    paddingHorizontal: 32,
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 32,
-  },
-  logo: {
-    width: 80,
-    height: 80,
-  },
-  logoFallback: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#2563EB',
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+    paddingTop: 80,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 10,
+    color: '#1F2937',
     textAlign: 'center',
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 30,
+    color: '#6B7280',
     textAlign: 'center',
+    marginBottom: 48,
+    lineHeight: 24,
+    paddingHorizontal: 20,
   },
   pinContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    marginBottom: 30,
+    width: '100%',
+    maxWidth: 300,
   },
   pinInput: {
-    width: 50,
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    textAlign: 'center',
-    fontSize: 20,
-    backgroundColor: '#F9FAFB',
+    marginBottom: 32,
   },
-  footer: {
-    padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
-  },
-  button: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonDisabled: {
-    backgroundColor: '#93C5FD',
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-}) 
+}); 

@@ -102,7 +102,7 @@ export function Onboarding() {
               />
             )}
           </View>
-          <Text style={styles.poweredByLabel}>Powered by Cloudnexus</Text>
+          <Text style={styles.poweredByLabel}>Powered by Cloud Nexus</Text>
         </View>
       </View>
     )

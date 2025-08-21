@@ -1,4 +1,5 @@
 import express from 'express';
+import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger';
 import { PrismaClient, TransactionType } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
@@ -69,10 +70,10 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res) => {
     }
 
     // Check if user already has an active order for this product
-    const existingOrder = await prisma.order.findFirst({
+    const existingOrder = await prisma.orders.findFirst({
       where: {
         userId,
-        orderItems: {
+        items: {
           some: { productId }
         },
         status: {
@@ -123,8 +124,9 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res) => {
     // Create order and order items in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Create the order
-      const order = await tx.order.create({
+      const order = await tx.orders.create({
         data: {
+          id: randomUUID(),
           orderNumber,
           userId,
           sellerId: product.sellerId,
@@ -141,7 +143,8 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res) => {
           shippingAddress: shippingAddress || 'To be provided',
           paymentMethod: null,
           paymentStatus: 'PENDING',
-          shippingMethod: deliveryOption?.name || 'STANDARD'
+          shippingMethod: deliveryOption?.name || 'STANDARD',
+          updatedAt: new Date()
         }
       });
 
@@ -210,7 +213,7 @@ router.get('/my-orders', authenticate, async (req: AuthenticatedRequest, res) =>
     }
 
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 6;
+    const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
@@ -227,10 +230,10 @@ router.get('/my-orders', authenticate, async (req: AuthenticatedRequest, res) =>
     }
 
     const [orders, total] = await Promise.all([
-      prisma.order.findMany({
+      prisma.orders.findMany({
         where: whereClause,
         include: {
-          orderItems: {
+          items: {
             include: {
               product: {
                 include: {
@@ -250,7 +253,7 @@ router.get('/my-orders', authenticate, async (req: AuthenticatedRequest, res) =>
         skip,
         take: limit
       }),
-      prisma.order.count({
+      prisma.orders.count({
         where: whereClause
       })
     ]);
@@ -266,12 +269,14 @@ router.get('/my-orders', authenticate, async (req: AuthenticatedRequest, res) =>
         deliveryCurrency: order.deliveryCurrency,
         status: order.status,
         shippingMethod: order.shippingMethod,
+        shippingAmount: order.shippingAmount,
+        discountAmount: order.discountAmount,
         createdAt: order.createdAt,
         // Payment information
         paymentStatus: order.paymentStatus,
         paymentMethod: order.paymentMethod,
         paidAt: order.paidAt,
-        items: order.orderItems.map(item => ({
+        items: order.items.map(item => ({
           id: item.id,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -313,7 +318,7 @@ router.get('/customer-orders', authenticate, async (req: AuthenticatedRequest, r
     }
 
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 6;
+    const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
@@ -330,10 +335,10 @@ router.get('/customer-orders', authenticate, async (req: AuthenticatedRequest, r
     }
 
     const [orders, total] = await Promise.all([
-      prisma.order.findMany({
+      prisma.orders.findMany({
         where: whereClause,
         include: {
-          orderItems: {
+          items: {
             include: {
               product: {
                 include: {
@@ -346,7 +351,7 @@ router.get('/customer-orders', authenticate, async (req: AuthenticatedRequest, r
               }
             }
           },
-          user: {
+          User_orders_userIdToUser: {
             select: {
               id: true,
               firstName: true,
@@ -361,7 +366,7 @@ router.get('/customer-orders', authenticate, async (req: AuthenticatedRequest, r
         skip,
         take: limit
       }),
-      prisma.order.count({
+      prisma.orders.count({
         where: whereClause
       })
     ]);
@@ -377,17 +382,19 @@ router.get('/customer-orders', authenticate, async (req: AuthenticatedRequest, r
         deliveryCurrency: order.deliveryCurrency,
         status: order.status,
         shippingMethod: order.shippingMethod,
+        shippingAmount: order.shippingAmount,
+        discountAmount: order.discountAmount,
         createdAt: order.createdAt,
         // Payment information
         paymentStatus: order.paymentStatus,
         paymentMethod: order.paymentMethod,
         paidAt: order.paidAt,
         customer: {
-          id: order.user.id,
-          name: `${order.user.firstName} ${order.user.lastName}`,
-          phone: order.user.phoneNumber
+          id: order.User_orders_userIdToUser.id,
+          name: `${order.User_orders_userIdToUser.firstName} ${order.User_orders_userIdToUser.lastName}`,
+          phone: order.User_orders_userIdToUser.phoneNumber
         },
-        items: order.orderItems.map(item => ({
+        items: order.items.map((item: any) => ({
           id: item.id,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -396,7 +403,7 @@ router.get('/customer-orders', authenticate, async (req: AuthenticatedRequest, r
             id: item.product.id,
             title: item.product.title,
             price: item.product.price,
-            images: item.product.images.map(img => img.imageUrl),
+            images: item.product.images.map((img: any) => img.imageUrl),
             seller: {
               id: item.product.seller.id,
               name: `${item.product.seller.firstName} ${item.product.seller.lastName}`
@@ -429,10 +436,10 @@ router.get('/:orderId', authenticate, async (req: AuthenticatedRequest, res) => 
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
-    const order = await prisma.order.findUnique({
+    const order = await prisma.orders.findUnique({
       where: { id: orderId },
       include: {
-        orderItems: {
+        items: {
           include: {
             product: {
               include: {
@@ -452,8 +459,8 @@ router.get('/:orderId', authenticate, async (req: AuthenticatedRequest, res) => 
             }
           }
         },
-        user: true,
-        seller: true
+        User_orders_userIdToUser: true,
+        User_orders_sellerIdToUser: true
       }
     });
 
@@ -467,7 +474,7 @@ router.get('/:orderId', authenticate, async (req: AuthenticatedRequest, res) => 
     }
 
     // Transform order items, handling cases where product might not exist
-    const transformedItems = order.orderItems.map((item: any) => {
+    const transformedItems = order.items.map((item: any) => {
       // Check if product exists and is accessible
       if (!item.product) {
         // Product was deleted, return basic item info
@@ -519,16 +526,16 @@ router.get('/:orderId', authenticate, async (req: AuthenticatedRequest, res) => 
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
       sellerId: order.sellerId,
-      customer: {
-        id: order.user.id,
-        name: `${order.user.firstName} ${order.user.lastName}`,
-        phone: order.user.phoneNumber
-      },
-      seller: {
-        id: order.seller.id,
-        name: `${order.seller.firstName} ${order.seller.lastName}`,
-        phone: order.seller.phoneNumber
-      },
+      customer: order.User_orders_userIdToUser ? {
+        id: order.User_orders_userIdToUser.id,
+        name: `${order.User_orders_userIdToUser.firstName} ${order.User_orders_userIdToUser.lastName}`,
+        phone: order.User_orders_userIdToUser.phoneNumber
+      } : null,
+      seller: order.User_orders_sellerIdToUser ? {
+        id: order.User_orders_sellerIdToUser.id,
+        name: `${order.User_orders_sellerIdToUser.firstName} ${order.User_orders_sellerIdToUser.lastName}`,
+        phone: order.User_orders_sellerIdToUser.phoneNumber
+      } : null,
       items: transformedItems,
       shippingMethod: order.shippingMethod,
       shippingAddress: (() => {
@@ -566,7 +573,7 @@ router.patch('/:orderId/status', authenticate, async (req: AuthenticatedRequest,
       return res.status(400).json({ message: 'Missing status' });
     }
 
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    const order = await prisma.orders.findUnique({ where: { id: orderId } });
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
@@ -574,7 +581,7 @@ router.patch('/:orderId/status', authenticate, async (req: AuthenticatedRequest,
       return res.status(403).json({ message: 'Only the seller can update order status' });
     }
 
-    const updated = await prisma.order.update({
+    const updated = await prisma.orders.update({
       where: { id: orderId },
       data: { status }
     });
@@ -596,10 +603,10 @@ router.patch('/:orderId/delivery-pricing', authenticate, async (req: Authenticat
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
-    const order = await prisma.order.findUnique({
+    const order = await prisma.orders.findUnique({
       where: { id: orderId },
       include: {
-        orderItems: {
+        items: {
           include: {
             product: {
               include: {
@@ -625,7 +632,7 @@ router.patch('/:orderId/delivery-pricing', authenticate, async (req: Authenticat
       deliveryOption = await prisma.productDeliveryOption.findFirst({
         where: {
           id: deliveryOptionId,
-          productId: order.orderItems[0]?.productId
+          productId: order.items[0]?.productId
         }
       });
 
@@ -662,14 +669,13 @@ router.patch('/:orderId/delivery-pricing', authenticate, async (req: Authenticat
     }
 
     // Update order
-    const updatedOrder = await prisma.order.update({
+    const updatedOrder = await prisma.orders.update({
       where: { id: orderId },
       data: {
         shippingAmount,
         deliveryCurrency: deliveryCurrencyCode !== order.currencyCode ? deliveryCurrencyCode : null,
         totalAmount: newTotalAmount,
-        shippingMethod: finalShippingMethod,
-        updatedAt: new Date()
+        shippingMethod: finalShippingMethod
       }
     });
 
@@ -717,7 +723,7 @@ router.patch('/:orderId/authorize', authenticate, async (req: AuthenticatedReque
       return res.status(400).json({ message: 'Invalid action. Must be "authorize" or "cancel"' });
     }
 
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    const order = await prisma.orders.findUnique({ where: { id: orderId } });
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
@@ -737,11 +743,11 @@ router.patch('/:orderId/authorize', authenticate, async (req: AuthenticatedReque
 
     const newStatus = action === 'authorize' ? 'AUTHORIZED' : 'CANCELLED';
 
-    const updated = await prisma.order.update({
+    const updated = await prisma.orders.update({
       where: { id: orderId },
       data: { 
         status: newStatus,
-        updatedAt: new Date()
+        // Let Prisma update the timestamp automatically
       }
     });
 
@@ -865,7 +871,7 @@ router.get('/seller/transaction/:transactionId', authenticate, async (req: Authe
     }
 
     // First, let's check if the order exists
-    const orderExists = await prisma.order.findFirst({
+    const orderExists = await prisma.orders.findFirst({
       where: {
         id: orderId,
         sellerId: req.user.id
@@ -891,13 +897,13 @@ router.get('/seller/transaction/:transactionId', authenticate, async (req: Authe
     }
 
     // Get the order with all details
-    const order = await prisma.order.findFirst({
+    const order = await prisma.orders.findFirst({
       where: {
         id: orderId,
         sellerId: req.user.id
       },
       include: {
-        orderItems: {
+        items: {
           where: {
             id: itemId
           },
@@ -909,7 +915,7 @@ router.get('/seller/transaction/:transactionId', authenticate, async (req: Authe
             }
           }
         },
-        user: {
+        User_orders_userIdToUser: {
           select: {
             id: true,
             firstName: true,
@@ -920,12 +926,12 @@ router.get('/seller/transaction/:transactionId', authenticate, async (req: Authe
       }
     });
 
-    if (!order || order.orderItems.length === 0) {
+    if (!order || order.items.length === 0) {
       logger.error('Order or order items not found after include:', { orderId, itemId });
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
-    const orderItem = order.orderItems[0];
+    const orderItem = order.items[0];
     const product = orderItem.product;
 
     // Get the actual amounts from the database - no calculations needed
@@ -993,9 +999,9 @@ router.get('/seller/transaction/:transactionId', authenticate, async (req: Authe
       totalAmount: itemSubtotal + itemTax + itemShipping - itemDiscount - serviceFeeAmount,
       currencySymbol: getCurrencySymbol(order.currencyCode),
       currencyCode: order.currencyCode,
-      buyerName: `${order.user.firstName} ${order.user.lastName}`,
+      buyerName: `${order.User_orders_userIdToUser.firstName} ${order.User_orders_userIdToUser.lastName}`,
       buyerEmail: order.customerEmail || 'No email provided',
-      buyerPhone: order.user.phoneNumber,
+      buyerPhone: order.User_orders_userIdToUser.phoneNumber,
       transactionDate: order.createdAt.toISOString(),
       status: getPaymentStatus(order.paymentStatus),
       orderNumber: order.orderNumber || `ORD-${order.id.slice(-8).toUpperCase()}`,
@@ -1048,14 +1054,14 @@ router.get('/seller/transactions/:currency', authenticate, async (req: Authentic
     });
 
     // Get orders for the seller in the specified currency (include all payment statuses for now)
-    const orders = await prisma.order.findMany({
+    const orders = await prisma.orders.findMany({
       where: {
         sellerId: req.user.id,
         currencyCode: currency
         // Temporarily remove paymentStatus filter to see all orders
       },
       include: {
-        orderItems: {
+        items: {
           include: {
             product: {
               include: {
@@ -1064,7 +1070,7 @@ router.get('/seller/transactions/:currency', authenticate, async (req: Authentic
             }
           }
         },
-        user: {
+        User_orders_userIdToUser: {
           select: {
             id: true,
             firstName: true,
@@ -1081,7 +1087,7 @@ router.get('/seller/transactions/:currency', authenticate, async (req: Authentic
 
     // Transform orders to match the frontend Transaction interface
     const transactions = orders.flatMap(order => 
-      order.orderItems.map(item => {
+      order.items.map((item: any) => {
         const transactionId = `${order.id}-${item.id}`;
         const paymentStatus = order.paymentStatus;
         const transactionStatus = getPaymentStatus(paymentStatus);
@@ -1105,7 +1111,7 @@ router.get('/seller/transactions/:currency', authenticate, async (req: Authentic
           totalAmount: parseFloat(item.totalPrice.toString()),
           currency: order.currencyCode,
           currencySymbol: getCurrencySymbol(order.currencyCode),
-          buyerName: `${order.user.firstName} ${order.user.lastName}`,
+          buyerName: `${order.User_orders_userIdToUser.firstName} ${order.User_orders_userIdToUser.lastName}`,
           transactionDate: order.createdAt.toISOString(),
           status: transactionStatus,
           orderNumber: order.orderNumber || `ORD-${order.id.slice(-8).toUpperCase()}`
@@ -1114,7 +1120,7 @@ router.get('/seller/transactions/:currency', authenticate, async (req: Authentic
     );
 
     // Get total count for pagination
-    const totalCount = await prisma.order.count({
+    const totalCount = await prisma.orders.count({
       where: {
         sellerId: req.user.id,
         currencyCode: currency
@@ -1124,7 +1130,7 @@ router.get('/seller/transactions/:currency', authenticate, async (req: Authentic
 
     // Calculate total revenue for this currency from ALL paid orders (not just paginated)
     // Exclude refunded orders from revenue calculation
-    const totalRevenueResult = await prisma.order.aggregate({
+    const totalRevenueResult = await prisma.orders.aggregate({
       where: {
         sellerId: req.user.id,
         currencyCode: currency,
@@ -1159,7 +1165,7 @@ router.get('/seller/transactions/:currency', authenticate, async (req: Authentic
     const totalRevenue = Math.max(0, grossRevenue - totalServiceFees);
 
     // Count refunded transactions for this currency
-    const refundedCount = await prisma.order.count({
+    const refundedCount = await prisma.orders.count({
       where: {
         sellerId: req.user.id,
         currencyCode: currency,
@@ -1213,23 +1219,23 @@ router.get('/seller/test-orders', authenticate, async (req: AuthenticatedRequest
     logger.info('Testing seller orders:', { userId: req.user.id });
 
     // Get all orders for the seller
-    const allOrders = await prisma.order.findMany({
+    const allOrders = await prisma.orders.findMany({
       where: {
         sellerId: req.user.id
       },
       include: {
-        orderItems: true
+        items: true
       }
     });
 
     // Get paid orders
-    const paidOrders = await prisma.order.findMany({
+    const paidOrders = await prisma.orders.findMany({
       where: {
         sellerId: req.user.id,
         paymentStatus: 'PAID'
       },
       include: {
-        orderItems: true
+        items: true
       }
     });
 
@@ -1237,12 +1243,12 @@ router.get('/seller/test-orders', authenticate, async (req: AuthenticatedRequest
       userId: req.user.id,
       totalOrders: allOrders.length,
       paidOrders: paidOrders.length,
-      orders: allOrders.map(o => ({
+      orders: allOrders.map((o: any) => ({
         id: o.id,
         status: o.status,
         paymentStatus: o.paymentStatus,
         currencyCode: o.currencyCode,
-        itemCount: o.orderItems.length,
+        itemCount: o.items.length,
         mappedStatus: getPaymentStatus(o.paymentStatus)
       }))
     });
@@ -1250,13 +1256,13 @@ router.get('/seller/test-orders', authenticate, async (req: AuthenticatedRequest
     res.json({
       totalOrders: allOrders.length,
       paidOrders: paidOrders.length,
-      orders: allOrders.map(o => ({
+      orders: allOrders.map((o: any) => ({
         id: o.id,
         status: o.status,
         paymentStatus: o.paymentStatus,
         currencyCode: o.currencyCode,
-        itemCount: o.orderItems.length,
-        orderItems: o.orderItems.map(item => ({
+        itemCount: o.items.length,
+        orderItems: o.items.map((item: any) => ({
           id: item.id,
           productId: item.productId
         }))
@@ -1355,10 +1361,10 @@ router.patch('/:orderId/product-price', authenticate, async (req: AuthenticatedR
     }
 
     // Find the order
-    const order = await prisma.order.findUnique({
+    const order = await prisma.orders.findUnique({
       where: { id: orderId },
       include: {
-        orderItems: {
+        items: {
           include: {
             product: true
           }
@@ -1381,7 +1387,7 @@ router.patch('/:orderId/product-price', authenticate, async (req: AuthenticatedR
     }
 
     // Calculate the original total (without any existing discount)
-    const originalSubtotal = order.orderItems.reduce((total, item) => {
+    const originalSubtotal = order.items.reduce((total: number, item: any) => {
       return total + parseFloat(item.unitPrice.toString()) * item.quantity;
     }, 0);
     
@@ -1403,22 +1409,21 @@ router.patch('/:orderId/product-price', authenticate, async (req: AuthenticatedR
     }
 
     // Update the order with new total and discount (keep original order item prices)
-    const updatedOrder = await prisma.order.update({
+    const updatedOrder = await prisma.orders.update({
       where: { id: orderId },
       data: {
         totalAmount: newTotal,
         discountAmount: discountAmount,
-        currencyCode: currency,
-        updatedAt: new Date()
+        currencyCode: currency
       },
       include: {
-        orderItems: {
+        items: {
           include: {
             product: true
           }
         },
-        user: true,
-        seller: true
+        User_orders_userIdToUser: true,
+        User_orders_sellerIdToUser: true
       }
     });
 
@@ -1439,7 +1444,7 @@ router.patch('/:orderId/product-price', authenticate, async (req: AuthenticatedR
         totalAmount: updatedOrder.totalAmount,
         discountAmount: updatedOrder.discountAmount,
         currencyCode: updatedOrder.currencyCode,
-        items: updatedOrder.orderItems.map(item => ({
+        items: updatedOrder.items.map((item: any) => ({
           id: item.id,
           quantity: item.quantity,
           unitPrice: item.unitPrice,

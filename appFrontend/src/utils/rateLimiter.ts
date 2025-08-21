@@ -12,85 +12,78 @@ interface RequestTracker {
 }
 
 class RateLimiter {
-  private requestTrackers: Map<string, RequestTracker> = new Map();
-  private retryCounts: Map<string, number> = new Map();
-
-  constructor(private config: RateLimitConfig = {
-    maxRequests: 10,
-    timeWindow: 60000, // 1 minute
-    retryDelay: 1000, // 1 second
-    maxRetries: 3
-  }) {}
+  private requestTrackers: Map<string, RequestTracker> = new Map()
+  private retryCounts: Map<string, number> = new Map()
+  private config = {
+    maxRequests: 50, // Increased from 10 to 50 requests per window
+    windowMs: 60000, // 1 minute window
+    retryDelay: 2000, // Increased base delay for retries (2 seconds)
+    maxRetries: 2, // Reduced from 3 to 2 retries to prevent excessive retries
+    backoffMultiplier: 1.5, // Reduced from 2 to 1.5 for less aggressive backoff
+  }
 
   /**
    * Check if a request can be made for the given endpoint
    */
   canMakeRequest(endpoint: string): boolean {
-    const now = Date.now();
-    const tracker = this.requestTrackers.get(endpoint);
+    const tracker = this.requestTrackers.get(endpoint)
+    if (!tracker) return true
 
-    if (!tracker) {
-      this.requestTrackers.set(endpoint, {
-        count: 1,
-        resetTime: now + this.config.timeWindow,
-        lastRequestTime: now
-      });
-      return true;
-    }
+    const now = Date.now()
+    const windowStart = now - this.config.windowMs
 
-    // Reset counter if time window has passed
-    if (now > tracker.resetTime) {
-      tracker.count = 1;
-      tracker.resetTime = now + this.config.timeWindow;
-      tracker.lastRequestTime = now;
-      return true;
-    }
+    // Remove old requests outside the window
+    tracker.requests = tracker.requests.filter(timestamp => timestamp > windowStart)
 
-    // Check if we're within the rate limit
-    if (tracker.count < this.config.maxRequests) {
-      tracker.count++;
-      tracker.lastRequestTime = now;
-      return true;
-    }
-
-    return false;
+    return tracker.requests.length < this.config.maxRequests
   }
 
   /**
    * Record a successful request
    */
   recordSuccess(endpoint: string): void {
-    this.retryCounts.delete(endpoint);
+    if (!this.requestTrackers.has(endpoint)) {
+      this.requestTrackers.set(endpoint, { requests: [] })
+    }
+
+    const tracker = this.requestTrackers.get(endpoint)!
+    tracker.requests.push(Date.now())
+
+    // Reset retry count on success
+    this.retryCounts.delete(endpoint)
   }
 
   /**
    * Handle a 429 response with exponential backoff
    */
   async handleRateLimit(endpoint: string): Promise<number> {
-    const retryCount = this.retryCounts.get(endpoint) || 0;
+    const retryCount = this.retryCounts.get(endpoint) || 0
     
     if (retryCount >= this.config.maxRetries) {
-      throw new Error('Max retries exceeded for rate limiting');
+      throw new Error('Max retries exceeded for rate limiting')
     }
 
-    const delay = this.config.retryDelay * Math.pow(2, retryCount);
-    this.retryCounts.set(endpoint, retryCount + 1);
+    const delay = this.config.retryDelay * Math.pow(this.config.backoffMultiplier, retryCount)
+    this.retryCounts.set(endpoint, retryCount + 1)
 
-    console.log(`🔄 Rate limited for ${endpoint}, retrying in ${delay}ms (attempt ${retryCount + 1})`);
+    console.log(`🔄 Rate limited for ${endpoint}, retrying in ${delay}ms (attempt ${retryCount + 1})`)
     
-    await new Promise(resolve => setTimeout(resolve, delay));
-    return delay;
+    await new Promise(resolve => setTimeout(resolve, delay))
+    return delay
   }
 
   /**
    * Get time until next request can be made
    */
   getTimeUntilReset(endpoint: string): number {
-    const tracker = this.requestTrackers.get(endpoint);
-    if (!tracker) return 0;
-    
-    const now = Date.now();
-    return Math.max(0, tracker.resetTime - now);
+    const tracker = this.requestTrackers.get(endpoint)
+    if (!tracker || tracker.requests.length < this.config.maxRequests) {
+      return 0
+    }
+
+    const oldestRequest = Math.min(...tracker.requests)
+    const windowEnd = oldestRequest + this.config.windowMs
+    return Math.max(0, windowEnd - Date.now())
   }
 
   /**

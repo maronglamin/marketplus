@@ -7,16 +7,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Image,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useAuth } from '../contexts/AuthContext';
 import PinInput from '../components/PinInput';
-import { colors, spacing, typography } from '../theme';
 
 interface RouteParams {
   currentPin: string;
@@ -33,15 +30,14 @@ const NewPin = () => {
   const { currentPin, isFirstTime, isPinReset, pinResetOTPId } = (route.params || {}) as RouteParams;
   const [newPin, setNewPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [imageError, setImageError] = useState(false);
 
-  const handlePinSubmit = async () => {
-    if (newPin.length !== 4) {
+  const handlePinComplete = async (pin: string) => {
+    if (pin.length !== 4) {
       Alert.alert('Error', 'Please enter a 4-digit PIN');
       return;
     }
 
-    if (newPin === currentPin) {
+    if (pin === currentPin) {
       Alert.alert('Error', 'New PIN must be different from current PIN');
       return;
     }
@@ -51,7 +47,7 @@ const NewPin = () => {
       // Navigate to confirm PIN screen
       navigation.navigate('ConfirmPin', { 
         currentPin,
-        newPin,
+        newPin: pin,
         isFirstTime,
         isPinReset,
         pinResetOTPId
@@ -74,52 +70,42 @@ const NewPin = () => {
             onPress={() => navigation.goBack()}
             style={styles.backButton}
           >
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
+            <Ionicons name="arrow-back" size={24} color="#1F2937" />
           </TouchableOpacity>
-          <Text style={styles.title}>New PIN</Text>
+          <Text style={styles.headerTitle}>New PIN</Text>
+          <View style={styles.headerRight} />
         </View>
 
         <View style={styles.content}>
-          <View style={styles.logoContainer}>
-            {imageError ? (
-              <View style={styles.logoFallback}>
-                <Text style={styles.logoText}>SNAP</Text>
+          <View style={styles.formContainer}>
+            <View style={styles.iconContainer}>
+              <View style={styles.iconBackground}>
+                <Ionicons name="key" size={32} color="#2563EB" />
               </View>
-            ) : (
-              <Image
-                source={require('../../assets/icon.png')}
-                style={styles.logo}
-                resizeMode="contain"
-                onError={(error) => {
-                  console.error('Failed to load logo:', error.nativeEvent.error);
-                  setImageError(true);
-                }}
+            </View>
+
+            <Text style={styles.title}>Create New PIN</Text>
+            
+            <Text style={styles.subtitle}>
+              Enter a new 4-digit PIN for your account
+            </Text>
+
+            <View style={styles.pinContainer}>
+              <PinInput
+                value={newPin}
+                onChangeText={setNewPin}
+                maxLength={4}
+                onComplete={handlePinComplete}
+                style={styles.pinInput}
               />
+            </View>
+
+            {isLoading && (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Processing...</Text>
+              </View>
             )}
           </View>
-
-          <Text style={styles.subtitle}>
-            Enter a new 4-digit PIN
-          </Text>
-
-          <PinInput
-            value={newPin}
-            onChangeText={setNewPin}
-            maxLength={4}
-            style={styles.pinInput}
-          />
-        </View>
-
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handlePinSubmit}
-            disabled={isLoading || newPin.length !== 4}
-          >
-            <Text style={styles.buttonText}>
-              {isLoading ? 'Processing...' : 'Continue'}
-            </Text>
-          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -129,7 +115,7 @@ const NewPin = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F9FAFB',
   },
   keyboardAvoid: {
     flex: 1,
@@ -137,72 +123,108 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.lg,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
-    padding: spacing.sm,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
   },
-  title: {
-    ...typography.h1,
-    marginLeft: spacing.md,
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  headerRight: {
+    width: 40,
   },
   content: {
     flex: 1,
-    padding: spacing.xl,
+    paddingHorizontal: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
   logoContainer: {
+    marginBottom: 32,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 32,
-  },
-  logo: {
-    width: 80,
-    height: 80,
+    borderWidth: 2,
+    borderColor: '#DBEAFE',
   },
   logoFallback: {
-    width: 80,
-    height: 80,
-    backgroundColor: colors.primary,
-    borderRadius: 40,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 50,
+  },
+  logoText: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#2563EB',
+  },
+  logo: {
+    width: '100%',
+    height: '100%',
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 300,
+  },
+  iconContainer: {
+    marginBottom: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoText: {
-    fontSize: 20,
+  iconBackground: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#DBEAFE',
+  },
+  title: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: colors.white,
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    ...typography.body1,
+    fontSize: 16,
+    color: '#6B7280',
     textAlign: 'center',
-    marginBottom: spacing.xl,
-    color: colors.textSecondary,
+    marginBottom: 48,
+    lineHeight: 24,
+    paddingHorizontal: 20,
+  },
+  pinContainer: {
+    width: '100%',
+    maxWidth: 300,
   },
   pinInput: {
-    marginBottom: spacing.xl,
+    marginBottom: 32,
   },
-  footer: {
-    padding: 24,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
-  },
-  button: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-    borderRadius: 8,
-    width: '100%',
+  loadingContainer: {
+    marginTop: 24,
     alignItems: 'center',
   },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    ...typography.button,
-    color: colors.white,
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
   },
 });
 

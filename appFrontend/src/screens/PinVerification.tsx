@@ -7,8 +7,6 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
-  TextInput,
-  KeyboardAvoidingView,
   Alert,
 } from 'react-native'
 import { ArrowLeft } from 'lucide-react-native'
@@ -17,6 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { verifyOTP, initiateLogin } from '../api/auth'
 import * as Device from 'expo-device'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import PinInput from '../components/PinInput'
 
 type RootStackParamList = {
   Onboarding: undefined
@@ -40,10 +39,8 @@ export function PinVerification() {
   const route = useRoute<PinVerificationRouteProp>()
   const { phoneNumber } = route.params
 
-  const inputRefs = useRef<Array<TextInput | null>>([])
-
   useEffect(() => {
-    let timer: NodeJS.Timeout
+    let timer: ReturnType<typeof setInterval>
     if (resendDisabled && countdown > 0) {
       timer = setInterval(() => {
         setCountdown((prev) => prev - 1)
@@ -55,24 +52,8 @@ export function PinVerification() {
     return () => clearInterval(timer)
   }, [resendDisabled, countdown])
 
-  const handleCodeChange = (text: string, index: number) => {
-    const newCode = code.split('')
-    newCode[index] = text
-    setCode(newCode.join(''))
-
-    if (text && index < 5) {
-      inputRefs.current[index + 1]?.focus()
-    }
-  }
-
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && !code[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus()
-    }
-  }
-
-  const handleVerify = async () => {
-    if (code.length !== 6) {
+  const handleCodeComplete = async (verificationCode: string) => {
+    if (verificationCode.length !== 6) {
       Alert.alert('Error', 'Please enter a valid 6-digit code');
       return;
     }
@@ -81,7 +62,7 @@ export function PinVerification() {
       setLoading(true);
       console.log('Starting verification process...');
       
-      const { response, isRegistered, isDeviceVerified } = await verifyOTP(phoneNumber, code);
+      const { response, isRegistered, isDeviceVerified } = await verifyOTP(phoneNumber, verificationCode);
 
       console.log('Verification complete:', {
         isRegistered,
@@ -129,6 +110,7 @@ export function PinVerification() {
         'Verification Failed',
         error.message || 'Please try again'
       );
+      setCode('');
     } finally {
       setLoading(false);
     }
@@ -154,71 +136,52 @@ export function PinVerification() {
         backgroundColor="#FFFFFF"
         translucent
       />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <ArrowLeft size={24} color="#000000" />
-          </TouchableOpacity>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <ArrowLeft size={24} color="#000000" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.content}>
+        <Text style={styles.title}>Enter Verification Code</Text>
+        <Text style={styles.subtitle}>
+          We've sent a verification code to {phoneNumber}
+        </Text>
+
+        <View style={styles.codeContainer}>
+          <PinInput
+            value={code}
+            onChangeText={setCode}
+            maxLength={6}
+            onComplete={handleCodeComplete}
+            style={styles.codeInput}
+          />
         </View>
 
-        <View style={styles.content}>
-          <Text style={styles.title}>Enter Verification Code</Text>
-          <Text style={styles.subtitle}>
-            We've sent a verification code to {phoneNumber}
-          </Text>
-
-          <View style={styles.codeContainer}>
-            {[...Array(6)].map((_, index) => (
-              <TextInput
-                key={index}
-                ref={(ref) => {
-                  inputRefs.current[index] = ref;
-                }}
-                style={styles.codeInput}
-                maxLength={1}
-                keyboardType="number-pad"
-                onChangeText={(text) => handleCodeChange(text, index)}
-                onKeyPress={(e) => handleKeyPress(e, index)}
-                value={code[index] || ''}
-              />
-            ))}
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Verifying...</Text>
           </View>
+        )}
 
-          <TouchableOpacity
-            onPress={handleVerify}
-            disabled={loading || code.length !== 6}
-            style={[
-              styles.verifyButton,
-              (loading || code.length !== 6) && styles.verifyButtonDisabled,
-            ]}
-          >
-            <Text style={styles.verifyButtonText}>
-              {loading ? 'Verifying...' : 'Verify'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleResendCode}
-            disabled={resendDisabled}
-            style={styles.resendButton}
-          >
-            <Text style={[
-              styles.resendButtonText,
-              resendDisabled && styles.resendButtonTextDisabled
-            ]}>
-              {resendDisabled
-                ? `Resend code in ${countdown}s`
-                : 'Resend verification code'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+        <TouchableOpacity
+          onPress={handleResendCode}
+          disabled={resendDisabled}
+          style={styles.resendButton}
+        >
+          <Text style={[
+            styles.resendButtonText,
+            resendDisabled && styles.resendButtonTextDisabled
+          ]}>
+            {resendDisabled
+              ? `Resend code in ${countdown}s`
+              : 'Resend verification code'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   )
 }
@@ -226,68 +189,59 @@ export function PinVerification() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  container: {
-    flex: 1,
+    backgroundColor: '#F9FAFB',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    height: 56,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
     padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
   },
   content: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
+    paddingHorizontal: 32,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: 80,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 10,
+    color: '#1F2937',
     textAlign: 'center',
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 30,
+    color: '#6B7280',
     textAlign: 'center',
+    marginBottom: 48,
+    lineHeight: 24,
+    paddingHorizontal: 20,
   },
   codeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 30,
+    width: '100%',
+    maxWidth: 300,
+    marginBottom: 32,
   },
   codeInput: {
-    width: 40,
-    height: 48,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    marginHorizontal: 4,
-    textAlign: 'center',
-    fontSize: 20,
-    backgroundColor: '#F9FAFB',
+    marginBottom: 32,
   },
-  verifyButton: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 16,
-    borderRadius: 8,
+  loadingContainer: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginTop: 20,
   },
-  verifyButtonDisabled: {
-    backgroundColor: '#93C5FD',
-  },
-  verifyButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
   },
   resendButton: {
     paddingVertical: 16,
@@ -300,4 +254,4 @@ const styles = StyleSheet.create({
   resendButtonTextDisabled: {
     color: '#93C5FD',
   },
-}) 
+}); 

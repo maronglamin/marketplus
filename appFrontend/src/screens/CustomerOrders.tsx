@@ -224,11 +224,11 @@ export function CustomerOrders() {
       let response;
       if (activeTab === 'my-orders') {
         response = await rateLimiter.executeRequest(() => 
-          orderService.getMyOrders(currentPage, 6)
+          orderService.getMyOrders(currentPage, 20)
         );
       } else {
         response = await rateLimiter.executeRequest(() => 
-          orderService.getCustomerOrders(currentPage, 6)
+          orderService.getCustomerOrders(currentPage, 20)
         );
       }
       

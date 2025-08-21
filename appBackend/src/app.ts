@@ -11,6 +11,8 @@ import morgan from 'morgan';
 import uploadRouter from './routes/upload';
 import riderUploadRouter from './routes/riderUpload';
 import driverRouter from './routes/driver';
+import rentalRouter from './routes/rental';
+import rentalMessageRoutes from './routes/rentalMessages';
 import path from 'path';
 import { RideRequestService } from './services/rideRequestService';
 
@@ -87,13 +89,27 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Rate limiting
+// Rate limiting - More generous limits to prevent customer frustration
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: 1000, // Increased from 100 to 1000 requests per windowMs
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Add skip function to allow certain endpoints to bypass rate limiting
+  skip: (req) => {
+    // Skip rate limiting for health checks and static assets
+    return req.path === '/api/health' || req.path.startsWith('/uploads/');
+  },
+  // Add handler for when rate limit is exceeded
+  handler: (req, res) => {
+    logger.warn('Rate limit exceeded for IP:', req.ip);
+    res.status(429).json({
+      error: 'Too many requests',
+      message: 'Please slow down your requests and try again later.',
+      retryAfter: Math.ceil(15 * 60 / 60) // 15 minutes in minutes
+    });
+  }
 });
 app.use(limiter);
 
@@ -109,6 +125,8 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/rider-upload', riderUploadRouter);
 app.use('/api/ride-requests', rideRequestRoutes);
 app.use('/api/driver', driverRouter);
+app.use('/api/rentals', rentalRouter);
+app.use('/api/rental-messages', rentalMessageRoutes);
 
 // Health check endpoint under /api
 app.get('/api/health', (req, res) => {

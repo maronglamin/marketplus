@@ -24,6 +24,7 @@ import getApi from '../api/config'
 import type { AuthStackParamList } from '../navigation/AuthNavigator'
 import countryData from '../utils/countryData'; // You will need to create this file with country code/name/flag
 import * as Localization from 'expo-localization';
+import { getUserLocationFromGPS } from '../utils/locationService';
 
 type LoginNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>
 
@@ -38,6 +39,8 @@ export function Login() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false)
   const [imageError, setImageError] = useState(false)
+  const [detectingCountry, setDetectingCountry] = useState(false)
+  const [autoDetectedCountry, setAutoDetectedCountry] = useState(false)
 
   // Initialize API and device info on component mount
   useEffect(() => {
@@ -90,35 +93,62 @@ export function Login() {
     }
   }
 
-  // On mount, set default country based on device locale
+  // On mount, set default country based on location and device locale
   useEffect(() => {
-    const deviceCountry = getDeviceCountryCode();
-    console.log('Detected device country code:', deviceCountry);
-    let found = null;
-    
-    if (deviceCountry) {
-      // Try to find the user's actual country
-      found = countryData.find((c: Country) => c.code === deviceCountry);
-      console.log('Found country for device code:', found?.name);
+    const detectUserCountry = async () => {
+      console.log('🌍 Starting country detection...');
+      setDetectingCountry(true);
+      let found = null;
       
-      if (!found) {
-        console.log('Country code not found in our data, will default to US');
+      // First, try to get country from user's current location
+      try {
+        const locationInfo = await getUserLocationFromGPS();
+        if (locationInfo) {
+          console.log('📍 Location detected from GPS:', locationInfo);
+          found = countryData.find((c: Country) => c.code === locationInfo.countryCode);
+          if (found) {
+            console.log('✅ Found country in our data from location:', found.name);
+          } else {
+            console.log('⚠️ Country from location not found in our data:', locationInfo.countryCode);
+          }
+        }
+      } catch (error) {
+        console.log('❌ Error getting location from GPS:', error);
       }
-    }
-    
-    // If we can't find the user's country in our list, default to US
-    if (!found) {
-      found = countryData.find((c: Country) => c.code === 'US');
-      console.log('Defaulting to US');
-    }
-    
-    if (found) {
-      setSelectedCountry(found);
-      // Don't set phone input - let user type their number
-      console.log('Set default country:', found.name, found.dial_code);
-    } else {
-      console.log('ERROR: Could not set any default country!');
-    }
+      
+      // If location detection failed, fall back to device locale
+      if (!found) {
+        const deviceCountry = getDeviceCountryCode();
+        console.log('📱 Fallback to device country code:', deviceCountry);
+        
+        if (deviceCountry) {
+          found = countryData.find((c: Country) => c.code === deviceCountry);
+          console.log('Found country for device code:', found?.name);
+          
+          if (!found) {
+            console.log('Country code not found in our data, will default to US');
+          }
+        }
+      }
+      
+      // If we still can't find the user's country in our list, default to US
+      if (!found) {
+        found = countryData.find((c: Country) => c.code === 'US');
+        console.log('Defaulting to US');
+      }
+      
+      if (found) {
+        setSelectedCountry(found);
+        setAutoDetectedCountry(true);
+        console.log('✅ Set default country:', found.name, found.dial_code);
+      } else {
+        console.log('❌ ERROR: Could not set any default country!');
+      }
+      
+      setDetectingCountry(false);
+    };
+
+    detectUserCountry();
   }, []);
 
   // Remove the auto-detection useEffect completely - it's causing the duplication issue
@@ -135,6 +165,7 @@ export function Login() {
 
   const onSelectCountry = (country: Country) => {
     setSelectedCountry(country);
+    setAutoDetectedCountry(false); // User manually selected a country
     // Don't set phone input to country code - let user type their number separately
   }
 
@@ -243,7 +274,11 @@ export function Login() {
 
                       <View style={styles.inputContainer}>
               <TouchableOpacity onPress={() => countrySheetRef.current?.present()} style={styles.inputIconLeft}>
-                {selectedCountry ? (
+                {detectingCountry ? (
+                  <View style={styles.loadingIndicator}>
+                    <Text style={styles.loadingText}>📍</Text>
+                  </View>
+                ) : selectedCountry ? (
                   <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
                 ) : (
                   <Globe size={22} color="#2563EB" />
@@ -267,14 +302,17 @@ export function Login() {
                   // Clear the input field completely for user to type
                   setPhoneInput('');
                   setSelectedCountry(null);
+                  setAutoDetectedCountry(false);
                 }} style={styles.inputIconRight}>
                   <X size={20} color="#6B7280" />
                 </TouchableOpacity>
               )}
             </View>
-          <Text style={styles.helperText}>
-            Enter your phone number (7-15 digits)
-          </Text>
+          {detectingCountry && (
+            <Text style={styles.detectingText}>
+              📍 Detecting your location...
+            </Text>
+          )}
         </View>
 
         <View style={styles.footer}>
@@ -342,6 +380,7 @@ export function Login() {
                     style={styles.countryItem}
                                       onPress={() => {
                     setSelectedCountry(c);
+                    setAutoDetectedCountry(false); // User manually selected a country
                     countrySheetRef.current?.dismiss();
                     Keyboard.dismiss();
                   }}
@@ -546,5 +585,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#2563EB',
     fontWeight: 'bold',
+  },
+  loadingIndicator: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+  },
+  detectingText: {
+    fontSize: 12,
+    color: '#2563EB',
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  detectedText: {
+    fontSize: 12,
+    color: '#059669',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  selectedText: {
+    fontSize: 12,
+    color: '#2563EB',
+    textAlign: 'center',
+    marginTop: 4,
   },
 }) 

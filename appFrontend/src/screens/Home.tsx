@@ -32,6 +32,10 @@ import { RideRequestService, RecentDestination } from '../services/rideRequestSe
 import { api } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTokenNotification } from '../contexts/TokenNotificationContext';
+import { getUserLocationFromGPS } from '../utils/locationService';
+import { categoryService, type Category } from '../services/categoryService';
+import { rentalApi } from '../services/rentalApi';
+import { userService } from '../services/userService';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -46,6 +50,10 @@ export function Home() {
   // Search modal state
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
   
+  // Fresh user data state (fetched from backend using JWT)
+  const [freshUserData, setFreshUserData] = useState<any>(null);
+  const [isLoadingUserData, setIsLoadingUserData] = useState(true);
+  
   // Rider application state
   const [riderApplication, setRiderApplication] = useState<RiderApplication | null>(null);
   const [isLoadingRiderStatus, setIsLoadingRiderStatus] = useState(true);
@@ -54,22 +62,100 @@ export function Home() {
   const [recentDestinations, setRecentDestinations] = useState<RecentDestination[]>([]);
   const [isLoadingDestinations, setIsLoadingDestinations] = useState(true);
 
+  // Categories state
+  const [categoriesData, setCategoriesData] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+
+  // Location state
+  const [userLocation, setUserLocation] = useState<string>('Detecting location...');
+  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
+
+  // Notifications state
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
+
   const [searchText, setSearchText] = useState('');
   const searchInputRef = useRef<TextInput>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  // Load fresh user data from backend using JWT token
+  const loadFreshUserData = async () => {
+    try {
+      setIsLoadingUserData(true);
+      console.log('🔄 Loading fresh user data from backend...');
+      const userData = await userService.getBasicUserInfo();
+      console.log('✅ Fresh user data loaded:', userData);
+      setFreshUserData(userData);
+    } catch (error) {
+      console.error('❌ Error loading fresh user data:', error);
+      setFreshUserData(null);
+    } finally {
+      setIsLoadingUserData(false);
+    }
+  };
+
   // Check rider application status on component mount
   useEffect(() => {
+    loadFreshUserData();
     checkRiderApplicationStatus();
     loadRecentDestinations();
+    loadCategories();
+    getUserLocation();
+    loadUnreadNotificationsCount();
     // Check for active tokens when component mounts
     checkActiveTokens();
   }, []);
 
+  // Re-run data loading when user changes
+  useEffect(() => {
+    if (user?.id) {
+      console.log('🔄 User changed in Home, refreshing data for user:', user.id);
+      loadFreshUserData();
+      checkRiderApplicationStatus();
+      loadRecentDestinations();
+      loadUnreadNotificationsCount();
+    } else {
+      console.log('⚠️ No user in Home, clearing user-specific data');
+      setFreshUserData(null);
+      setRiderApplication(null);
+      setRecentDestinations([]);
+      setUnreadNotificationsCount(0);
+    }
+  }, [user?.id]);
 
+  // Load unread notifications count when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadUnreadNotificationsCount();
+    }, [])
+  );
 
+  // Refresh user-specific data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user?.id) {
+        console.log('📱 Home screen focused, refreshing user data for:', user.id);
+        loadFreshUserData();
+        checkRiderApplicationStatus();
+        loadRecentDestinations();
+        loadUnreadNotificationsCount();
+      }
+    }, [user?.id])
+  );
 
-
+  const loadUnreadNotificationsCount = async () => {
+    try {
+      setIsLoadingNotifications(true);
+      const data = await rentalApi.getAllNotifications();
+      const unreadCount = data.totalUnread || 0;
+      setUnreadNotificationsCount(unreadCount);
+    } catch (error) {
+      console.error('Error loading unread notifications count:', error);
+      setUnreadNotificationsCount(0);
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
 
   // Handle back button press to prevent navigation to login screen
   useFocusEffect(
@@ -154,6 +240,121 @@ export function Home() {
     }
   };
 
+  const loadCategories = async () => {
+    try {
+      setIsLoadingCategories(true);
+      const categories = await categoryService.getCategories();
+      setCategoriesData(categories);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      setCategoriesData([]);
+    } finally {
+      setIsLoadingCategories(false);
+    }
+  };
+
+  // Function to map category names to icons
+  const getCategoryIcon = (categoryName: string): string => {
+    const name = categoryName.toLowerCase();
+    
+    if (name.includes('phone') || name.includes('mobile') || name.includes('smartphone')) {
+      return 'phone-portrait-outline';
+    }
+    if (name.includes('laptop') || name.includes('computer') || name.includes('pc')) {
+      return 'laptop-outline';
+    }
+    if (name.includes('clothing') || name.includes('fashion') || name.includes('shirt') || name.includes('dress')) {
+      return 'shirt-outline';
+    }
+    if (name.includes('home') || name.includes('furniture') || name.includes('house')) {
+      return 'home-outline';
+    }
+    if (name.includes('car') || name.includes('vehicle') || name.includes('automotive')) {
+      return 'car-outline';
+    }
+    if (name.includes('book') || name.includes('education') || name.includes('study')) {
+      return 'library-outline';
+    }
+    if (name.includes('food') || name.includes('restaurant') || name.includes('meal')) {
+      return 'restaurant-outline';
+    }
+    if (name.includes('sport') || name.includes('fitness') || name.includes('gym')) {
+      return 'fitness-outline';
+    }
+    if (name.includes('beauty') || name.includes('cosmetic') || name.includes('makeup')) {
+      return 'rose-outline';
+    }
+    if (name.includes('baby') || name.includes('child') || name.includes('toy')) {
+      return 'happy-outline';
+    }
+    if (name.includes('pet') || name.includes('animal') || name.includes('dog') || name.includes('cat')) {
+      return 'paw-outline';
+    }
+    if (name.includes('garden') || name.includes('plant') || name.includes('flower')) {
+      return 'leaf-outline';
+    }
+    if (name.includes('music') || name.includes('instrument') || name.includes('audio')) {
+      return 'musical-notes-outline';
+    }
+    if (name.includes('art') || name.includes('craft') || name.includes('creative')) {
+      return 'color-palette-outline';
+    }
+    if (name.includes('jewelry') || name.includes('watch') || name.includes('accessory')) {
+      return 'diamond-outline';
+    }
+    if (name.includes('tool') || name.includes('hardware') || name.includes('diy')) {
+      return 'construct-outline';
+    }
+    if (name.includes('game') || name.includes('entertainment') || name.includes('toy')) {
+      return 'game-controller-outline';
+    }
+    if (name.includes('health') || name.includes('medical') || name.includes('pharmacy')) {
+      return 'medical-outline';
+    }
+    if (name.includes('office') || name.includes('business') || name.includes('work')) {
+      return 'briefcase-outline';
+    }
+    
+    // Default icon for unknown categories
+    return 'cube-outline';
+  };
+
+  const getUserLocation = async () => {
+    try {
+      setIsLoadingLocation(true);
+      console.log('📍 Getting user location for Home screen...');
+      
+      const locationInfo = await getUserLocationFromGPS();
+      
+      if (locationInfo) {
+        setUserLocation(`You're in ${locationInfo.cityName}`);
+        console.log('✅ Location set for Home screen:', locationInfo.cityName);
+      } else {
+        // Try to get location from device timezone as fallback
+        try {
+          const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          const timezoneParts = timezone.split('/');
+          if (timezoneParts.length > 1) {
+            const city = timezoneParts[timezoneParts.length - 1].replace('_', ' ');
+            setUserLocation(`You're in ${city}`);
+            console.log('✅ Location set from timezone for Home screen:', city);
+          } else {
+            setUserLocation('Location unavailable');
+            console.log('⚠️ Could not detect location for Home screen');
+          }
+        } catch (timezoneError) {
+          setUserLocation('Location unavailable');
+          console.log('⚠️ Could not detect location for Home screen');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error getting user location for Home screen:', error);
+      setUserLocation('Location unavailable');
+    } finally {
+      setIsLoadingLocation(false);
+    }
+  };
+
   // Get status-specific content
   const getRiderStatusContent = () => {
     if (isLoadingRiderStatus) {
@@ -200,7 +401,7 @@ export function Home() {
       case 'UNDER_REVIEW':
         return {
           title: 'Application Under Review',
-          subtitle: 'Our team is carefully reviewing your application. This usually takes 2-3 business days.',
+          subtitle: 'Our team is carefully reviewing your Account. This usually takes 2-3 business days.',
           icon: 'search-outline',
           iconColor: '#3B82F6',
           buttonText: 'View Application',
@@ -213,8 +414,8 @@ export function Home() {
       
       case 'APPROVED':
         return {
-          title: 'Welcome to Snap Driver! 🎉',
-          subtitle: 'Your application has been approved. You can now start earning as a driver.',
+          title: 'Snap Driver! 🎉',
+          subtitle: 'You can now start earning as a driver.',
           icon: 'car-sport',
           iconColor: '#10B981',
           buttonText: 'Go to Driver Dashboard',
@@ -292,7 +493,7 @@ export function Home() {
           // Show contact support alert
           Alert.alert(
             'Contact Support',
-            'Please contact our support team to resolve your account suspension.\n\nEmail: support@snap.com\nPhone: +220 123 4567',
+            'Please contact our support team to resolve your account suspension.\n\nEmail: contact@cloudnexus.biz\nPhone: +220 3547128',
             [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Copy Email', onPress: () => console.log('Copy email to clipboard') }
@@ -319,11 +520,10 @@ export function Home() {
 
   // Mock data
   const quickActions = [
-    { icon: 'time-outline', label: 'My Rides' },
-    { icon: 'car-outline', label: 'Ride Request' },
+    { icon: 'car-sport', label: 'Rental' },
+    { icon: 'car-outline', label: 'Ride History' },
     { icon: 'bag-outline', label: 'My Orders' },
     { icon: 'heart-outline', label: 'Interest' },
-    { icon: 'pricetag-outline', label: 'Promotions' },
   ];
 
 
@@ -389,21 +589,17 @@ export function Home() {
 
   const handleQuickActionPress = (action: string) => {
     switch (action) {
-      case 'My Rides':
-        navigation.navigate('RideRequest');
+      case 'Rental':
+        navigation.navigate('RentalRequest');
+        break;
+      case 'Ride History':
+        navigation.navigate('CustomerRidesRecords');
         break;
       case 'My Orders':
         navigation.navigate('CustomerOrders');
         break;
       case 'Interest':
         navigation.navigate('InterestManagement');
-        break;
-      case 'Promotions':
-        // Handle promotions navigation
-        console.log('Promotions pressed');
-        break;
-      case 'Ride Request':
-        navigation.navigate('CustomerRides');
         break;
       default:
         console.log('Unknown action:', action);
@@ -416,7 +612,7 @@ export function Home() {
         // Already on home
         break;
       case 'rides':
-        navigation.navigate('RideRequest');
+        navigation.navigate('CustomerRideService');
         break;
       case 'shop':
         navigation.navigate('FeaturedProducts');
@@ -430,12 +626,16 @@ export function Home() {
     }
   };
 
+  const handleNotificationPress = () => {
+    navigation.navigate('Notifications');
+  };
+
   const isActiveTab = (tab: string) => {
     switch (tab) {
       case 'home':
         return route.name === 'Home';
       case 'rides':
-        return route.name === 'RideRequest';
+        return route.name === 'CustomerRideService';
       case 'shop':
         return route.name === 'ProductListing';
       case 'messages':
@@ -463,18 +663,36 @@ export function Home() {
             <Text style={styles.logo}></Text>
           </View>
           <View style={styles.headerRight}>
-            <View style={styles.locationContainer}>
-              <Ionicons name="location-outline" size={16} color="#6B7280" />
-              <Text style={styles.locationText}>You're in Banjul</Text>
-            </View>
+            <TouchableOpacity 
+              style={styles.locationContainer}
+              onPress={getUserLocation}
+              disabled={isLoadingLocation}
+            >
+              {isLoadingLocation ? (
+                <ActivityIndicator size="small" color="#6B7280" />
+              ) : (
+                <Ionicons name="location-outline" size={16} color="#6B7280" />
+              )}
+              <Text style={styles.locationText}>
+                {isLoadingLocation ? 'Detecting...' : userLocation}
+              </Text>
+            </TouchableOpacity>
             <TouchableOpacity 
               style={styles.notificationButton}
-              onPress={() => navigation.navigate('Notifications')}
+              onPress={handleNotificationPress}
             >
               <Ionicons name="notifications-outline" size={24} color="#6B7280" />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>2</Text>
-              </View>
+              {isLoadingNotifications ? (
+                <View style={styles.notificationBadge}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                </View>
+              ) : unreadNotificationsCount > 0 ? (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                  </Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.profileButton}
@@ -509,14 +727,29 @@ export function Home() {
           {/* Welcome Banner */}
           <View style={styles.welcomeBanner}>
             <Text style={styles.welcomeTitle}>
-              Hello, {user?.firstName || 'Modou'} 👋
+              Hello, {(() => {
+                // First try fresh user data from backend
+                if (freshUserData?.firstName) {
+                  return freshUserData.firstName;
+                }
+                // Then try AuthContext user data
+                if (user?.firstName) {
+                  return user.firstName;
+                }
+                // Show loading state
+                if (isLoadingUserData) {
+                  return 'Loading...';
+                }
+                // Fallback
+                return 'User';
+              })()} 👋
             </Text>
             <Text style={styles.welcomeSubtitle}>What would you like to do today?</Text>
             
             <View style={styles.welcomeButtons}>
               <TouchableOpacity 
                 style={styles.rideButton}
-                onPress={() => navigation.navigate('RideRequest')}
+                onPress={() => navigation.navigate('CustomerRideService')}
               >
                 <Ionicons name="car-outline" size={36} color="#1E40AF" />
                 <Text style={styles.rideButtonTitle}>Book a Ride</Text>
@@ -550,7 +783,7 @@ export function Home() {
                   onPress={() => handleQuickActionPress(action.label)}
                 >
                   <View style={styles.quickActionIcon}>
-                    <Ionicons name={action.icon as any} size={24} color="#14B8A6" />
+                    <Ionicons name={action.icon as any} size={24} color="#0EA5E9" />
                   </View>
                   <Text style={styles.quickActionLabel}>{action.label}</Text>
                 </TouchableOpacity>
@@ -635,21 +868,24 @@ export function Home() {
                     </Text>
                     <TouchableOpacity 
                       style={styles.bookFirstRideButton}
-                      onPress={() => navigation.navigate('RideRequest')}
+                      onPress={() => navigation.navigate('CustomerRideService')}
                     >
                       <Text style={styles.bookFirstRideButtonText}>Book a Ride</Text>
                     </TouchableOpacity>
                   </View>
                 )}
                 
-                <View style={styles.nearestDriverCard}>
+                <View style={[styles.nearestDriverCard, { marginTop: 20 }]}>
                   <View style={styles.nearestDriverInfo}>
                     <Ionicons name="time-outline" size={20} color="#14B8A6" />
                     <Text style={styles.nearestDriverText}>
-                      Nearest driver: <Text style={styles.nearestDriverTime}>3 mins away</Text>
+                      Get A Ride
                     </Text>
                   </View>
-                  <TouchableOpacity style={styles.bookNowButton}>
+                  <TouchableOpacity 
+                    style={styles.bookNowButton}
+                    onPress={() => navigation.navigate('RideRequest')}
+                  >
                     <Text style={styles.bookNowButtonText}>Book Now</Text>
                   </TouchableOpacity>
                 </View>
@@ -671,40 +907,63 @@ export function Home() {
               </View>
               
               <View style={styles.shopGrid}>
-                <View style={styles.shopCard}>
+                <TouchableOpacity 
+                  style={styles.shopCard}
+                  onPress={() => navigation.navigate('PopularProducts')}
+                >
                   <Text style={styles.shopCardTitle}>🔥 POPULAR</Text>
                   <Text style={styles.shopCardSubtitle}>Products</Text>
-                  <TouchableOpacity style={styles.shopCardButton}>
+                  <View style={styles.shopCardButton}>
                     <Text style={styles.shopCardButtonText}>Explore</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.shopCard}>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.shopCard}
+                  onPress={() => navigation.navigate('NewArrivals')}
+                >
                   <Text style={styles.shopCardTitle}>✨ New Arrivals</Text>
                   <Text style={styles.shopCardSubtitle}>Just Added</Text>
-                  <TouchableOpacity style={styles.shopCardButton}>
+                  <View style={styles.shopCardButton}>
                     <Text style={styles.shopCardButtonText}>See New</Text>
-                  </TouchableOpacity>
-                </View>
+                  </View>
+                </TouchableOpacity>
               </View>
               
               <Text style={styles.categoriesTitle}>Categories</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {categories.map((category, index) => (
-                  <View key={index} style={styles.categoryItem}>
-                    <View style={styles.categoryIcon}>
-                      <Ionicons name={category.icon as any} size={20} color="#3B82F6" />
-                    </View>
-                    <Text style={styles.categoryName}>{category.name}</Text>
-                  </View>
-                ))}
-              </ScrollView>
+              {isLoadingCategories ? (
+                <View style={styles.categoriesLoading}>
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                  <Text style={styles.categoriesLoadingText}>Loading categories...</Text>
+                </View>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {categoriesData.map((category, index) => (
+                    <TouchableOpacity 
+                      key={category.id} 
+                      style={styles.categoryItem}
+                      onPress={() => navigation.navigate('FeaturedByCategories', { 
+                        categoryId: category.id, 
+                        categoryName: category.name 
+                      })}
+                    >
+                      <View style={styles.categoryIcon}>
+                        <Ionicons name={getCategoryIcon(category.name) as any} size={20} color="#3B82F6" />
+                      </View>
+                      <Text style={styles.categoryName}>{category.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
               
-              <View style={styles.sellCard}>
+              <View style={[styles.sellCard, { marginTop: 40 }]}>
                 <View style={styles.sellCardHeader}>
                   <Ionicons name="add-circle-outline" size={20} color="#3B82F6" />
                   <Text style={styles.sellCardTitle}>Have something to sell?</Text>
                 </View>
-                <TouchableOpacity style={styles.sellButton}>
+                <TouchableOpacity 
+                  style={styles.sellButton}
+                  onPress={() => navigation.navigate('SellerDashboard')}
+                >
                   <Text style={styles.sellButtonText}>Post an Item for Sale</Text>
                 </TouchableOpacity>
               </View>
@@ -747,7 +1006,7 @@ export function Home() {
           </View>
 
           {/* Live Activity */}
-          <View style={styles.activityContainer}>
+          {/* <View style={styles.activityContainer}>
             <View style={styles.activityHeader}>
               <Ionicons name="pulse-outline" size={20} color="#EF4444" />
               <Text style={styles.activityTitle}>Live Activity</Text>
@@ -758,7 +1017,7 @@ export function Home() {
                 <Text style={styles.activityTime}>{activity.time}</Text>
               </View>
             ))}
-          </View>
+          </View> */}
 
           {/* Become a Rider Section */}
           <View style={styles.becomeRiderContainer}>
@@ -1117,11 +1376,12 @@ const styles = StyleSheet.create({
     top: -4,
     right: -4,
     backgroundColor: '#F97316',
-    borderRadius: 8,
-    width: 16,
-    height: 16,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   notificationBadgeText: {
     fontSize: 10,
@@ -1574,6 +1834,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#374151',
     textAlign: 'center',
+  },
+  categoriesLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  categoriesLoadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
   },
   sellCard: {
     backgroundColor: '#F0F4FF',

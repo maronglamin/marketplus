@@ -25,6 +25,8 @@ export interface Order {
   deliveryCurrency?: string;
   status: string;
   shippingMethod?: string;
+  shippingAmount?: number;
+  discountAmount?: number;
   createdAt: string;
   items: OrderItem[];
   customer?: {
@@ -43,12 +45,12 @@ export interface OrderListResponse {
 }
 
 export const orderService = {
-  async getMyOrders(page: number = 1, limit: number = 6): Promise<OrderListResponse> {
+  async getMyOrders(page: number = 1, limit: number = 20): Promise<OrderListResponse> {
     const response = await api.get(`/api/orders/my-orders?page=${page}&limit=${limit}`);
     return response.data;
   },
 
-  async getCustomerOrders(page: number = 1, limit: number = 6): Promise<OrderListResponse> {
+  async getCustomerOrders(page: number = 1, limit: number = 20): Promise<OrderListResponse> {
     const response = await api.get(`/api/orders/customer-orders?page=${page}&limit=${limit}`);
     return response.data;
   },

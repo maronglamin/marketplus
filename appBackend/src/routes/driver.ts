@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticate as authenticateToken, AuthRequest } from '../middleware/auth';
 import { PrismaClient } from '@prisma/client';
 import { DriverService } from '../services/driverService';
+import { logger } from '../utils/logger';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -460,6 +461,281 @@ router.get('/profile', authenticateToken, async (req: AuthRequest, res) => {
       message: 'Failed to get driver profile',
       error: error.message
     });
+  }
+});
+
+/**
+ * Get vehicle images for a specific driver
+ * Returns CAR_INTERIOR_PHOTO and CAR_EXTERIOR_PHOTO documents
+ * Uses distant relationship: Driver → RiderApplication → RiderDocument
+ */
+router.get('/:driverId/vehicle-images', async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    if (!driverId) {
+      return res.status(400).json({ success: false, message: 'driverId is required' });
+    }
+
+    // Get the driver with their rider application and documents
+    const driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      include: {
+        riderApplication: {
+          include: {
+            documents: {
+              where: {
+                documentType: { in: ['CAR_INTERIOR_PHOTO', 'CAR_EXTERIOR_PHOTO'] }
+              },
+              select: {
+                id: true,
+                documentType: true,
+                fileUrl: true,
+                fileName: true,
+                uploadedAt: true
+              },
+              orderBy: { uploadedAt: 'desc' }
+            }
+          }
+        }
+      }
+    });
+
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    if (!driver.riderApplication) {
+      return res.status(404).json({ success: false, message: 'Rider application not found' });
+    }
+
+    // Group images by type from the included documents
+    const groupedImages = {
+      interior: driver.riderApplication.documents.filter(img => img.documentType === 'CAR_INTERIOR_PHOTO'),
+      exterior: driver.riderApplication.documents.filter(img => img.documentType === 'CAR_EXTERIOR_PHOTO')
+    };
+
+    return res.json({ 
+      success: true, 
+      data: groupedImages 
+    });
+  } catch (error: any) {
+    console.error('Error fetching vehicle images:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch vehicle images', 
+      error: error?.message || String(error) 
+    });
+  }
+});
+
+/**
+ * Get vehicle images for a specific user
+ * Returns CAR_INTERIOR_PHOTO and CAR_EXTERIOR_PHOTO documents
+ * Uses distant relationship: User → RiderApplication → RiderDocument
+ */
+router.get('/user/:userId/vehicle-images', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'userId is required' });
+    }
+
+    // Get the user's rider application with documents
+    const riderApplication = await prisma.riderApplication.findFirst({
+      where: { userId },
+      include: {
+        documents: {
+          where: {
+            documentType: { in: ['CAR_INTERIOR_PHOTO', 'CAR_EXTERIOR_PHOTO'] }
+          },
+          select: {
+            id: true,
+            documentType: true,
+            fileUrl: true,
+            fileName: true,
+            uploadedAt: true
+          },
+          orderBy: { uploadedAt: 'desc' }
+        }
+      }
+    });
+
+    if (!riderApplication) {
+      return res.status(404).json({ success: false, message: 'Rider application not found for this user' });
+    }
+
+    // Group images by type
+    const groupedImages = {
+      interior: riderApplication.documents.filter(img => img.documentType === 'CAR_INTERIOR_PHOTO'),
+      exterior: riderApplication.documents.filter(img => img.documentType === 'CAR_EXTERIOR_PHOTO')
+    };
+
+    return res.json({ 
+      success: true, 
+      data: groupedImages 
+    });
+  } catch (error: any) {
+    console.error('Error fetching vehicle images for user:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch vehicle images', 
+      error: error?.message || String(error) 
+    });
+  }
+});
+
+/**
+ * Get verified rental drivers for a given service
+ * Filters: isVerified = true, isActive = true, isRentalType = true, rideServiceId matches
+ * Includes: user basic info, riderApplication vehicle details, documents limited to interior/exterior car photos
+ */
+router.get('/rental/:serviceId', async (req, res) => {
+  try {
+    const { serviceId } = req.params;
+    if (!serviceId) {
+      return res.status(400).json({ success: false, message: 'serviceId is required' });
+    }
+
+    const drivers = await prisma.driver.findMany({
+      where: {
+        isVerified: true,
+        isActive: true,
+        isRentalType: true,
+        rideServiceId: serviceId,
+      },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, phoneNumber: true },
+        },
+        riderApplication: {
+          include: {
+            documents: {
+              where: {
+                documentType: { in: ['CAR_INTERIOR_PHOTO', 'CAR_EXTERIOR_PHOTO'] }
+              },
+              select: {
+                id: true,
+                documentType: true,
+                fileUrl: true,
+                fileName: true,
+                uploadedAt: true
+              },
+              orderBy: { uploadedAt: 'desc' }
+            }
+          }
+        },
+        rideService: { select: { id: true, name: true, description: true } },
+        // Documents are stored in rider_documents table linked via riderApplication
+        // We'll fetch CAR_INTERIOR_PHOTO and CAR_EXTERIOR_PHOTO
+      },
+    });
+
+    if (drivers.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const payload = drivers.map((d) => ({
+      id: d.id,
+      userId: d.userId,
+      driverId: d.driverId,
+      isOnline: d.isOnline,
+      status: d.status,
+      totalRides: d.totalRides,
+      totalEarnings: (d.totalEarnings as any)?.toString?.() ?? String(d.totalEarnings ?? ''),
+      rating: (d.rating as any)?.toString?.() ?? (d.rating as any),
+      ratingCount: d.ratingCount,
+      isVerified: d.isVerified,
+      isActive: d.isActive,
+      isRentalType: d.isRentalType,
+      rideService: d.rideService,
+      user: d.user,
+      riderApplication: {
+        id: d.riderApplication?.id,
+        firstName: (d.riderApplication as any)?.firstName,
+        lastName: (d.riderApplication as any)?.lastName,
+        address: (d.riderApplication as any)?.address,
+        vehicleModel: d.riderApplication?.vehicleModel,
+        vehicleType: d.riderApplication?.vehicleType,
+        licensePlate: d.riderApplication?.vehiclePlate,
+        documents: (d.riderApplication as any)?.documents || [],
+      },
+      documents: (d.riderApplication as any)?.documents || [],
+    }));
+
+    logger.info(`Returned ${payload.length} rental drivers for service ${serviceId}`);
+    return res.json({ success: true, data: payload });
+  } catch (error: any) {
+    console.error('Error fetching rental drivers:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch rental drivers', error: error?.message || String(error) });
+  }
+});
+
+/**
+ * Get all verified rental drivers (across services)
+ */
+router.get('/rental/verified', async (_req, res) => {
+  try {
+    const drivers = await prisma.driver.findMany({
+      where: { isVerified: true, isActive: true, isRentalType: true, rideServiceId: { not: null } },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true, phoneNumber: true } },
+        riderApplication: { 
+          include: {
+            documents: {
+              where: {
+                documentType: { in: ['CAR_INTERIOR_PHOTO', 'CAR_EXTERIOR_PHOTO'] }
+              },
+              select: {
+                id: true,
+                documentType: true,
+                fileUrl: true,
+                fileName: true,
+                uploadedAt: true
+              },
+              orderBy: { uploadedAt: 'desc' }
+            }
+          }
+        },
+        rideService: { select: { id: true, name: true, description: true } },
+      },
+    });
+
+    if (drivers.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const payload = drivers.map((d) => ({
+      id: d.id,
+      userId: d.userId,
+      driverId: d.driverId,
+      isOnline: d.isOnline,
+      status: d.status,
+      totalRides: d.totalRides,
+      totalEarnings: (d.totalEarnings as any)?.toString?.() ?? String(d.totalEarnings ?? ''),
+      rating: (d.rating as any)?.toString?.() ?? (d.rating as any),
+      ratingCount: d.ratingCount,
+      isVerified: d.isVerified,
+      isActive: d.isActive,
+      isRentalType: d.isRentalType,
+      rideService: d.rideService,
+      user: d.user,
+      riderApplication: {
+        id: d.riderApplication?.id,
+        firstName: (d.riderApplication as any)?.firstName,
+        lastName: (d.riderApplication as any)?.lastName,
+        address: (d.riderApplication as any)?.address,
+        vehicleModel: d.riderApplication?.vehicleModel,
+        vehicleType: d.riderApplication?.vehicleType,
+        licensePlate: d.riderApplication?.vehiclePlate,
+        documents: (d.riderApplication as any)?.documents || [],
+      },
+      documents: (d.riderApplication as any)?.documents || [],
+    }));
+
+    return res.json({ success: true, data: payload });
+  } catch (error: any) {
+    console.error('Error fetching verified rental drivers:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch verified rental drivers', error: error?.message || String(error) });
   }
 });
 

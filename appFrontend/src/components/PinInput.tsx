@@ -3,16 +3,20 @@ import {
   View,
   TextInput,
   StyleSheet,
+  StyleProp,
   ViewStyle,
   TextInputProps,
 } from 'react-native';
 import { colors, spacing } from '../theme';
 
-interface PinInputProps extends TextInputProps {
+interface PinInputProps {
   value: string;
   onChangeText: (text: string) => void;
   maxLength?: number;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
+  onComplete?: (pin: string) => void;
+  editable?: boolean;
+  placeholder?: string;
 }
 
 const PinInput = ({
@@ -20,19 +24,41 @@ const PinInput = ({
   onChangeText,
   maxLength = 4,
   style,
+  onComplete,
   ...props
 }: PinInputProps) => {
   const inputRef = useRef<TextInput>(null);
+  const hasCompletedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+
+  // Update the ref when onComplete changes
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     // Focus input when component mounts
     inputRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    // Reset completion flag when value changes
+    if (value.length < maxLength) {
+      hasCompletedRef.current = false;
+    }
+    
+    // Auto-complete when PIN is fully entered (only once)
+    if (value.length === maxLength && onCompleteRef.current && !hasCompletedRef.current) {
+      hasCompletedRef.current = true;
+      onCompleteRef.current(value);
+    }
+  }, [value, maxLength]);
+
   const handleChangeText = (text: string) => {
     // Only allow numbers
     const numbersOnly = text.replace(/[^0-9]/g, '');
-    onChangeText(numbersOnly.slice(0, maxLength));
+    const newValue = numbersOnly.slice(0, maxLength);
+    onChangeText(newValue);
   };
 
   return (
@@ -55,7 +81,9 @@ const PinInput = ({
               styles.dot,
               index < value.length && styles.dotFilled,
             ]}
-          />
+          >
+            {index < value.length && <View style={styles.dotInner} />}
+          </View>
         ))}
       </View>
     </View>
@@ -65,6 +93,7 @@ const PinInput = ({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+    alignItems: 'center',
   },
   input: {
     position: 'absolute',
@@ -77,16 +106,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     height: 50,
+    paddingHorizontal: 10,
+    gap: 8,
   },
   dot: {
-    width: 12,
-    height: 12,
+    width: 40,
+    height: 40,
     borderRadius: 6,
-    backgroundColor: colors.border,
-    marginHorizontal: spacing.sm,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   dotFilled: {
-    backgroundColor: colors.primary,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#2563EB',
+    borderWidth: 2,
+    shadowColor: '#2563EB',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  dotInner: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#2563EB',
+    alignSelf: 'center',
+    marginTop: 12,
   },
 });
 

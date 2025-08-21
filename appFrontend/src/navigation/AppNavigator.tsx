@@ -4,6 +4,11 @@ import { Home } from '../screens/Home';
 import { Settings } from '../screens/Settings';
 import { Notifications } from '../screens/Notifications';
 import { AccountSettings } from '../screens/AccountSettings';
+import { AccountType } from '../screens/account-settings/AccountType';
+import Permissions from '../screens/account-settings/Permissions';
+import { ServiceTerms } from '../screens/account-settings/ServiceTerms';
+import { Notifications as NotificationsSettings } from '../screens/account-settings/Notifications';
+import { PaymentMethods } from '../screens/account-settings/PaymentMethods';
 import { ProductDetail } from '../screens/products/buyer/ProductDetail';
 import { SellerDashboard } from '../screens/SellerDashboard';
 import { AddProduct } from '../screens/add-product';
@@ -40,15 +45,30 @@ import { DriverEarnings } from '../screens/DriverEarnings';
 import { JourneyMapView } from '../screens/JourneyMapView';
 import { CustomerRides } from '../screens/CustomerRides';
 import { CustomerRideHistory } from '../screens/CustomerRideHistory';
+import { CustomerRideService } from '../screens/CustomerRideService';
 import { RideTracking } from '../screens/RideTracking';
 import { TokenNotificationCard } from '../components/TokenNotificationCard';
 import { View } from 'react-native';
+import RentalRequestScreen from '../screens/RentalRequest';
+import RentalDetailScreen from '../screens/RentalDetail';
+import RentalChatScreen from '../screens/RentalChat';
+import AssetRentalScreen from '../screens/AssetRental';
+import VehicleDetailsScreen from '../screens/VehicleDetailsScreen';
+import CustomerRidesRecordsScreen from '../screens/CustomerRidesRecords';
+import FeaturedByCategoriesScreen from '../screens/FeaturedByCategories';
+import PopularProductsScreen from '../screens/PopularProducts';
+import NewArrivalsScreen from '../screens/NewArrivals';
 
 export type AppStackParamList = {
   Home: { openSearch?: boolean } | undefined;
   Settings: undefined;
   Notifications: undefined;
   AccountSettings: undefined;
+  AccountType: undefined;
+  Permissions: undefined;
+  ServiceTerms: undefined;
+  NotificationsSettings: undefined;
+  PaymentMethods: undefined;
   ProductDetail: { productId: string };
   SellerDashboard: undefined;
   AddProduct: { productId?: string };
@@ -171,8 +191,22 @@ export type AppStackParamList = {
     totalFare: number;
     currencySymbol: string;
   };
+  CustomerRideService: undefined;
   CustomerRides: undefined;
   CustomerRideHistory: undefined;
+  CustomerRidesRecords: undefined;
+  FeaturedByCategories: { categoryId: string; categoryName: string };
+  PopularProducts: undefined;
+  NewArrivals: undefined;
+  RentalRequest: undefined;
+  RentalDetail: { rentalId: string };
+  RentalChat: { rentalId: string };
+  AssetRental: undefined;
+  VehicleDetails: {
+    driver: any;
+    selectedService: any;
+    scheduleData: any;
+  };
   RideTracking: {
     rideId: string;
     requestId: string;
@@ -202,142 +236,81 @@ export type AppStackParamList = {
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
 
-const AppNavigator = () => {
+export function AppNavigator() {
   return (
     <View style={{ flex: 1 }}>
+      <TokenNotificationCard />
       <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        animation: 'slide_from_right',
-        animationDuration: 200,
-        gestureEnabled: true,
-        gestureDirection: 'horizontal',
-      }}
-    >
-      <Stack.Screen 
-        name="Home" 
-        component={Home}
-        options={{
-          gestureEnabled: false, // Disable swipe back gesture
-        }}
-      />
-      <Stack.Screen name="SellerInterestDetail" component={SellerInterestDetail} />
-      <Stack.Screen name="Settings" component={Settings} />
-      <Stack.Screen name="Notifications" component={Notifications} />
-      <Stack.Screen name="AccountSettings" component={AccountSettings} />
-      <Stack.Screen name="ProductDetail" component={ProductDetail} />
-      <Stack.Screen name="SellerDashboard" component={SellerDashboard} />
-      <Stack.Screen name="AddProduct" component={AddProduct} />
-      <Stack.Screen name="ProductListing" component={ProductListing} />
-      <Stack.Screen name="FeaturedProducts" component={FeaturedProducts} />
-      <Stack.Screen name="SellerProductDetail" component={SellerProductDetail} />
-      <Stack.Screen name="InterestManagement" component={InterestManagement} />
-      <Stack.Screen name="CustomerOrders" component={CustomerOrders} />
-      <Stack.Screen name="ShowInterest" component={ShowInterest} />
-      <Stack.Screen name="Order" component={Order} />
-      <Stack.Screen 
-        name="SellerKycForm" 
-        component={SellerKycForm}
-        options={{
-          animation: 'fade',
-        }}
-      />
-      <Stack.Screen 
-        name="SellerKycBusiness" 
-        component={SellerKycBusiness}
-        options={{
+        screenOptions={{
+          headerShown: false,
           animation: 'slide_from_right',
+          animationDuration: 200,
+          gestureEnabled: true,
+          gestureDirection: 'horizontal',
         }}
-      />
-      <Stack.Screen 
-        name="SellerKycAddress" 
-        component={SellerKycAddress}
-        options={{
-          animation: 'slide_from_right',
-        }}
-      />
-      <Stack.Screen 
-        name="SellerKycVerification" 
-        component={SellerKycVerification}
-        options={{
-          animation: 'slide_from_right',
-        }}
-      />
-      <Stack.Screen 
-        name="SellerKycConfirmation" 
-        component={SellerKycConfirmation}
-        options={{
-          animation: 'slide_from_right',
-        }}
-      />
-      <Stack.Screen name="UpdateStock" component={UpdateStock} />
-      <Stack.Screen name="DeliveryOptions" component={DeliveryOptions} />
-      <Stack.Screen name="RevenueDetails" component={RevenueDetails} />
-      <Stack.Screen name="TransactionHistory" component={TransactionHistory} />
-      <Stack.Screen name="TransactionDetail" component={TransactionDetail} />
-      <Stack.Screen name="SettlementRequest" component={SettlementRequest} />
-      <Stack.Screen name="SettlementHistory" component={SettlementHistory} />
-      <Stack.Screen name="SettlementDetail" component={SettlementDetail} />
-      <Stack.Screen name="RideSettlementRequest" component={RideSettlementRequest} />
-      <Stack.Screen name="OrderDetails" component={OrderDetails} />
-              <Stack.Screen name="ChatList" component={ChatList} />
+      >
+        <Stack.Screen 
+          name="Home" 
+          component={Home}
+          options={{
+            gestureEnabled: false, // Disable swipe back gesture
+          }}
+        />
+        <Stack.Screen name="SellerInterestDetail" component={SellerInterestDetail} />
+        <Stack.Screen name="Settings" component={Settings} />
+        <Stack.Screen name="Notifications" component={Notifications} />
+        <Stack.Screen name="AccountSettings" component={AccountSettings} />
+        <Stack.Screen name="AccountType" component={AccountType} />
+        <Stack.Screen name="Permissions" component={Permissions} />
+        <Stack.Screen name="ServiceTerms" component={ServiceTerms} />
+        <Stack.Screen name="NotificationsSettings" component={NotificationsSettings} />
+        <Stack.Screen name="PaymentMethods" component={PaymentMethods} />
+        <Stack.Screen name="ProductDetail" component={ProductDetail} />
+        <Stack.Screen name="SellerDashboard" component={SellerDashboard} />
+        <Stack.Screen name="AddProduct" component={AddProduct} />
+        <Stack.Screen name="ProductListing" component={ProductListing} />
+        <Stack.Screen name="FeaturedProducts" component={FeaturedProducts} />
+        <Stack.Screen name="SellerProductDetail" component={SellerProductDetail} />
+        <Stack.Screen name="InterestManagement" component={InterestManagement} />
+        <Stack.Screen name="CustomerOrders" component={CustomerOrders} />
+        <Stack.Screen name="ShowInterest" component={ShowInterest} />
+        <Stack.Screen name="Order" component={Order} />
+        <Stack.Screen name="SellerKycForm" component={SellerKycForm} options={{ animation: 'fade' }} />
+        <Stack.Screen name="SellerKycBusiness" component={SellerKycBusiness} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="SellerKycAddress" component={SellerKycAddress} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="SellerKycVerification" component={SellerKycVerification} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="SellerKycConfirmation" component={SellerKycConfirmation} options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="UpdateStock" component={UpdateStock} />
+        <Stack.Screen name="DeliveryOptions" component={DeliveryOptions} />
+        <Stack.Screen name="RevenueDetails" component={RevenueDetails} />
+        <Stack.Screen name="TransactionHistory" component={TransactionHistory} />
+        <Stack.Screen name="TransactionDetail" component={TransactionDetail} />
+        <Stack.Screen name="SettlementRequest" component={SettlementRequest} />
+        <Stack.Screen name="SettlementHistory" component={SettlementHistory} />
+        <Stack.Screen name="SettlementDetail" component={SettlementDetail} />
+        <Stack.Screen name="RideSettlementRequest" component={RideSettlementRequest} />
+        <Stack.Screen name="OrderDetails" component={OrderDetails} />
+        <Stack.Screen name="ChatList" component={ChatList} />
         <Stack.Screen name="RideRequest" component={RideRequest} />
         <Stack.Screen name="BecomeRider" component={BecomeRider} />
-        <Stack.Screen 
-          name="DriverDashboard" 
-          component={DriverDashboard}
-          options={{
-            gestureEnabled: true, // Allow swipe back gesture to go to Home
-          }}
-        />
-        <Stack.Screen 
-          name="DriverRequests" 
-          component={DriverRequests}
-          options={{
-            gestureEnabled: true,
-          }}
-        />
-        <Stack.Screen 
-          name="DriverEarnings" 
-          component={DriverEarnings}
-          options={{
-            gestureEnabled: true,
-          }}
-        />
-        <Stack.Screen 
-          name="JourneyMapView" 
-          component={JourneyMapView}
-          options={{
-            gestureEnabled: true,
-          }}
-        />
-        <Stack.Screen 
-          name="CustomerRides" 
-          component={CustomerRides}
-          options={{
-            gestureEnabled: true,
-          }}
-        />
-        <Stack.Screen 
-          name="CustomerRideHistory" 
-          component={CustomerRideHistory}
-          options={{
-            gestureEnabled: true,
-          }}
-        />
-        <Stack.Screen 
-          name="RideTracking" 
-          component={RideTracking}
-          options={{
-            gestureEnabled: true,
-          }}
-        />
+        <Stack.Screen name="DriverDashboard" component={DriverDashboard} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="DriverRequests" component={DriverRequests} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="DriverEarnings" component={DriverEarnings} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="JourneyMapView" component={JourneyMapView} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="CustomerRideService" component={CustomerRideService} />
+        <Stack.Screen name="CustomerRides" component={CustomerRides} />
+        <Stack.Screen name="CustomerRideHistory" component={CustomerRideHistory} />
+        <Stack.Screen name="CustomerRidesRecords" component={CustomerRidesRecordsScreen} />
+        <Stack.Screen name="FeaturedByCategories" component={FeaturedByCategoriesScreen} />
+        <Stack.Screen name="PopularProducts" component={PopularProductsScreen} />
+        <Stack.Screen name="NewArrivals" component={NewArrivalsScreen} />
+        <Stack.Screen name="RentalRequest" component={RentalRequestScreen} />
+        <Stack.Screen name="RentalDetail" component={RentalDetailScreen} />
+        <Stack.Screen name="RentalChat" component={RentalChatScreen} />
+        <Stack.Screen name="AssetRental" component={AssetRentalScreen} />
+        <Stack.Screen name="VehicleDetails" component={VehicleDetailsScreen} />
+        <Stack.Screen name="RideTracking" component={RideTracking} />
       </Stack.Navigator>
-      
-      {/* Global Token Notification Card */}
-      <TokenNotificationCard />
     </View>
   );
-};
-
-export default AppNavigator; 
+} 

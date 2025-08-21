@@ -1,26 +1,53 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ViewStyle, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { mobileWalletService, MobileWalletProvider } from '../services/mobileWalletService';
+import { api } from '../api/api';
+
+interface ProviderItem {
+  id: string;
+  name: string;
+  code?: string;
+  countryCode?: string;
+}
 
 interface MobileWalletPickerProps {
   value: string;
-  onChange: (providerId: string) => void;
+  onChange: (providerId: string, providerName?: string) => void;
   style?: ViewStyle;
   label?: string;
 }
 
 export const MobileWalletPicker: React.FC<MobileWalletPickerProps> = ({ value, onChange, style, label }) => {
   const [search, setSearch] = useState('');
-  const providers = useMemo(() => mobileWalletService.getActiveProviders(), []);
+  const [providers, setProviders] = useState<ProviderItem[]>([]);
+
+  useEffect(() => {
+    const loadProviders = async () => {
+      try {
+        // Load all active providers (backend defaults to isActive=true)
+        const res = await api.get('/api/payment-gateway-service-providers');
+        const items: ProviderItem[] = (res.data?.providers || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          code: p.code || p.metadata?.code,
+          countryCode: p.countryCode,
+        }));
+        setProviders(items);
+      } catch (e) {
+        console.error('Failed to load mobile money providers', e);
+        setProviders([]);
+      }
+    };
+    loadProviders();
+  }, []);
   
   const filteredProviders = useMemo(() => {
     if (!search) return providers;
     const q = search.toLowerCase();
     return providers.filter(provider =>
       provider.name.toLowerCase().includes(q) ||
-      provider.code.toLowerCase().includes(q) ||
-      provider.country.toLowerCase().includes(q)
+      (provider.code || '').toLowerCase().includes(q) ||
+      (provider.countryCode || '').toLowerCase().includes(q)
     );
   }, [search, providers]);
 
@@ -43,7 +70,7 @@ export const MobileWalletPicker: React.FC<MobileWalletPickerProps> = ({ value, o
             <TouchableOpacity
               key={provider.id}
               style={[styles.providerOption, value === provider.id && styles.providerOptionSelected]}
-              onPress={() => onChange(provider.id)}
+              onPress={() => onChange(provider.id, provider.name)}
             >
               <View style={styles.providerContent}>
                 <Ionicons 

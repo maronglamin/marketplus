@@ -112,13 +112,14 @@ export function UserRegistration() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={styles.backButton}
           >
-            <ArrowLeft size={24} color="#000000" />
+            <ArrowLeft size={24} color="#1F2937" />
           </TouchableOpacity>
         </View>
 
@@ -126,82 +127,92 @@ export function UserRegistration() {
           style={styles.content}
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.title}>Complete Your Profile</Text>
-          <Text style={styles.subtitle}>
-            Please provide your information to complete registration
-          </Text>
+          <View style={styles.formContainer}>
+            <Text style={styles.title}>Complete Your Profile</Text>
+            <Text style={styles.subtitle}>
+              Please provide your information to complete registration
+            </Text>
 
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>First Name *</Text>
-              <TextInput
-                style={[styles.input, errors.firstName && styles.inputError]}
-                value={firstName}
-                onChangeText={(text) => {
-                  setFirstName(text);
-                  if (errors.firstName) {
-                    setErrors(prev => ({ ...prev, firstName: undefined }));
-                  }
-                }}
-                placeholder="Enter your first name"
-                autoCapitalize="words"
-                editable={!loading}
-              />
-              {errors.firstName && (
-                <Text style={styles.errorText}>{errors.firstName}</Text>
-              )}
+            <View style={styles.form}>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>First Name *</Text>
+                <TextInput
+                  style={[styles.input, errors.firstName && styles.inputError]}
+                  value={firstName}
+                  onChangeText={(text) => {
+                    setFirstName(text);
+                    if (errors.firstName) {
+                      setErrors(prev => ({ ...prev, firstName: undefined }));
+                    }
+                  }}
+                  placeholder="Enter your first name"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="words"
+                  editable={!loading}
+                  returnKeyType="next"
+                />
+                {errors.firstName && (
+                  <Text style={styles.errorText}>{errors.firstName}</Text>
+                )}
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Middle Name</Text>
+                <TextInput
+                  style={[styles.input, errors.middleName && styles.inputError]}
+                  value={middleName}
+                  onChangeText={(text) => {
+                    setMiddleName(text);
+                    if (errors.middleName) {
+                      setErrors(prev => ({ ...prev, middleName: undefined }));
+                    }
+                  }}
+                  placeholder="Enter your middle name (optional)"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="words"
+                  editable={!loading}
+                  returnKeyType="next"
+                />
+                {errors.middleName && (
+                  <Text style={styles.errorText}>{errors.middleName}</Text>
+                )}
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>Last Name *</Text>
+                <TextInput
+                  style={[styles.input, errors.lastName && styles.inputError]}
+                  value={lastName}
+                  onChangeText={(text) => {
+                    setLastName(text);
+                    if (errors.lastName) {
+                      setErrors(prev => ({ ...prev, lastName: undefined }));
+                    }
+                  }}
+                  placeholder="Enter your last name"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="words"
+                  editable={!loading}
+                  returnKeyType="done"
+                />
+                {errors.lastName && (
+                  <Text style={styles.errorText}>{errors.lastName}</Text>
+                )}
+              </View>
+
+              <TouchableOpacity
+                onPress={handleRegister}
+                disabled={loading}
+                style={[styles.button, loading && styles.buttonDisabled]}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.buttonText}>
+                  {loading ? 'Registering...' : 'Complete Registration'}
+                </Text>
+              </TouchableOpacity>
             </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Middle Name</Text>
-              <TextInput
-                style={[styles.input, errors.middleName && styles.inputError]}
-                value={middleName}
-                onChangeText={(text) => {
-                  setMiddleName(text);
-                  if (errors.middleName) {
-                    setErrors(prev => ({ ...prev, middleName: undefined }));
-                  }
-                }}
-                placeholder="Enter your middle name (optional)"
-                autoCapitalize="words"
-                editable={!loading}
-              />
-              {errors.middleName && (
-                <Text style={styles.errorText}>{errors.middleName}</Text>
-              )}
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Last Name *</Text>
-              <TextInput
-                style={[styles.input, errors.lastName && styles.inputError]}
-                value={lastName}
-                onChangeText={(text) => {
-                  setLastName(text);
-                  if (errors.lastName) {
-                    setErrors(prev => ({ ...prev, lastName: undefined }));
-                  }
-                }}
-                placeholder="Enter your last name"
-                autoCapitalize="words"
-                editable={!loading}
-              />
-              {errors.lastName && (
-                <Text style={styles.errorText}>{errors.lastName}</Text>
-              )}
-            </View>
-
-            <TouchableOpacity
-              onPress={handleRegister}
-              disabled={loading}
-              style={[styles.button, loading && styles.buttonDisabled]}
-            >
-              <Text style={styles.buttonText}>
-                {loading ? 'Registering...' : 'Complete Registration'}
-              </Text>
-            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -212,7 +223,7 @@ export function UserRegistration() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F9FAFB',
   },
   container: {
     flex: 1,
@@ -220,71 +231,107 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    height: 56,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
     padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
   },
   content: {
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
+    paddingHorizontal: 32,
+    paddingTop: 40,
+    paddingBottom: 40,
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 10,
+    color: '#1F2937',
     textAlign: 'center',
+    marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 30,
+    color: '#6B7280',
     textAlign: 'center',
+    marginBottom: 48,
+    lineHeight: 24,
+    paddingHorizontal: 20,
   },
   form: {
-    gap: 20,
+    gap: 24,
   },
   inputContainer: {
     gap: 8,
   },
   label: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#374151',
+    marginBottom: 4,
   },
   input: {
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     fontSize: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
+    color: '#1F2937',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  inputError: {
+    borderColor: '#DC2626',
+    backgroundColor: '#FEF2F2',
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 4,
+    marginLeft: 4,
   },
   button: {
     backgroundColor: '#2563EB',
-    paddingVertical: 16,
-    borderRadius: 8,
+    paddingVertical: 18,
+    borderRadius: 12,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 32,
+    shadowColor: '#2563EB',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonDisabled: {
     backgroundColor: '#93C5FD',
+    shadowOpacity: 0.1,
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-  },
-  inputError: {
-    borderColor: '#DC2626',
-  },
-  errorText: {
-    color: '#DC2626',
-    fontSize: 12,
-    marginTop: 4,
   },
 }); 

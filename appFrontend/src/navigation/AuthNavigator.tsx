@@ -7,7 +7,7 @@ import { LoginPin } from '../screens/LoginPin';
 import ChangePin from '../screens/ChangePin';
 import NewPin from '../screens/NewPin';
 import ConfirmPin from '../screens/ConfirmPin';
-import AppNavigator from './AppNavigator';
+import { AppNavigator } from './AppNavigator';
 
 export type AuthStackParamList = {
   Login: undefined;

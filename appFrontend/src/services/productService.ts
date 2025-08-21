@@ -110,7 +110,7 @@ export interface RevenueBreakdown {
 }
 
 export const productService = {
-  async getSellerProducts(page: number = 1, limit: number = 10): Promise<ProductListResponse> {
+  async getSellerProducts(page: number = 1, limit: number = 30): Promise<ProductListResponse> {
     const response = await api.get(`/api/products/seller?page=${page}&limit=${limit}`);
     return response.data;
   },
@@ -125,7 +125,7 @@ export const productService = {
     return response.data
   },
 
-  async getCustomerProducts(page: number = 1, limit: number = 10, categoryId?: string, search?: string): Promise<CustomerProductListResponse> {
+  async getCustomerProducts(page: number = 1, limit: number = 30, categoryId?: string, search?: string): Promise<CustomerProductListResponse> {
     const params = new URLSearchParams({
       page: page.toString(),
       limit: limit.toString()
@@ -143,7 +143,7 @@ export const productService = {
     return response.data;
   },
 
-  async getFeaturedProducts(limit: number = 4, page: number = 1): Promise<CustomerProductListResponse> {
+  async getFeaturedProducts(limit: number = 30, page: number = 1): Promise<CustomerProductListResponse> {
     const params = new URLSearchParams({
       limit: limit.toString(),
       page: page.toString()

@@ -7,6 +7,9 @@ const router = Router();
 // Get all active ride services
 router.get('/', RideServiceController.getActiveServices);
 
+// Get all active rental ride services
+router.get('/rental', RideServiceController.getRentalServices);
+
 // Get ride services with online drivers nearby
 router.get('/with-online-drivers', RideServiceController.getServicesWithOnlineDrivers);
 

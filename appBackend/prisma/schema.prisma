@@ -93,6 +93,8 @@ model User {
   customerRideRequests         RideRequest[]          @relation("CustomerRideRequests")
   riderApplications            RiderApplication[]
   customerRides                Ride[]                 @relation("CustomerRides")
+  customerRentalRequests       RentalRequest[]
+  rentalMessages               RentalMessage[]
 
   @@index([phoneNumber])
   @@index([createdAt])
@@ -673,6 +675,7 @@ model RiderApplication {
   driver           Driver?
   user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents        RiderDocument[]
+  rentalRequests   RentalRequest[]
 
   @@index([userId])
   @@index([vehicleType])
@@ -701,6 +704,77 @@ model RiderDocument {
   @@map("rider_documents")
 }
 
+enum RentalRequestStatus {
+  PENDING_QUOTE
+  QUOTED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+model RentalRequest {
+  id                 String               @id @default(uuid())
+  requestId          String               @unique
+  customerId         String
+  driverId           String?
+  riderApplicationId String?
+  rideServiceId      String
+  status             RentalRequestStatus  @default(PENDING_QUOTE)
+  pickupAddress      String
+  pickupLocation     Json?
+  pickupLatitude     Float?
+  pickupLongitude    Float?
+  startDate          DateTime
+  endDate            DateTime
+  days               Int
+  proposedPrice      Decimal?             @db.Decimal(10, 2)
+  agreedPrice        Decimal?             @db.Decimal(10, 2)
+  currency           String               @default("GMD")
+  notes              String?
+  chatMeta           Json?                // Store chat metadata like last message, unread count, etc.
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  // Relations
+  customer           User                 @relation(fields: [customerId], references: [id])
+  driver             Driver?              @relation(fields: [driverId], references: [id])
+  rideService        RideService          @relation(fields: [rideServiceId], references: [id])
+  riderApplication   RiderApplication?    @relation(fields: [riderApplicationId], references: [id])
+  messages           RentalMessage[]
+
+  @@index([customerId])
+  @@index([driverId])
+  @@index([rideServiceId])
+  @@index([createdAt])
+  @@map("rental_requests")
+}
+
+model RentalMessage {
+  id            String        @id @default(uuid())
+  rentalId      String
+  senderId      String
+  senderType    SenderType    // CUSTOMER or DRIVER
+  content       String
+  isRead        Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  rental        RentalRequest @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  sender        User          @relation(fields: [senderId], references: [id])
+
+  @@index([rentalId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("rental_messages")
+}
+
+enum SenderType {
+  CUSTOMER
+  DRIVER
+}
+
 model Driver {
   id                 String           @id @default(uuid())
   userId             String           @unique
@@ -719,6 +793,7 @@ model Driver {
   preferences        Json?
   isVerified         Boolean          @default(false)
   isActive           Boolean          @default(true)
+  isRentalType       Boolean          @default(false)
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   rideServiceId      String?
@@ -730,6 +805,7 @@ model Driver {
   user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   rideRequests       RideRequest[]
   rides              Ride[]
+  rentalRequests     RentalRequest[]
 
   @@index([userId])
   @@index([driverId])
@@ -737,6 +813,7 @@ model Driver {
   @@index([isOnline])
   @@index([status])
   @@index([isActive])
+  @@index([isRentalType])
   @@index([createdAt])
   @@index([updatedBy])
   @@map("drivers")
@@ -916,6 +993,7 @@ model RideService {
   vehicleType              RiderVehicleType
   isActive                 Boolean          @default(true)
   isDefault                Boolean          @default(false)
+  isRentalType             Boolean          @default(false)
   distanceUnit             DistanceUnit     @default(KILOMETER)
   baseDistance             Float            @default(1.0)
   maxDistance              Float?
@@ -945,11 +1023,13 @@ model RideService {
   drivers                  Driver[]
   rideRequests             RideRequest[]
   rides                    Ride[]
+  rentalRequests           RentalRequest[]
 
   @@index([serviceId])
   @@index([vehicleType])
   @@index([isActive])
   @@index([isDefault])
+  @@index([isRentalType])
   @@index([currency])
   @@map("ride_services")
 }
@@ -983,7 +1063,7 @@ model orders {
   sellerNotes                String?
   metadata                   Json?
   createdAt                  DateTime              @default(now())
-  updatedAt                  DateTime
+  updatedAt                  DateTime              @updatedAt
   cancelledAt                DateTime?
   deliveryCurrency           String?               @db.VarChar(3)
   externalTransactions       ExternalTransaction[]

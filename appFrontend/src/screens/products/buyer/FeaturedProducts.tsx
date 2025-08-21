@@ -230,14 +230,14 @@ export function FeaturedProducts() {
       setError(null);
       
       const currentPage = isLoadMore ? page + 1 : 1;
-      console.log('Making API call to getFeaturedProducts:', { currentPage, limit: 10 });
+      console.log('Making API call to getFeaturedProducts:', { currentPage, limit: 30 });
       
       // Add timeout to prevent hanging requests
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Request timeout')), 15000); // 15 second timeout
       });
       
-      const productsPromise = productService.getFeaturedProducts(10, currentPage);
+      const productsPromise = productService.getFeaturedProducts(30, currentPage);
       const products = await Promise.race([productsPromise, timeoutPromise]) as any;
       
       console.log('Featured products response:', { 

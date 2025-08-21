@@ -91,8 +91,8 @@ export function ProductListing() {
       }
 
       console.log('Fetching products:', { pageNum, shouldRefresh });
-      // Use the backend's default limit of 10 products per page
-      const response = await productService.getSellerProducts(pageNum, 10);
+      // Use the backend's default limit of 30 products per page
+      const response = await productService.getSellerProducts(pageNum, 30);
       console.log('Products response:', response);
       
       // Validate response data

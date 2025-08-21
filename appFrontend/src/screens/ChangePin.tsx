@@ -9,6 +9,8 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,15 +21,17 @@ interface RouteParams {
   isFirstTime?: boolean;
 }
 
+type ChangePinNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'ChangePin'>;
+
 const ChangePin = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<ChangePinNavigationProp>();
   const route = useRoute();
   const { isFirstTime } = (route.params || {}) as RouteParams;
   const [currentPin, setCurrentPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handlePinSubmit = async () => {
-    if (currentPin.length !== 4) {
+  const handlePinComplete = async (pin: string) => {
+    if (pin.length !== 4) {
       Alert.alert('Error', 'Please enter a 4-digit PIN');
       return;
     }
@@ -36,7 +40,7 @@ const ChangePin = () => {
     try {
       // Navigate to new PIN screen
       navigation.navigate('NewPin', { 
-        currentPin,
+        currentPin: pin,
         isFirstTime 
       });
     } catch (error) {
@@ -57,36 +61,48 @@ const ChangePin = () => {
             onPress={() => navigation.goBack()}
             style={styles.backButton}
           >
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
+            <Ionicons name="arrow-back" size={24} color="#1F2937" />
           </TouchableOpacity>
-          <Text style={styles.title}>
+          <Text style={styles.headerTitle}>
             {isFirstTime ? 'Create PIN' : 'Change PIN'}
           </Text>
+          <View style={styles.headerRight} />
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.subtitle}>
-            {isFirstTime
-              ? 'Create a 4-digit PIN to secure your account'
-              : 'Enter your current PIN'}
-          </Text>
+          <View style={styles.formContainer}>
+            <View style={styles.iconContainer}>
+              <View style={styles.iconBackground}>
+                <Ionicons name="lock-closed" size={32} color="#2563EB" />
+              </View>
+            </View>
 
-          <PinInput
-            value={currentPin}
-            onChangeText={setCurrentPin}
-            maxLength={4}
-            style={styles.pinInput}
-          />
-
-          <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handlePinSubmit}
-            disabled={isLoading || currentPin.length !== 4}
-          >
-            <Text style={styles.buttonText}>
-              {isLoading ? 'Processing...' : 'Continue'}
+            <Text style={styles.title}>
+              {isFirstTime ? 'Create Your PIN' : 'Enter Current PIN'}
             </Text>
-          </TouchableOpacity>
+            
+            <Text style={styles.subtitle}>
+              {isFirstTime
+                ? 'Create a secure 4-digit PIN to protect your account'
+                : 'Enter your current PIN to continue'}
+            </Text>
+
+            <View style={styles.pinContainer}>
+              <PinInput
+                value={currentPin}
+                onChangeText={setCurrentPin}
+                maxLength={4}
+                onComplete={handlePinComplete}
+                style={styles.pinInput}
+              />
+            </View>
+
+            {isLoading && (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Processing...</Text>
+              </View>
+            )}
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -96,7 +112,7 @@ const ChangePin = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: '#F9FAFB',
   },
   keyboardAvoid: {
     flex: 1,
@@ -104,46 +120,108 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.lg,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
-    padding: spacing.sm,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
   },
-  title: {
-    ...typography.h1,
-    marginLeft: spacing.md,
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  headerRight: {
+    width: 40,
   },
   content: {
     flex: 1,
-    padding: spacing.xl,
+    paddingHorizontal: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  subtitle: {
-    ...typography.body1,
+  logoContainer: {
+    marginBottom: 32,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#DBEAFE',
+  },
+  logoFallback: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 50,
+  },
+  logoText: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#2563EB',
+  },
+  logo: {
+    width: '100%',
+    height: '100%',
+  },
+  formContainer: {
+    width: '100%',
+    maxWidth: 300,
+  },
+  iconContainer: {
+    marginBottom: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBackground: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#DBEAFE',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
     textAlign: 'center',
-    marginBottom: spacing.xl,
-    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 48,
+    lineHeight: 24,
+    paddingHorizontal: 20,
+  },
+  pinContainer: {
+    width: '100%',
+    maxWidth: 300,
   },
   pinInput: {
-    marginBottom: spacing.xl,
+    marginBottom: 32,
   },
-  button: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-    borderRadius: 8,
-    width: '100%',
+  loadingContainer: {
+    marginTop: 24,
     alignItems: 'center',
   },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    ...typography.button,
-    color: colors.white,
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
   },
 });
 

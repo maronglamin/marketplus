@@ -1,5 +1,7 @@
 {
   "dependencies": {
+    "expo-location": "^18.1.6",
+    "react-native-google-places-autocomplete": "^2.5.7",
     "react-native-reanimated": "^3.8.0",
     "react-native-safe-area-context": "^5.4.0",
     "react-native-svg": "^15.11.2"

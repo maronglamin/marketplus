@@ -27,6 +27,20 @@ export class RideServiceController {
   }
 
   /**
+   * Get all active rental ride services
+   */
+  static async getRentalServices(req: Request, res: Response) {
+    try {
+      const services = await RideService.getRentalServices();
+      logger.info(`Retrieved ${services.length} rental ride services`);
+      res.json({ success: true, data: services, message: 'Rental ride services retrieved successfully' });
+    } catch (error) {
+      logger.error('Error getting rental ride services:', error);
+      res.status(500).json({ success: false, message: 'Failed to retrieve rental ride services' });
+    }
+  }
+
+  /**
    * Get ride service by ID
    */
   static async getServiceById(req: Request, res: Response) {

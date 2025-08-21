@@ -28,6 +28,7 @@ export interface RideServiceConfig {
   id: string;
   serviceId: string;
   name: string;
+  description?: string;
   vehicleType: string;
   baseFare: Decimal;
   perKmRate: Decimal;
@@ -46,6 +47,7 @@ export interface RideServiceConfig {
   weekendFareMultiplier: Decimal;
   estimatedPickupTime: number;
   maxWaitTime: number;
+  restrictions?: any;
 }
 
 export class RideService {
@@ -68,6 +70,7 @@ export class RideService {
         id: service.id,
         serviceId: service.serviceId,
         name: service.name,
+        description: service.description ?? undefined,
         vehicleType: service.vehicleType,
         baseFare: service.baseFare,
         perKmRate: service.perKmRate,
@@ -85,11 +88,59 @@ export class RideService {
         nightFareMultiplier: service.nightFareMultiplier,
         weekendFareMultiplier: service.weekendFareMultiplier,
         estimatedPickupTime: service.estimatedPickupTime,
-        maxWaitTime: service.maxWaitTime
+        maxWaitTime: service.maxWaitTime,
+        restrictions: service.restrictions ?? undefined,
       }));
     } catch (error) {
       console.error('Error fetching active ride services:', error);
       throw new Error('Failed to fetch ride services');
+    }
+  }
+
+  /**
+   * Get all active rental ride services (isRentalType = true)
+   */
+  static async getRentalServices(): Promise<RideServiceConfig[]> {
+    try {
+      const services = await prisma.rideService.findMany({
+        where: {
+          isActive: true,
+          isRentalType: true,
+        },
+        orderBy: [
+          { isDefault: 'desc' },
+          { name: 'asc' },
+        ],
+      });
+
+      return services.map((service) => ({
+        id: service.id,
+        serviceId: service.serviceId,
+        name: service.name,
+        description: service.description ?? undefined,
+        vehicleType: service.vehicleType,
+        baseFare: service.baseFare,
+        perKmRate: service.perKmRate,
+        perMinuteRate: service.perMinuteRate,
+        minimumFare: service.minimumFare,
+        maximumFare: service.maximumFare,
+        currency: service.currency,
+        currencySymbol: service.currencySymbol,
+        distanceUnit: service.distanceUnit,
+        baseDistance: service.baseDistance,
+        surgeMultiplier: service.surgeMultiplier,
+        maxSurgeMultiplier: service.maxSurgeMultiplier,
+        platformFeePercentage: service.platformFeePercentage,
+        driverEarningsPercentage: service.driverEarningsPercentage,
+        nightFareMultiplier: service.nightFareMultiplier,
+        weekendFareMultiplier: service.weekendFareMultiplier,
+        estimatedPickupTime: service.estimatedPickupTime,
+        maxWaitTime: service.maxWaitTime,
+        restrictions: service.restrictions ?? undefined,
+      }));
+    } catch (error) {
+      console.error('Error fetching rental ride services:', error);
+      throw new Error('Failed to fetch rental ride services');
     }
   }
 

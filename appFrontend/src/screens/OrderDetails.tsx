@@ -685,10 +685,9 @@ export function OrderDetails() {
         return false;
       }
 
-      // Ensure we have a valid token
+      // Do not block if in-memory token is missing; interceptor reads from storage
       if (!token) {
-        console.log('No authentication token available, skipping payment method check');
-        return false;
+        console.log('No in-memory token available; continuing since interceptor attaches stored token');
       }
 
       // Add a small check to ensure API is ready
@@ -755,7 +754,7 @@ export function OrderDetails() {
         throw apiError;
       }
       
-      const allPaymentMethods = response?.data?.paymentMethods || [];
+      const allPaymentMethods = response?.data?.data || [];
       
       console.log('Raw API response for payment methods:', {
         responseData: response?.data,
@@ -821,23 +820,12 @@ export function OrderDetails() {
       });
       
       setPaymentMethods(parsedUserPaymentMethods);
-      
-      if (parsedUserPaymentMethods.length === 0) {
+      // Consider any existing method sufficient to proceed
+      const hasAnyMethods = parsedUserPaymentMethods.length > 0;
+      if (!hasAnyMethods) {
         console.log('No payment methods found for current user:', user.id);
-        return false;
       }
-      
-      // Check if any payment methods are active
-      const activeMethods = parsedUserPaymentMethods.filter((pm: any) => pm.status === 'ACTIVE');
-      
-      if (activeMethods.length === 0) {
-        console.log('No active payment methods found for current user:', user.id);
-        // Don't show alert for pre-check, only for user-initiated actions
-        return false;
-      }
-      
-      console.log('Active payment methods found for current user:', activeMethods.length);
-      return true;
+      return hasAnyMethods;
       
     } catch (error: any) {
       console.error('Error checking payment methods:', error);
@@ -875,11 +863,9 @@ export function OrderDetails() {
         return false;
       }
 
-      // Ensure we have a valid token
+      // Do not block if in-memory token is missing; interceptor reads from storage
       if (!token) {
-        console.error('No authentication token available');
-        Alert.alert('Authentication Error', 'Please log in again to continue.');
-        return false;
+        console.log('No in-memory token available; continuing since interceptor attaches stored token');
       }
 
       // Add a small check to ensure API is ready
@@ -947,7 +933,7 @@ export function OrderDetails() {
         throw apiError;
       }
       
-      const allPaymentMethods = response?.data?.paymentMethods || [];
+      const allPaymentMethods = response?.data?.data || [];
       
       console.log('Raw API response for payment methods:', {
         responseData: response?.data,
@@ -1013,26 +999,12 @@ export function OrderDetails() {
       });
       
       setPaymentMethods(parsedUserPaymentMethods);
-      
+      // Consider any existing method sufficient to proceed
       if (parsedUserPaymentMethods.length === 0) {
         console.log('No payment methods found for current user:', user.id);
+        Alert.alert('No Payment Methods', 'You do not have any payment methods saved. Please add one to proceed.');
         return false;
       }
-      
-      // Check if any payment methods are active
-      const activeMethods = parsedUserPaymentMethods.filter((pm: any) => pm.status === 'ACTIVE');
-      
-      if (activeMethods.length === 0) {
-        console.log('No active payment methods found for current user:', user.id);
-        Alert.alert(
-          'Payment Methods Inactive',
-          'Your payment methods are currently inactive. Please contact support or add new payment methods.',
-          [{ text: 'OK' }]
-        );
-        return false;
-      }
-      
-      console.log('Active payment methods found for current user:', activeMethods.length);
       return true;
       
     } catch (error: any) {
@@ -1814,7 +1786,9 @@ export function OrderDetails() {
                       setShowPaymentModal(true);
                     } else {
                       // No payment methods found - show add payment method modal
-                      setShowAddPaymentModal(true);
+                      navigation.navigate('PaymentMethods');
+                      setShowAddPaymentModal(false);
+                      setShowPaymentModal(false);
                     }
                   } catch (error) {
                     console.error('Error during checkout process:', error);
@@ -2557,7 +2531,7 @@ export function OrderDetails() {
                 style={styles.addMorePaymentButton}
                 onPress={() => {
                   setShowPaymentModal(false);
-                  setShowAddPaymentModal(true);
+                  navigation.navigate('PaymentMethods');
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 }}
               >
