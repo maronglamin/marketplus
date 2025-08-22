@@ -120,7 +120,185 @@ router.patch('/:rentalId/reject', authenticate, async (req: any, res) => {
   }
 });
 
-export default router;
+// Add proposed price to rental request (Quote)
+router.patch('/:rentalId/quote', authenticate, async (req: any, res) => {
+  try {
+    const { rentalId } = req.params;
+    const { proposedPrice, currency } = req.body;
+    const userId = req.user?.id;
+    
+    if (!rentalId) {
+      return res.status(400).json({ success: false, message: 'rentalId is required' });
+    }
+
+    if (!proposedPrice || isNaN(parseFloat(proposedPrice)) || parseFloat(proposedPrice) <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid proposedPrice is required' });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    // First, find the driver record for the current user
+    const driver = await prisma.driver.findUnique({
+      where: { userId: userId }
+    });
+
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver profile not found' });
+    }
+
+    // Check if the rental request belongs to this driver
+    const rental = await prisma.rentalRequest.findFirst({
+      where: { 
+        id: rentalId,
+        driverId: driver.id
+      }
+    });
+
+    if (!rental) {
+      return res.status(403).json({ success: false, message: 'Rental request not found or access denied' });
+    }
+
+    // Check if the rental is in PENDING_QUOTE status
+    if (rental.status !== 'PENDING_QUOTE') {
+      return res.status(400).json({ success: false, message: 'Can only add price to PENDING_QUOTE requests' });
+    }
+
+    // Update the rental request with proposed price and change status to QUOTED
+    const updateData: any = {
+      status: 'QUOTED',
+      proposedPrice: parseFloat(proposedPrice),
+      updatedAt: new Date()
+    };
+
+    // Add currency if provided
+    if (currency) {
+      updateData.currency = currency;
+    }
+
+    const updatedRental = await prisma.rentalRequest.update({
+      where: { id: rentalId },
+      data: updateData
+    });
+
+    // Log a chat message about the proposed price
+    try {
+      const driverUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true }
+      });
+
+      const driverName = driverUser ? `${driverUser.firstName} ${driverUser.lastName}` : 'Asset Owner';
+      const currencySymbol = currency || '$';
+      
+      await prisma.rentalMessage.create({
+        data: {
+          rentalId: rentalId,
+          senderId: userId,
+          senderType: 'DRIVER',
+          content: `Your rental ride request has been charged on a proposed price of ${currencySymbol}${proposedPrice} by the asset owner ${driverName}`,
+          isRead: false
+        }
+      });
+    } catch (error) {
+      console.error('Error creating chat message for proposed price:', error);
+      // Don't fail the main operation if chat message creation fails
+    }
+
+    return res.json({ success: true, data: updatedRental });
+  } catch (error: any) {
+    console.error('Error adding price to rental:', error);
+    return res.status(500).json({ success: false, message: 'Failed to add price to rental', error: error?.message || String(error) });
+  }
+});
+
+// Update agreed price for rental request
+router.patch('/:rentalId/update-agreed-price', authenticate, async (req: any, res) => {
+  try {
+    const { rentalId } = req.params;
+    const { agreedPrice, currency } = req.body;
+    const userId = req.user?.id;
+    
+    if (!rentalId) {
+      return res.status(400).json({ success: false, message: 'rentalId is required' });
+    }
+
+    if (!agreedPrice || isNaN(parseFloat(agreedPrice)) || parseFloat(agreedPrice) <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid agreedPrice is required' });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    // First, find the driver record for the current user
+    const driver = await prisma.driver.findUnique({
+      where: { userId: userId }
+    });
+
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver profile not found' });
+    }
+
+    // Check if the rental request belongs to this driver
+    const rental = await prisma.rentalRequest.findFirst({
+      where: { 
+        id: rentalId,
+        driverId: driver.id
+      }
+    });
+
+    if (!rental) {
+      return res.status(403).json({ success: false, message: 'Rental request not found or access denied' });
+    }
+
+    // Update the rental request with agreed price
+    const updateData: any = {
+      agreedPrice: parseFloat(agreedPrice),
+      updatedAt: new Date()
+    };
+
+    // Add currency if provided
+    if (currency) {
+      updateData.currency = currency;
+    }
+
+    const updatedRental = await prisma.rentalRequest.update({
+      where: { id: rentalId },
+      data: updateData
+    });
+
+    // Log a chat message about the agreed price update
+    try {
+      const driverUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true }
+      });
+
+      const driverName = driverUser ? `${driverUser.firstName} ${driverUser.lastName}` : 'Asset Owner';
+      const currencySymbol = currency || '$';
+      
+      await prisma.rentalMessage.create({
+        data: {
+          rentalId: rentalId,
+          senderId: userId,
+          senderType: 'DRIVER',
+          content: `Agreed price has been updated to ${currencySymbol}${agreedPrice} by ${driverName}`,
+          isRead: false
+        }
+      });
+    } catch (error) {
+      console.error('Error creating chat message for agreed price update:', error);
+      // Don't fail the main operation if chat message creation fails
+    }
+
+    return res.json({ success: true, data: updatedRental });
+  } catch (error: any) {
+    console.error('Error updating agreed price:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update agreed price', error: error?.message || String(error) });
+  }
+});
 
 // Get rental requests by customerId (paginated)
 router.get('/customer/:customerId', authenticate, async (req: any, res) => {
@@ -376,5 +554,164 @@ router.get('/:rentalId', authenticate, async (req: any, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch rental details', error: error?.message || String(error) });
   }
 });
+
+// Customer accept quote
+router.patch('/:rentalId/customer/accept', authenticate, async (req: any, res) => {
+  try {
+    const { rentalId } = req.params;
+    const userId = req.user?.id;
+    
+    if (!rentalId) {
+      return res.status(400).json({ success: false, message: 'rentalId is required' });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    // Find the rental request
+    const rental = await prisma.rentalRequest.findUnique({
+      where: { id: rentalId },
+      include: {
+        customer: { select: { id: true, firstName: true, lastName: true } },
+        driver: { 
+          include: { 
+            user: { select: { firstName: true, lastName: true } } 
+          } 
+        }
+      }
+    });
+
+    if (!rental) {
+      return res.status(404).json({ success: false, message: 'Rental request not found' });
+    }
+
+    // Check if the authenticated user is the customer for this rental
+    if (rental.customerId !== userId) {
+      return res.status(403).json({ success: false, message: 'Access denied - can only accept own rental quotes' });
+    }
+
+    // Check if the rental is in QUOTED status
+    if (rental.status !== 'QUOTED') {
+      return res.status(400).json({ success: false, message: 'Can only accept quotes that are in QUOTED status' });
+    }
+
+    // Check if there's a proposed price
+    if (!rental.proposedPrice) {
+      return res.status(400).json({ success: false, message: 'No proposed price found for this rental' });
+    }
+
+    // Update the rental request status to ACCEPTED and set agreed price
+    const updatedRental = await prisma.rentalRequest.update({
+      where: { id: rentalId },
+      data: {
+        status: 'ACCEPTED',
+        agreedPrice: rental.proposedPrice,
+        updatedAt: new Date()
+      }
+    });
+
+    // Log a chat message about the acceptance
+    try {
+      const customerName = `${rental.customer.firstName} ${rental.customer.lastName}`;
+      const driverName = rental.driver?.user ? `${rental.driver.user.firstName} ${rental.driver.user.lastName}` : 'Asset Owner';
+      
+      await prisma.rentalMessage.create({
+        data: {
+          rentalId: rentalId,
+          senderId: userId,
+          senderType: 'CUSTOMER',
+          content: `Quote accepted by ${customerName}. Agreed price: ${rental.currency} ${rental.proposedPrice}`,
+          isRead: false
+        }
+      });
+    } catch (error) {
+      console.error('Error creating chat message for quote acceptance:', error);
+      // Don't fail the main operation if chat message creation fails
+    }
+
+    return res.json({ success: true, data: updatedRental });
+  } catch (error: any) {
+    console.error('Error accepting quote:', error);
+    return res.status(500).json({ success: false, message: 'Failed to accept quote', error: error?.message || String(error) });
+  }
+});
+
+// Customer reject quote
+router.patch('/:rentalId/customer/reject', authenticate, async (req: any, res) => {
+  try {
+    const { rentalId } = req.params;
+    const userId = req.user?.id;
+    
+    if (!rentalId) {
+      return res.status(400).json({ success: false, message: 'rentalId is required' });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    // Find the rental request
+    const rental = await prisma.rentalRequest.findUnique({
+      where: { id: rentalId },
+      include: {
+        customer: { select: { id: true, firstName: true, lastName: true } },
+        driver: { 
+          include: { 
+            user: { select: { firstName: true, lastName: true } } 
+          } 
+        }
+      }
+    });
+
+    if (!rental) {
+      return res.status(404).json({ success: false, message: 'Rental request not found' });
+    }
+
+    // Check if the authenticated user is the customer for this rental
+    if (rental.customerId !== userId) {
+      return res.status(403).json({ success: false, message: 'Access denied - can only reject own rental quotes' });
+    }
+
+    // Check if the rental is in QUOTED status
+    if (rental.status !== 'QUOTED') {
+      return res.status(400).json({ success: false, message: 'Can only reject quotes that are in QUOTED status' });
+    }
+
+    // Update the rental request status to REJECTED
+    const updatedRental = await prisma.rentalRequest.update({
+      where: { id: rentalId },
+      data: {
+        status: 'REJECTED',
+        updatedAt: new Date()
+      }
+    });
+
+    // Log a chat message about the rejection
+    try {
+      const customerName = `${rental.customer.firstName} ${rental.customer.lastName}`;
+      
+      await prisma.rentalMessage.create({
+        data: {
+          rentalId: rentalId,
+          senderId: userId,
+          senderType: 'CUSTOMER',
+          content: `Quote rejected by ${customerName}`,
+          isRead: false
+        }
+      });
+    } catch (error) {
+      console.error('Error creating chat message for quote rejection:', error);
+      // Don't fail the main operation if chat message creation fails
+    }
+
+    return res.json({ success: true, data: updatedRental });
+  } catch (error: any) {
+    console.error('Error rejecting quote:', error);
+    return res.status(500).json({ success: false, message: 'Failed to reject quote', error: error?.message || String(error) });
+  }
+});
+
+export default router;
 
 

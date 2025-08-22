@@ -10,6 +10,16 @@ import { ImageSlideshowModal } from '../components/ImageSlideshowModal';
 import { getAuthToken } from '../api/auth';
 import { useAuth } from '../contexts/AuthContext';
 
+// Currency symbol mapping
+const getCurrencySymbol = (currencyCode?: string): string => {
+  const currencySymbolMap: Record<string, string> = {
+    USD: '$', EUR: '€', GBP: '£', JPY: '¥', CAD: 'C$', AUD: 'A$', CHF: 'CHF',
+    CNY: '¥', INR: '₹', BRL: 'R$', MXN: '$', KRW: '₩', SGD: 'S$', HKD: 'HK$', NZD: 'NZ$',
+    GMD: 'D'
+  };
+  return currencySymbolMap[currencyCode || ''] || (currencyCode || '$');
+};
+
 type RentalDetailNavigationProp = NativeStackNavigationProp<AppStackParamList, 'RentalDetail'>;
 
 export default function RentalDetailScreen() {
@@ -35,6 +45,18 @@ export default function RentalDetailScreen() {
       setError(null);
       const data = await rentalApi.getRentalById(rentalId);
       console.log('Rental data loaded:', JSON.stringify(data, null, 2));
+      
+      // Debug: Log price information
+      console.log('RentalDetail: Price debug info:', {
+        proposedPrice: data?.proposedPrice,
+        agreedPrice: data?.agreedPrice,
+        currency: data?.currency,
+        rideServiceCurrency: data?.rideService?.currency,
+        rideServiceCurrencySymbol: data?.rideService?.currencySymbol,
+        proposedPriceType: typeof data?.proposedPrice,
+        agreedPriceType: typeof data?.agreedPrice
+      });
+      
       setRental(data);
       
       // Set images if available
@@ -166,24 +188,76 @@ export default function RentalDetailScreen() {
     navigation.navigate('RentalChat', { rentalId: rental.id });
   };
 
-  const handleAcceptQuote = () => {
+  const handleAcceptQuote = async () => {
     Alert.alert(
       'Accept Quote',
       'Are you sure you want to accept this quote?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Accept', style: 'destructive', onPress: () => console.log('Accept quote') }
+        { 
+          text: 'Accept', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              const token = await getAuthToken();
+              const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/rentals/${rental.id}/customer/accept`, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to accept quote');
+              }
+
+              Alert.alert('Success', 'Quote accepted successfully!');
+              loadRentalDetails(); // Reload the rental details
+            } catch (error: any) {
+              console.error('Error accepting quote:', error);
+              Alert.alert('Error', error.message || 'Failed to accept quote. Please try again.');
+            }
+          }
+        }
       ]
     );
   };
 
-  const handleRejectQuote = () => {
+  const handleRejectQuote = async () => {
     Alert.alert(
       'Reject Quote',
       'Are you sure you want to reject this quote?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Reject', style: 'destructive', onPress: () => console.log('Reject quote') }
+        { 
+          text: 'Reject', 
+          style: 'destructive', 
+          onPress: async () => {
+            try {
+              const token = await getAuthToken();
+              const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/rentals/${rental.id}/customer/reject`, {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to reject quote');
+              }
+
+              Alert.alert('Success', 'Quote rejected successfully!');
+              loadRentalDetails(); // Reload the rental details
+            } catch (error: any) {
+              console.error('Error rejecting quote:', error);
+              Alert.alert('Error', error.message || 'Failed to reject quote. Please try again.');
+            }
+          }
+        }
       ]
     );
   };
@@ -332,7 +406,7 @@ export default function RentalDetailScreen() {
                   <View style={styles.cardContent}>
                     <Text style={styles.cardLabel}>Proposed Price</Text>
                     <Text style={styles.cardValue}>
-                      {rental.currencySymbol}{Number(rental.proposedPrice).toLocaleString()}
+                      {getCurrencySymbol(rental.currency)}{rental.proposedPrice.toLocaleString()}
                     </Text>
                   </View>
                 </View>
@@ -343,7 +417,7 @@ export default function RentalDetailScreen() {
                   <View style={styles.cardContent}>
                     <Text style={styles.cardLabel}>Agreed Price</Text>
                     <Text style={[styles.cardValue, styles.agreedPrice]}>
-                      {rental.currencySymbol}{Number(rental.agreedPrice).toLocaleString()}
+                      {getCurrencySymbol(rental.currency)}{rental.agreedPrice.toLocaleString()}
                     </Text>
                   </View>
                 </View>
@@ -352,7 +426,9 @@ export default function RentalDetailScreen() {
                 <Ionicons name="cash" size={20} color="#6B7280" />
                 <View style={styles.cardContent}>
                   <Text style={styles.cardLabel}>Currency</Text>
-                  <Text style={styles.cardValue}>{rental.currency} ({rental.currencySymbol})</Text>
+                  <Text style={styles.cardValue}>
+                    {rental.currency} ({getCurrencySymbol(rental.currency)})
+                  </Text>
                 </View>
               </View>
             </View>

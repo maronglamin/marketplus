@@ -571,14 +571,14 @@ router.get('/seller/stats', authenticate, async (req: AuthRequest, res) => {
     // Get order statistics and revenue
     const [totalSales, pendingOrders, paidOrders] = await Promise.all([
       // Total sales: orders with PAID payment status
-      prisma.order.count({
+      prisma.orders.count({
         where: {
           sellerId: req.user.id,
           paymentStatus: 'PAID'
         }
       }),
       // Pending orders: orders not in CONFIRMED or AUTHORIZED status
-      prisma.order.count({
+      prisma.orders.count({
         where: {
           sellerId: req.user.id,
           status: {
@@ -587,7 +587,7 @@ router.get('/seller/stats', authenticate, async (req: AuthRequest, res) => {
         }
       }),
       // Get all paid orders for revenue calculation
-      prisma.order.findMany({
+      prisma.orders.findMany({
         where: {
           sellerId: req.user.id,
           paymentStatus: 'PAID'
@@ -622,7 +622,7 @@ router.get('/seller/stats', authenticate, async (req: AuthRequest, res) => {
         where: {
           sellerId: req.user.id,
           currencyCode: revenueCurrency,
-          transactionType: 'SERVICE_FEE' as TransactionType,
+          transactionType: TransactionType.SERVICE_FEE,
           status: 'SUCCESS'
         },
         _sum: {
@@ -688,7 +688,7 @@ router.get('/seller/revenue', authenticate, async (req: AuthRequest, res) => {
     });
 
     // Get all paid orders grouped by currency
-    const paidOrders = await prisma.order.findMany({
+    const paidOrders = await prisma.orders.findMany({
       where: {
         sellerId: req.user.id,
         paymentStatus: 'PAID'
@@ -707,7 +707,7 @@ router.get('/seller/revenue', authenticate, async (req: AuthRequest, res) => {
     const serviceFees = await prisma.externalTransaction.findMany({
       where: {
         sellerId: req.user.id,
-        transactionType: 'SERVICE_FEE' as TransactionType,
+        transactionType: TransactionType.SERVICE_FEE,
         status: 'SUCCESS'
       },
       select: {

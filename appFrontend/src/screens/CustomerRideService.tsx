@@ -12,9 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'react-native';
-import { useImagePreloader } from '../hooks/useImagePreloader';
 import OptimizedImage from '../components/OptimizedImage';
+import { useImagePreloader } from '../hooks/useImagePreloader';
 import ScheduleRideModal from '../components/ScheduleRideModal';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 
@@ -22,8 +21,8 @@ type CustomerRideServiceNavigationProp = NativeStackNavigationProp<AppStackParam
 
 export function CustomerRideService() {
   const navigation = useNavigation<CustomerRideServiceNavigationProp>();
-  const { preloadedImages } = useImagePreloader();
   const [showRentalModal, setShowRentalModal] = useState(false);
+  const { preloadedImages } = useImagePreloader();
 
   const rideServices = [
     {
@@ -31,35 +30,19 @@ export function CustomerRideService() {
       title: 'Quick Ride',
       subtitle: 'Book a ride now',
       description: 'Get a ride immediately to your destination',
-      icon: 'car-sport',
-      iconColor: '#6B7280',
-      backgroundColor: '#F9FAFB',
-      borderColor: '#E5E7EB',
+      image: preloadedImages.taxi,
+      backgroundColor: '#EFF6FF',
+      borderColor: '#DBEAFE',
       onPress: () => navigation.navigate('RideRequest'),
-    },
-    {
-      id: 'schedule-ride',
-      title: 'Schedule a Ride',
-      subtitle: 'Book for later',
-      description: 'Schedule a ride for a specific time and date',
-      icon: 'calendar',
-      iconColor: '#6B7280',
-      backgroundColor: '#F9FAFB',
-      borderColor: '#E5E7EB',
-      onPress: () => {
-        // TODO: Navigate to Schedule Ride screen
-        console.log('Schedule Ride pressed');
-      },
     },
     {
       id: 'rental',
       title: 'Rental',
       subtitle: 'Rent a vehicle',
       description: 'Rent a car or motorcycle for extended periods',
-      icon: 'car',
-      iconColor: '#6B7280',
-      backgroundColor: '#F9FAFB',
-      borderColor: '#E5E7EB',
+      image: preloadedImages.rental,
+      backgroundColor: '#ECFDF5',
+      borderColor: '#D1FAE5',
       onPress: () => {
         console.log('🚗 Rental button pressed - opening modal');
         setShowRentalModal(true);
@@ -105,38 +88,13 @@ export function CustomerRideService() {
                 onPress={service.onPress}
                 activeOpacity={0.8}
               >
-                {/* Service Icon */}
-                <View style={[
-                  styles.serviceIcon,
-                  { backgroundColor: '#F3F4F6' }
-                ]}>
-                  {service.id === 'quick-ride' ? (
-                    <OptimizedImage 
-                      source={preloadedImages.taxi}
-                      style={{ 
-                        width: 56, 
-                        height: 56
-                      }}
-                      size={56}
-                      showLoader={false}
-                    />
-                  ) : service.id === 'rental' ? (
-                    <OptimizedImage 
-                      source={preloadedImages.rental}
-                      style={{ 
-                        width: 56, 
-                        height: 56
-                      }}
-                      size={56}
-                      showLoader={false}
-                    />
-                  ) : (
-                    <Ionicons 
-                      name={service.icon as any} 
-                      size={36} 
-                      color={service.iconColor} 
-                    />
-                  )}
+                {/* Service Image */}
+                <View style={styles.serviceImageContainer}>
+                  <OptimizedImage
+                    source={service.image}
+                    style={styles.serviceImage}
+                    showLoader={true}
+                  />
                 </View>
 
                 {/* Service Content */}
@@ -151,64 +109,26 @@ export function CustomerRideService() {
                   <Ionicons 
                     name="chevron-forward" 
                     size={20} 
-                    color={service.iconColor} 
+                    color="#6B7280" 
                   />
                 </View>
               </TouchableOpacity>
             ))}
           </View>
-
-          {/* Additional Information */}
-          <View style={styles.infoSection}>
-            <View style={styles.infoCard}>
-              <View style={styles.infoHeader}>
-                <Ionicons name="information-circle-outline" size={24} color="#3B82F6" />
-                <Text style={styles.infoTitle}>Service Information</Text>
-              </View>
-              <Text style={styles.infoText}>
-                All our services are backed by verified drivers.
-              </Text>
-            </View>
-          </View>
-
-          {/* Quick Actions */}
-          {/* <View style={styles.quickActionsSection}>
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
-            <View style={styles.quickActionsGrid}>
-              <TouchableOpacity style={styles.quickActionCard}>
-                <View style={{
-                  backgroundColor: '#F3F4F6',
-                  borderRadius: 12,
-                  padding: 10,
-                  marginBottom: 4
-                }}>
-                  <OptimizedImage 
-                    source={preloadedImages.taxi}
-                    style={{ 
-                      width: 36, 
-                      height: 36
-                    }}
-                    size={36}
-                    showLoader={false}
-                  />
-                </View>
-                <Text style={styles.quickActionText}>Recent Rides</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.quickActionCard}>
-                <Ionicons name="star" size={24} color="#6B7280" />
-                <Text style={styles.quickActionText}>Favorites</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.quickActionCard}>
-                <Ionicons name="card" size={24} color="#6B7280" />
-                <Text style={styles.quickActionText}>Payment</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.quickActionCard}>
-                <Ionicons name="call" size={24} color="#6B7280" />
-                <Text style={styles.quickActionText}>Support</Text>
-              </TouchableOpacity>
-            </View>
-          </View> */}
         </ScrollView>
+
+        {/* Service Information - Fixed at bottom */}
+        <View style={styles.bottomInfoSection}>
+          <View style={styles.infoCard}>
+            <View style={styles.infoHeader}>
+              <Ionicons name="information-circle-outline" size={24} color="#3B82F6" />
+              <Text style={styles.infoTitle}>Service Information</Text>
+            </View>
+            <Text style={styles.infoText}>
+              All our services are backed by verified drivers.
+            </Text>
+          </View>
+        </View>
       </SafeAreaView>
 
       {/* Rental Modal */}
@@ -273,10 +193,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingVertical: 20,
+    paddingBottom: 0, // Remove bottom padding since info card is fixed at bottom
   },
   servicesContainer: {
     gap: 16,
-    marginBottom: 32,
+    marginBottom: 20,
   },
   serviceCard: {
     flexDirection: 'row',
@@ -290,13 +211,25 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  serviceIcon: {
+  serviceImageContainer: {
     width: 80,
     height: 80,
     borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+    padding: 8, // Add padding to give images some breathing room
+  },
+  serviceImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
   },
   serviceContent: {
     flex: 1,
@@ -321,70 +254,34 @@ const styles = StyleSheet.create({
   serviceArrow: {
     marginLeft: 12,
   },
-  infoSection: {
-    marginBottom: 32,
+  bottomInfoSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
   },
   infoCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 20,
-    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    borderColor: '#E2E8F0',
   },
   infoHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   infoTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#1F2937',
     marginLeft: 8,
   },
   infoText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6B7280',
-    lineHeight: 20,
-  },
-  quickActionsSection: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 16,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  quickActionCard: {
-    width: '48%',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  quickActionText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginTop: 8,
-    textAlign: 'center',
+    lineHeight: 18,
   },
 });

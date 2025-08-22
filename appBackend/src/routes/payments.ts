@@ -26,7 +26,7 @@ router.post('/create-payment-intent', authenticate, async (req, res) => {
     // Get order and user details for description
     let description = `Order #${orderId}`;
     try {
-      const order = await prisma.order.findUnique({
+      const order = await prisma.orders.findUnique({
         where: { id: orderId },
         include: {
           user: {
@@ -297,7 +297,7 @@ router.post('/payment-success', authenticate, async (req, res) => {
     }
 
     // Get order details
-    const order = await prisma.order.findUnique({
+    const order = await prisma.orders.findUnique({
       where: { id: orderId },
       include: {
         user: true,
@@ -332,7 +332,7 @@ router.post('/payment-success', authenticate, async (req, res) => {
     // Use a transaction to ensure all updates and external transaction creations succeed
     const result = await prisma.$transaction(async (tx) => {
       // Update the order
-      const updatedOrder = await tx.order.update({
+      const updatedOrder = await tx.orders.update({
         where: { id: orderId },
         data: {
           paymentStatus: 'PAID',
@@ -407,7 +407,7 @@ router.post('/payment-success', authenticate, async (req, res) => {
           paymentReference: paymentIntent.id,
           appTransactionId: appTransactionId, // Same app transaction ID
           appService: 'ECOMMERCE', // Set app service to ECOMMERCE for ecommerce payments
-          transactionType: 'SERVICE_FEE' as TransactionType,
+          transactionType: TransactionType.SERVICE_FEE,
           amount: serviceFeeAmount,
           currencyCode: paymentIntent.currency.toUpperCase(),
           gatewayChargeFees: null,

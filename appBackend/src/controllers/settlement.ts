@@ -15,7 +15,7 @@ export const getAvailableRevenue = async (req: AuthRequest, res: Response) => {
     logger.info('Fetching available revenue for settlement:', { userId: req.user.id });
 
     // Get all PAID orders (excluding SETTLED orders) grouped by currency
-    const paidOrders = await prisma.order.findMany({
+    const paidOrders = await prisma.orders.findMany({
       where: {
         sellerId: req.user.id,
         paymentStatus: 'PAID' // Only include PAID orders, SETTLED orders are excluded
@@ -824,7 +824,7 @@ export const getSettlementDetails = async (req: AuthRequest, res: Response) => {
       const orderIds = settlement.includedOrderIds as string[];
       
       if (orderIds.length > 0) {
-        const orders = await prisma.order.findMany({
+        const orders = await prisma.orders.findMany({
           where: {
             id: { in: orderIds }
           },
@@ -913,7 +913,7 @@ async function calculateEcommerceSettlementData(userId: string, currency: string
     });
 
     // Get all PAID orders for this currency that haven't been settled yet
-    const availableOrders = await prisma.order.findMany({
+    const availableOrders = await prisma.orders.findMany({
       where: {
         sellerId: userId,
         paymentStatus: 'PAID', // Only include PAID orders, not SETTLED
@@ -1279,7 +1279,7 @@ async function calculateRidesSettlementData(userId: string, currency: string, re
 // Helper function to update orders to SETTLED status
 async function updateOrdersToSettled(orderIds: string[]) {
   try {
-    const result = await prisma.order.updateMany({
+    const result = await prisma.orders.updateMany({
       where: {
         id: { in: orderIds },
         paymentStatus: 'PAID' // Only update PAID orders to prevent double updates

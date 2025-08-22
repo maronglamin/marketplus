@@ -3,6 +3,7 @@ import { authenticate as authenticateToken, AuthRequest } from '../middleware/au
 import { PrismaClient } from '@prisma/client';
 import { DriverService } from '../services/driverService';
 import { logger } from '../utils/logger';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -585,24 +586,199 @@ router.get('/user/:userId/vehicle-images', async (req, res) => {
 });
 
 /**
+ * Get verified rental drivers for a given service with availability check
+ * Filters: isVerified = true, isActive = true, isRentalType = true, rideServiceId matches
+ * Excludes drivers who have conflicting bookings during the specified date range
+ * Excludes the current user from the list (if authenticated)
+ */
+router.get('/rental/:serviceId/available', async (req, res) => {
+  try {
+    // Get user ID from token if available, but don't require authentication
+    let currentUserId: string | null = null;
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+          userId: string;
+          deviceId: string;
+        };
+        currentUserId = decoded.userId;
+      }
+    } catch (error) {
+      // Token is invalid or missing, continue without user exclusion
+      console.log('No valid token found, showing all drivers');
+    }
+
+    const { serviceId } = req.params;
+    const { startDate, endDate } = req.query;
+    
+    if (!serviceId) {
+      return res.status(400).json({ success: false, message: 'serviceId is required' });
+    }
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ success: false, message: 'startDate and endDate are required' });
+    }
+
+    const start = new Date(startDate as string);
+    const end = new Date(endDate as string);
+
+    // Get all drivers for the service (excluding the current user if authenticated)
+    const whereClause: any = {
+      isVerified: true,
+      isActive: true,
+      isRentalType: true,
+      rideServiceId: serviceId,
+    };
+    
+    // Exclude current user if we have a valid user ID
+    if (currentUserId) {
+      whereClause.userId = { not: currentUserId };
+    }
+    
+    const allDrivers = await prisma.driver.findMany({
+      where: whereClause,
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, phoneNumber: true },
+        },
+        riderApplication: {
+          include: {
+            documents: {
+              where: {
+                documentType: { in: ['CAR_INTERIOR_PHOTO', 'CAR_EXTERIOR_PHOTO'] }
+              },
+              select: {
+                id: true,
+                documentType: true,
+                fileUrl: true,
+                fileName: true,
+                uploadedAt: true
+              },
+              orderBy: { uploadedAt: 'desc' }
+            }
+          }
+        },
+        rideService: { select: { id: true, name: true, description: true } },
+      },
+    });
+
+    if (allDrivers.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // Get conflicting bookings for the date range
+    const conflictingBookings = await prisma.rentalRequest.findMany({
+      where: {
+        driverId: { in: allDrivers.map(d => d.id) },
+        status: { in: ['PENDING_QUOTE', 'QUOTED', 'ACCEPTED'] }, // Only check active bookings
+        OR: [
+          // Booking starts during the requested period
+          {
+            startDate: { gte: start, lte: end }
+          },
+          // Booking ends during the requested period
+          {
+            endDate: { gte: start, lte: end }
+          },
+          // Booking spans the entire requested period
+          {
+            startDate: { lte: start },
+            endDate: { gte: end }
+          }
+        ]
+      },
+      select: {
+        driverId: true
+      }
+    });
+
+    // Get driver IDs that have conflicting bookings
+    const conflictingDriverIds = new Set(conflictingBookings.map(booking => booking.driverId));
+
+    // Filter out drivers with conflicting bookings
+    const availableDrivers = allDrivers.filter(driver => !conflictingDriverIds.has(driver.id));
+
+    const payload = availableDrivers.map((d) => ({
+      id: d.id,
+      userId: d.userId,
+      driverId: d.driverId,
+      isOnline: d.isOnline,
+      status: d.status,
+      totalRides: d.totalRides,
+      totalEarnings: (d.totalEarnings as any)?.toString?.() ?? String(d.totalEarnings ?? ''),
+      rating: (d.rating as any)?.toString?.() ?? (d.rating as any),
+      ratingCount: d.ratingCount,
+      isVerified: d.isVerified,
+      isActive: d.isActive,
+      isRentalType: d.isRentalType,
+      rideService: d.rideService,
+      user: d.user,
+      riderApplication: {
+        id: d.riderApplication?.id,
+        firstName: (d.riderApplication as any)?.firstName,
+        lastName: (d.riderApplication as any)?.lastName,
+        address: (d.riderApplication as any)?.address,
+        vehicleModel: d.riderApplication?.vehicleModel,
+        vehicleType: d.riderApplication?.vehicleType,
+        licensePlate: d.riderApplication?.vehiclePlate,
+        documents: (d.riderApplication as any)?.documents || [],
+      },
+      documents: (d.riderApplication as any)?.documents || [],
+    }));
+
+    logger.info(`Returned ${payload.length} available rental drivers for service ${serviceId} from ${startDate} to ${endDate}`);
+    return res.json({ success: true, data: payload });
+  } catch (error: any) {
+    console.error('Error fetching available rental drivers:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch available rental drivers', error: error?.message || String(error) });
+  }
+});
+
+/**
  * Get verified rental drivers for a given service
  * Filters: isVerified = true, isActive = true, isRentalType = true, rideServiceId matches
  * Includes: user basic info, riderApplication vehicle details, documents limited to interior/exterior car photos
+ * Excludes the current user from the list (if authenticated)
  */
 router.get('/rental/:serviceId', async (req, res) => {
   try {
+    // Get user ID from token if available, but don't require authentication
+    let currentUserId: string | null = null;
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+          userId: string;
+          deviceId: string;
+        };
+        currentUserId = decoded.userId;
+      }
+    } catch (error) {
+      // Token is invalid or missing, continue without user exclusion
+      console.log('No valid token found, showing all drivers');
+    }
+
     const { serviceId } = req.params;
     if (!serviceId) {
       return res.status(400).json({ success: false, message: 'serviceId is required' });
     }
 
+    // Build where clause
+    const whereClause: any = {
+      isVerified: true,
+      isActive: true,
+      isRentalType: true,
+      rideServiceId: serviceId,
+    };
+    
+    // Exclude current user if we have a valid user ID
+    if (currentUserId) {
+      whereClause.userId = { not: currentUserId };
+    }
+    
     const drivers = await prisma.driver.findMany({
-      where: {
-        isVerified: true,
-        isActive: true,
-        isRentalType: true,
-        rideServiceId: serviceId,
-      },
+      where: whereClause,
       include: {
         user: {
           select: { id: true, firstName: true, lastName: true, phoneNumber: true },
@@ -672,11 +848,41 @@ router.get('/rental/:serviceId', async (req, res) => {
 
 /**
  * Get all verified rental drivers (across services)
+ * Excludes the current user from the list (if authenticated)
  */
-router.get('/rental/verified', async (_req, res) => {
+router.get('/rental/verified', async (req, res) => {
   try {
+    // Get user ID from token if available, but don't require authentication
+    let currentUserId: string | null = null;
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      if (token) {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+          userId: string;
+          deviceId: string;
+        };
+        currentUserId = decoded.userId;
+      }
+    } catch (error) {
+      // Token is invalid or missing, continue without user exclusion
+      console.log('No valid token found, showing all drivers');
+    }
+
+    // Build where clause
+    const whereClause: any = { 
+      isVerified: true, 
+      isActive: true, 
+      isRentalType: true, 
+      rideServiceId: { not: null },
+    };
+    
+    // Exclude current user if we have a valid user ID
+    if (currentUserId) {
+      whereClause.userId = { not: currentUserId };
+    }
+    
     const drivers = await prisma.driver.findMany({
-      where: { isVerified: true, isActive: true, isRentalType: true, rideServiceId: { not: null } },
+      where: whereClause,
       include: {
         user: { select: { id: true, firstName: true, lastName: true, phoneNumber: true } },
         riderApplication: { 

@@ -13,7 +13,7 @@ import {
   FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { rentalApi } from '../services/rentalApi';
 import { RentalDriver } from '../services/rentalService';
 import { ENV_CONFIG } from '../config/env';
@@ -42,6 +42,16 @@ export default function VehicleDetailsScreen() {
   useEffect(() => {
     loadVehicleImages();
   }, []);
+
+  // Ensure screen is properly focused when it becomes active
+  useFocusEffect(
+    React.useCallback(() => {
+      // This ensures the screen is properly displayed when it comes into focus
+      return () => {
+        // Cleanup if needed
+      };
+    }, [])
+  );
 
   const loadVehicleImages = async () => {
     try {

@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { rentalService, RentalDriver, RentalRideService } from '../services/rentalService';
+import VehicleDetailsModal from './VehicleDetailsModal';
 
 interface DriversModalProps {
   isVisible: boolean;
@@ -32,19 +33,22 @@ export default function DriversModal({
   const [drivers, setDrivers] = useState<RentalDriver[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedDriver, setSelectedDriver] = useState<RentalDriver | null>(null);
+  const [showVehicleDetails, setShowVehicleDetails] = useState(false);
 
   useEffect(() => {
-    if (isVisible && selectedService) {
+    if (isVisible && selectedService && scheduleData?.startDate && scheduleData?.endDate) {
+      fetchAvailableDriversByService(selectedService.id, scheduleData.startDate, scheduleData.endDate);
+    } else if (isVisible && selectedService) {
       fetchDriversByService(selectedService.id);
     }
-  }, [isVisible, selectedService]);
+  }, [isVisible, selectedService, scheduleData]);
 
   const fetchDriversByService = async (serviceId: string) => {
     try {
       setIsLoading(true);
       const serviceDrivers = await rentalService.getDriversByService(serviceId);
       setDrivers(serviceDrivers);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching drivers for service:', error);
       Alert.alert('Error', 'Failed to load drivers. Please try again.');
     } finally {
@@ -52,15 +56,27 @@ export default function DriversModal({
     }
   };
 
+  const fetchAvailableDriversByService = async (serviceId: string, startDate: Date, endDate: Date) => {
+    try {
+      setIsLoading(true);
+      const availableDrivers = await rentalService.getAvailableDriversByService(serviceId, startDate, endDate);
+      setDrivers(availableDrivers);
+    } catch (error: any) {
+      console.error('Error fetching available drivers for service:', error);
+      Alert.alert('Error', 'Failed to load available drivers. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleDriverSelect = (driver: RentalDriver) => {
     setSelectedDriver(driver);
-    onClose();
-    // Navigate to vehicle details screen instead of directly selecting
-    navigation.navigate('VehicleDetails' as never, {
-      driver,
-      selectedService,
-      scheduleData: scheduleData || {}
-    } as never);
+    setShowVehicleDetails(true);
+  };
+
+  const handleVehicleDetailsClose = () => {
+    setShowVehicleDetails(false);
+    setSelectedDriver(null);
   };
 
   const getDriverFullName = (driver: RentalDriver) => {
@@ -69,7 +85,7 @@ export default function DriversModal({
 
   const getVehicleInfo = (driver: RentalDriver) => {
     const app = driver.riderApplication;
-    return `${app.vehicleYear} ${app.vehicleModel} • ${app.vehicleColor}`;
+    return `${app.vehicleModel} • ${app.licensePlate}`;
   };
 
   const getRatingDisplay = (driver: RentalDriver) => {
@@ -85,6 +101,7 @@ export default function DriversModal({
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      statusBarTranslucent={true}
     >
       <View style={styles.container}>
         {/* Header */}
@@ -93,9 +110,16 @@ export default function DriversModal({
             <Ionicons name="close" size={24} color="#374151" />
           </TouchableOpacity>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Asset Owners</Text>
+            <Text style={styles.headerTitle}>
+              {scheduleData?.startDate && scheduleData?.endDate ? 'Available Asset Owners' : 'Asset Owners'}
+            </Text>
             {selectedService && (
-              <Text style={styles.headerSubtitle}>{selectedService.name}</Text>
+              <Text style={styles.headerSubtitle}>
+                {scheduleData?.startDate && scheduleData?.endDate 
+                  ? `${selectedService.name} - Available for your dates`
+                  : selectedService.name
+                }
+              </Text>
             )}
           </View>
           <View style={styles.placeholder} />
@@ -106,7 +130,9 @@ export default function DriversModal({
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#3B82F6" />
-              <Text style={styles.loadingText}>Loading drivers...</Text>
+              <Text style={styles.loadingText}>
+                {scheduleData?.startDate && scheduleData?.endDate ? 'Loading available drivers...' : 'Loading drivers...'}
+              </Text>
             </View>
           ) : drivers.length > 0 ? (
             <View style={styles.driversContainer}>
@@ -160,14 +186,28 @@ export default function DriversModal({
           ) : (
             <View style={styles.emptyContainer}>
               <Ionicons name="people-outline" size={64} color="#9CA3AF" />
-              <Text style={styles.emptyTitle}>No Drivers Available</Text>
+              <Text style={styles.emptyTitle}>
+                {scheduleData?.startDate && scheduleData?.endDate ? 'No Available Drivers' : 'No Drivers Available'}
+              </Text>
               <Text style={styles.emptyText}>
-                There are currently no drivers available for this service. Please try another service or check back later.
+                {scheduleData?.startDate && scheduleData?.endDate 
+                  ? 'There are currently no drivers available for your selected dates. Please try different dates or another service.'
+                  : 'There are currently no drivers available for this service. Please try another service or check back later.'
+                }
               </Text>
             </View>
           )}
         </ScrollView>
       </View>
+             {selectedDriver && selectedService && (
+         <VehicleDetailsModal
+           isVisible={showVehicleDetails}
+           onClose={handleVehicleDetailsClose}
+           driver={selectedDriver}
+           selectedService={selectedService}
+           scheduleData={scheduleData}
+         />
+       )}
     </Modal>
   );
 }

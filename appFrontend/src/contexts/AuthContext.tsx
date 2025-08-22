@@ -20,6 +20,7 @@ interface AuthContextType {
   reinitializeAuth: () => Promise<void>;
   refreshUserFromStorage: () => Promise<{ token: string | null; user: any | null } | null>;
   forceClearAuth: () => Promise<void>;
+  validateAndRefreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,15 +44,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       
       if (storedToken && storedUser) {
-        const userData = JSON.parse(storedUser);
-        setToken(storedToken);
-        setUser(userData);
-        console.log('AuthContext: Auth initialized from storage:', { 
-          token: !!storedToken, 
-          user: userData,
-          userId: userData?.id,
-          tokenSet: !!storedToken
-        });
+        try {
+          const userData = JSON.parse(storedUser);
+          // Always validate the token by making a fresh API call
+          console.log('AuthContext: Validating stored token with fresh API call...');
+          const response = await api.get('/api/users/me');
+          const freshUserData = response.data;
+          
+          // Update with fresh data
+          await AsyncStorage.setItem('user', JSON.stringify(freshUserData));
+          setToken(storedToken);
+          setUser(freshUserData);
+          console.log('AuthContext: Token validated, fresh user data loaded:', { 
+            token: !!storedToken, 
+            user: freshUserData,
+            userId: freshUserData?.id,
+            tokenSet: !!storedToken
+          });
+        } catch (error) {
+          console.error('AuthContext: Token validation failed, clearing invalid data:', error);
+          // Clear invalid token and user data
+          await AsyncStorage.multiRemove(['token', 'user']);
+          setToken(null);
+          setUser(null);
+        }
       } else if (storedToken && !storedUser) {
         // We have a token but no user data - try to fetch user data
         console.log('AuthContext: Token found but no user data, fetching user...');
@@ -475,6 +491,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  // Function to validate and refresh user data when app becomes active
+  const validateAndRefreshUser = useCallback(async () => {
+    try {
+      console.log('AuthContext: Validating and refreshing user data...');
+      const storedToken = await AsyncStorage.getItem('token');
+      
+      if (storedToken && user?.id) {
+        // We have both token and user, validate the token
+        try {
+          const response = await api.get('/api/users/me');
+          const freshUserData = response.data;
+          
+          // Check if user data has changed (different user logged in)
+          if (freshUserData.id !== user.id) {
+            console.log('AuthContext: User changed, updating with fresh data');
+            await AsyncStorage.setItem('user', JSON.stringify(freshUserData));
+            setUser(freshUserData);
+          } else {
+            console.log('AuthContext: User data is current');
+          }
+        } catch (error) {
+          console.error('AuthContext: Token validation failed, clearing auth data');
+          await forceClearAuth();
+        }
+      } else if (storedToken && !user?.id) {
+        // We have token but no user, try to fetch user data
+        console.log('AuthContext: Token exists but no user, fetching user data...');
+        try {
+          const response = await api.get('/api/users/me');
+          const userData = response.data;
+          await AsyncStorage.setItem('user', JSON.stringify(userData));
+          setUser(userData);
+          console.log('AuthContext: User data fetched successfully');
+        } catch (error) {
+          console.error('AuthContext: Failed to fetch user data, clearing token');
+          await AsyncStorage.removeItem('token');
+        }
+      }
+    } catch (error) {
+      console.error('AuthContext: Error in validateAndRefreshUser:', error);
+    }
+  }, [user?.id, forceClearAuth]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -491,6 +550,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         reinitializeAuth,
         refreshUserFromStorage,
         forceClearAuth,
+        validateAndRefreshUser,
       }}
     >
       {children}

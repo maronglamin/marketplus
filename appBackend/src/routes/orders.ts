@@ -944,7 +944,7 @@ router.get('/seller/transaction/:transactionId', authenticate, async (req: Authe
     const serviceFeeTransaction = await prisma.externalTransaction.findFirst({
       where: {
         orderId: order.id,
-        transactionType: 'SERVICE_FEE' as TransactionType,
+        transactionType: TransactionType.SERVICE_FEE,
         status: 'SUCCESS'
       },
       select: {
@@ -1146,7 +1146,7 @@ router.get('/seller/transactions/:currency', authenticate, async (req: Authentic
       where: {
         sellerId: req.user.id,
         currencyCode: currency,
-        transactionType: 'SERVICE_FEE' as TransactionType,
+        transactionType: TransactionType.SERVICE_FEE,
         status: 'SUCCESS'
       },
       _sum: {

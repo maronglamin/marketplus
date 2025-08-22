@@ -12,13 +12,18 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { getAuthToken } from '../api/auth';
+import AddPriceModal from '../components/AddPriceModal';
+import UpdatePriceModal from '../components/UpdatePriceModal';
 
 type AssetRentalNavigationProp = NativeStackNavigationProp<AppStackParamList, 'AssetRental'>;
 
@@ -64,37 +69,73 @@ interface Message {
 
 export default function AssetRentalScreen() {
   const navigation = useNavigation<AssetRentalNavigationProp>();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading, refreshUser, validateAndRefreshUser } = useAuth();
   
   const [rentals, setRentals] = useState<RentalRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRental, setSelectedRental] = useState<RentalRequest | null>(null);
   const [showChatModal, setShowChatModal] = useState(false);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [isDriver, setIsDriver] = useState<boolean | null>(null);
+  const [showAddPriceModal, setShowAddPriceModal] = useState(false);
+  const [showUpdatePriceModal, setShowUpdatePriceModal] = useState(false);
+  const [userLoading, setUserLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Validate and refresh user data when component mounts
+  useEffect(() => {
+    const validateUser = async () => {
+      if (!authLoading) {
+        console.log('AssetRental: Component mounted, validating user data...');
+        await validateAndRefreshUser();
+      }
+    };
+    validateUser();
+  }, [authLoading, validateAndRefreshUser]);
+
+  // Refresh user data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      const refreshOnFocus = async () => {
+        if (!authLoading && user?.id) {
+          console.log('AssetRental: Screen focused, refreshing user data...');
+          await validateAndRefreshUser();
+        }
+      };
+      refreshOnFocus();
+    }, [authLoading, user?.id, validateAndRefreshUser])
+  );
 
   useEffect(() => {
-    console.log('AssetRental: Component mounted');
-    console.log('AssetRental: User state:', user);
-    console.log('AssetRental: User ID:', user?.id);
+    console.log('AssetRental: Auth state changed:', { 
+      hasUser: !!user, 
+      userId: user?.id,
+      authLoading,
+      userLoading 
+    });
     
-    if (user?.id) {
-      loadDriverRentals();
-    } else {
-      console.log('AssetRental: User not available yet, waiting...');
-      // Set a timeout to retry after 2 seconds in case user loads later
-      const timeout = setTimeout(() => {
-        if (user?.id) {
-          console.log('AssetRental: User became available, loading rentals...');
-          loadDriverRentals();
-        }
-      }, 2000);
+    // Wait for auth to finish loading
+    if (!authLoading) {
+      setUserLoading(false);
       
-      return () => clearTimeout(timeout);
+      if (user?.id) {
+        console.log('AssetRental: User authenticated, loading driver rentals...');
+        setAuthError(null);
+        setError(null);
+        setIsDriver(null); // Reset driver status
+        setRentals([]); // Clear existing rentals
+        loadDriverRentals();
+      } else {
+        console.log('AssetRental: No user authenticated');
+        // User is not authenticated
+        setAuthError('Please login to view your rental requests');
+        setRentals([]);
+        setIsDriver(null);
+      }
     }
-  }, [user]);
+  }, [user, authLoading]); // Changed from user?.id to user to detect all user changes
 
 
 
@@ -102,18 +143,41 @@ export default function AssetRentalScreen() {
     try {
       setLoading(true);
       setError(null);
+      setAuthError(null);
       
       console.log('AssetRental: Loading driver rentals...');
       console.log('AssetRental: User:', user);
       console.log('AssetRental: User ID:', user?.id);
       
       if (!user?.id) {
-        throw new Error('User not authenticated or ID not available');
+        console.log('AssetRental: No user ID available, checking token...');
+        const token = await getAuthToken();
+        if (token) {
+          console.log('AssetRental: Token exists but no user - attempting to refresh user data...');
+          try {
+            await refreshUser();
+            // If refreshUser succeeds, the user state will be updated and useEffect will trigger loadDriverRentals again
+            return;
+          } catch (error) {
+            console.log('AssetRental: Failed to refresh user data, token may be invalid');
+            setAuthError('Authentication expired. Please login again.');
+          }
+        } else {
+          setAuthError('Please login to view your rental requests');
+        }
+        setRentals([]);
+        return;
       }
       
       // Get rentals where the current driver is the asset owner
       const token = await getAuthToken();
       console.log('AssetRental: Token available:', !!token);
+      
+      if (!token) {
+        setAuthError('Please login to view your rental requests');
+        setRentals([]);
+        return;
+      }
       
       const apiUrl = `${process.env.EXPO_PUBLIC_API_URL}/api/rentals/driver/me`;
       console.log('AssetRental: API URL:', apiUrl);
@@ -126,7 +190,36 @@ export default function AssetRentalScreen() {
       
       console.log('AssetRental: Response status:', response.status);
       
-      if (response.status === 404) {
+      if (response.status === 401) {
+        console.log('AssetRental: Token is invalid (401) - attempting to refresh user data...');
+        try {
+          await refreshUser();
+          // If refreshUser succeeds, retry the API call
+          const retryResponse = await fetch(apiUrl, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+          
+          if (retryResponse.ok) {
+            const data = await retryResponse.json();
+            console.log('AssetRental: Retry successful, rentals count:', data.data?.length || 0);
+            setIsDriver(true);
+            setRentals(data.data || []);
+            return;
+          } else {
+            console.log('AssetRental: Retry failed, token is truly invalid');
+            setAuthError('Authentication expired. Please login again.');
+            setRentals([]);
+            return;
+          }
+        } catch (error) {
+          console.log('AssetRental: Failed to refresh user data after 401');
+          setAuthError('Authentication expired. Please login again.');
+          setRentals([]);
+          return;
+        }
+      } else if (response.status === 404) {
         // User is not a driver
         console.log('AssetRental: User is not a driver (404 - Driver profile not found)');
         setIsDriver(false);
@@ -143,10 +236,23 @@ export default function AssetRentalScreen() {
       console.log('AssetRental: Rentals count:', data.data?.length || 0);
       setIsDriver(true);
       setRentals(data.data || []);
-    } catch (e) {
+    } catch (e: any) {
       console.error('AssetRental: Failed to load driver rentals', e);
-      setError('Failed to load rentals');
-      Alert.alert('Error', 'Failed to load rentals. Please try again.');
+      if (e.message?.includes('401') || e.message?.includes('Unauthorized')) {
+        console.log('AssetRental: Unauthorized error - attempting to refresh user data...');
+        try {
+          await refreshUser();
+          // If refreshUser succeeds, retry the load
+          loadDriverRentals();
+          return;
+        } catch (refreshError) {
+          console.log('AssetRental: Failed to refresh user data after unauthorized error');
+          setAuthError('Authentication expired. Please login again.');
+        }
+      } else {
+        setError('Failed to load rentals. Please try again.');
+      }
+      setRentals([]);
     } finally {
       setLoading(false);
     }
@@ -347,7 +453,7 @@ export default function AssetRentalScreen() {
     ).length;
   };
 
-  if (!user?.id) {
+  if (authLoading || userLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -399,16 +505,23 @@ export default function AssetRentalScreen() {
         </TouchableOpacity>
       </View>
 
-      {error ? (
+      {authError || error ? (
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={loadDriverRentals} style={styles.retryButton}>
-            <Text style={styles.retryButtonText}>Retry</Text>
+          <Text style={styles.errorText}>{authError || error}</Text>
+          {!authError && (
+                      <TouchableOpacity onPress={async () => {
+            try {
+              await refreshUser();
+              loadDriverRentals();
+            } catch (error) {
+              console.log('AssetRental: Manual refresh failed');
+            }
+          }} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Refresh User & Retry</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => console.log('AssetRental: Debug info - User:', user, 'Token:', !!getAuthToken())} style={styles.debugButton}>
-            <Text style={styles.debugButtonText}>Debug Info</Text>
-          </TouchableOpacity>
+          )}
+
         </View>
       ) : isDriver === false ? (
         <View style={styles.emptyContainer}>
@@ -417,9 +530,16 @@ export default function AssetRentalScreen() {
           <Text style={styles.emptyText}>
             You need to be a registered driver to view rental requests. Please complete your driver profile first.
           </Text>
-          <Text style={styles.debugText}>
-            Debug: User ID: {user?.id}, Is Driver: {isDriver ? 'Yes' : 'No'}
-          </Text>
+          <TouchableOpacity onPress={async () => {
+            try {
+              await refreshUser();
+              loadDriverRentals();
+            } catch (error) {
+              console.log('AssetRental: Manual refresh failed');
+            }
+          }} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Refresh User & Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : rentals.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -427,9 +547,6 @@ export default function AssetRentalScreen() {
           <Text style={styles.emptyTitle}>No Rental Requests</Text>
           <Text style={styles.emptyText}>
             You haven't received any rental requests yet. They will appear here when customers request your vehicle.
-          </Text>
-          <Text style={styles.debugText}>
-            Debug: User ID: {user?.id}, Is Driver: {isDriver ? 'Yes' : 'No'}
           </Text>
         </View>
       ) : (
@@ -465,12 +582,12 @@ export default function AssetRentalScreen() {
                   
                   {rental.proposedPrice && (
                     <Text style={styles.price}>
-                      Proposed: {rental.currencySymbol}{rental.proposedPrice.toLocaleString()}
+                      Proposed: {rental.currency || rental.rideService?.currency || 'USD'} {rental.proposedPrice.toLocaleString()}
                     </Text>
                   )}
                   {rental.agreedPrice && (
                     <Text style={styles.agreedPrice}>
-                      Agreed: {rental.currencySymbol}{rental.agreedPrice.toLocaleString()}
+                      Agreed: {rental.currency || rental.rideService?.currency || 'USD'} {rental.agreedPrice.toLocaleString()}
                     </Text>
                   )}
                 </View>
@@ -520,11 +637,37 @@ export default function AssetRentalScreen() {
               </TouchableOpacity>
               
               <TouchableOpacity 
-                style={styles.chatAcceptButton}
-                onPress={() => handleAcceptRental(selectedRental)}
+                style={styles.chatAddPriceButton}
+                onPress={() => setShowAddPriceModal(true)}
               >
-                <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                <Text style={styles.chatAcceptButtonText}>Accept</Text>
+                <Ionicons name="pricetag" size={20} color="#FFFFFF" />
+                <Text style={styles.chatAddPriceButtonText}>Add Price</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Action Buttons for QUOTED status */}
+          {selectedRental?.status === 'QUOTED' && (
+            <View style={styles.chatActionButtons}>
+              <TouchableOpacity 
+                style={styles.chatRejectButton}
+                onPress={() => handleRejectRental(selectedRental)}
+              >
+                <Ionicons name="close" size={20} color="#EF4444" />
+                <Text style={styles.chatRejectButtonText}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Action Buttons for ACCEPTED status */}
+          {selectedRental?.status === 'ACCEPTED' && (
+            <View style={styles.chatActionButtons}>
+              <TouchableOpacity 
+                style={styles.chatUpdatePriceButton}
+                onPress={() => setShowUpdatePriceModal(true)}
+              >
+                <Ionicons name="pricetag" size={20} color="#FFFFFF" />
+                <Text style={styles.chatUpdatePriceButtonText}>Update Agreed Price</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -590,6 +733,31 @@ export default function AssetRentalScreen() {
                      </View>
          </SafeAreaView>
        </KeyboardAvoidingView>
+
+      {/* Add Price Modal */}
+      <AddPriceModal
+        isVisible={showAddPriceModal}
+        onClose={() => setShowAddPriceModal(false)}
+        onSuccess={() => {
+          loadDriverRentals(); // Reload the list after adding price
+        }}
+        rentalId={selectedRental?.id || ''}
+        currencySymbol={selectedRental?.rideService?.currencySymbol || '$'}
+        currency={selectedRental?.currency || selectedRental?.rideService?.currency || 'USD'}
+      />
+
+      {/* Update Price Modal */}
+      <UpdatePriceModal
+        isVisible={showUpdatePriceModal}
+        onClose={() => setShowUpdatePriceModal(false)}
+        onSuccess={() => {
+          loadDriverRentals(); // Reload the list after updating price
+        }}
+        rentalId={selectedRental?.id || ''}
+        currencySymbol={selectedRental?.rideService?.currencySymbol || '$'}
+        currency={selectedRental?.currency || selectedRental?.rideService?.currency || 'USD'}
+        currentAgreedPrice={selectedRental?.agreedPrice}
+      />
     </SafeAreaView>
   );
 }
@@ -661,18 +829,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  debugButton: {
-    marginTop: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: '#6B7280',
-    borderRadius: 8,
-  },
-  debugButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -692,13 +849,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 24,
   },
-  debugText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 16,
-    fontFamily: 'monospace',
-  },
+
   rentalCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -1015,6 +1166,34 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   chatAcceptButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 4,
+  },
+  chatAddPriceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#10B981',
+    borderRadius: 8,
+  },
+  chatAddPriceButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 4,
+  },
+  chatUpdatePriceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
+  },
+  chatUpdatePriceButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',

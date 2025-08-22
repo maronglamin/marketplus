@@ -1,4 +1,5 @@
 import { ENV_CONFIG } from '../config/env';
+import { api } from '../api/api';
 
 export interface RentalRideService {
   id: string;
@@ -67,26 +68,14 @@ export interface RentalDriver {
 }
 
 class RentalService {
-  private baseUrl = ENV_CONFIG.API_BASE_URL;
 
   /**
    * Get all rental ride services
    */
   async getRentalServices(): Promise<RentalRideService[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/ride-services/rental`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.data || [];
+      const response = await api.get('/api/ride-services/rental');
+      return response.data.data || [];
     } catch (error) {
       console.error('Error fetching rental services:', error);
       throw new Error('Failed to fetch rental services');
@@ -98,22 +87,27 @@ class RentalService {
    */
   async getDriversByService(serviceId: string): Promise<RentalDriver[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/driver/rental/${serviceId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.data || [];
+      const response = await api.get(`/api/driver/rental/${serviceId}`);
+      return response.data.data || [];
     } catch (error) {
-      console.error('Error fetching drivers for service:', error);
-      throw new Error('Failed to fetch drivers for service');
+      console.error('Error fetching drivers by service:', error);
+      throw error;
+    }
+  }
+
+  async getAvailableDriversByService(serviceId: string, startDate: Date, endDate: Date): Promise<RentalDriver[]> {
+    try {
+      const startDateStr = startDate.toISOString();
+      const endDateStr = endDate.toISOString();
+      
+      const response = await api.get(
+        `/api/driver/rental/${serviceId}/available?startDate=${startDateStr}&endDate=${endDateStr}`
+      );
+
+      return response.data.data || [];
+    } catch (error) {
+      console.error('Error fetching available drivers by service:', error);
+      throw error;
     }
   }
 
@@ -122,19 +116,8 @@ class RentalService {
    */
   async getVerifiedRentalDrivers(): Promise<RentalDriver[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/driver/rental/verified`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.data || [];
+      const response = await api.get('/api/driver/rental/verified');
+      return response.data.data || [];
     } catch (error) {
       console.error('Error fetching verified rental drivers:', error);
       throw new Error('Failed to fetch verified rental drivers');
