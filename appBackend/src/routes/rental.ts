@@ -712,6 +712,185 @@ router.patch('/:rentalId/customer/reject', authenticate, async (req: any, res) =
   }
 });
 
+// Process rental payment
+router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
+  try {
+    const { rentalId } = req.params;
+    const { paymentMethodId, paymentIntentId } = req.body;
+    const userId = req.user?.id;
+    
+    if (!rentalId) {
+      return res.status(400).json({ success: false, message: 'rentalId is required' });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    // Find the rental request
+    const rental = await prisma.rentalRequest.findUnique({
+      where: { id: rentalId },
+      include: {
+        customer: { select: { id: true, firstName: true, lastName: true } },
+        driver: { 
+          include: { 
+            user: { select: { id: true, firstName: true, lastName: true } } 
+          } 
+        },
+        rideService: { select: { id: true, name: true } }
+      }
+    });
+
+    if (!rental) {
+      return res.status(404).json({ success: false, message: 'Rental request not found' });
+    }
+
+    // Check if the authenticated user is the customer for this rental
+    if (rental.customerId !== userId) {
+      return res.status(403).json({ success: false, message: 'Access denied - can only pay for own rental requests' });
+    }
+
+    // Check if the rental is in ACCEPTED status
+    if (rental.status !== 'ACCEPTED') {
+      return res.status(400).json({ success: false, message: 'Can only pay for rental requests that are in ACCEPTED status' });
+    }
+
+    // Check if there's an agreed price
+    if (!rental.agreedPrice) {
+      return res.status(400).json({ success: false, message: 'No agreed price found for this rental request' });
+    }
+
+    // For Stripe payments, we don't need to validate the payment method in our database
+    // since Stripe handles the payment method validation
+    let paymentMethod = null;
+    if (paymentMethodId && paymentMethodId !== 'stripe') {
+      paymentMethod = await prisma.paymentMethod.findFirst({
+        where: { 
+          id: paymentMethodId,
+          userId: userId
+        }
+      });
+
+      if (!paymentMethod) {
+        return res.status(404).json({ success: false, message: 'Payment method not found' });
+      }
+    }
+
+    // Create external transaction record
+    const transactionData: any = {
+      customerId: rental.customerId,
+      sellerId: rental.driver?.userId || '',
+      gatewayProvider: 'stripe',
+      gatewayTransactionId: paymentIntentId || `rental-${rentalId}-${Date.now()}`,
+      paymentReference: `RENTAL-${rental.requestId}`,
+      amount: rental.agreedPrice,
+      currencyCode: rental.currency,
+      status: 'SUCCESS',
+      processedAt: new Date(),
+      appTransactionId: `rental-${rentalId}-${Date.now()}`,
+      appService: 'RENTAL',
+      rentalRequestId: rentalId,
+      gatewayResponse: { paymentIntentId },
+      gatewayRequest: { rentalId, paymentMethodId }
+    };
+
+    // Only add paymentMethodId if it's a valid stored payment method
+    if (paymentMethodId && paymentMethodId !== 'stripe' && paymentMethod) {
+      transactionData.paymentMethodId = paymentMethodId;
+    }
+
+    const transaction = await prisma.externalTransaction.create({
+      data: transactionData
+    });
+
+    // Update rental request status to PAID
+    const updatedRental = await prisma.rentalRequest.update({
+      where: { id: rentalId },
+      data: {
+        status: 'PAID',
+        updatedAt: new Date()
+      }
+    });
+
+    // Log a chat message about the payment
+    try {
+      const customerName = `${rental.customer.firstName} ${rental.customer.lastName}`;
+      
+      await prisma.rentalMessage.create({
+        data: {
+          rentalId: rentalId,
+          senderId: userId,
+          senderType: 'CUSTOMER',
+          content: `Payment completed by ${customerName}. Amount: ${rental.currency} ${rental.agreedPrice}`,
+          isRead: false
+        }
+      });
+    } catch (error) {
+      console.error('Error creating chat message for payment:', error);
+      // Don't fail the main operation if chat message creation fails
+    }
+
+    return res.json({ 
+      success: true, 
+      data: { 
+        rental: updatedRental,
+        transaction: transaction
+      }
+    });
+  } catch (error: any) {
+    console.error('Error processing rental payment:', error);
+    return res.status(500).json({ success: false, message: 'Failed to process payment', error: error?.message || String(error) });
+  }
+});
+
+// Get rental payment status
+router.get('/:rentalId/payment-status', authenticate, async (req: any, res) => {
+  try {
+    const { rentalId } = req.params;
+    const userId = req.user?.id;
+    
+    if (!rentalId) {
+      return res.status(400).json({ success: false, message: 'rentalId is required' });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    // Find the rental request
+    const rental = await prisma.rentalRequest.findUnique({
+      where: { id: rentalId },
+      include: {
+        transactions: {
+          where: { status: 'SUCCESS' },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    if (!rental) {
+      return res.status(404).json({ success: false, message: 'Rental request not found' });
+    }
+
+    // Check if the authenticated user is the customer for this rental
+    if (rental.customerId !== userId) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const paymentStatus = {
+      isPaid: rental.status === 'PAID',
+      status: rental.status,
+      lastTransaction: rental.transactions[0] || null
+    };
+
+    return res.json({ success: true, data: paymentStatus });
+  } catch (error: any) {
+    console.error('Error getting rental payment status:', error);
+    return res.status(500).json({ success: false, message: 'Failed to get payment status', error: error?.message || String(error) });
+  }
+});
+
 export default router;
 
 

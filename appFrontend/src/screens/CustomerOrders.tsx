@@ -26,7 +26,7 @@ import { kycService } from '../services/kycService';
 import Constants from 'expo-constants';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.199';
+const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.137.200';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
 
 type CustomerOrdersNavigationProp = NativeStackNavigationProp<AppStackParamList, 'CustomerOrders'>;

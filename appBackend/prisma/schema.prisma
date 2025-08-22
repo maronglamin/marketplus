@@ -602,14 +602,17 @@ model ExternalTransaction {
   transactionType      TransactionType   @default(ORIGINAL)
   appService           AppService        @default(ECOMMERCE)
   rideRequestId        String?
+  rentalRequestId      String?
   customer             User              @relation("CustomerTransactions", fields: [customerId], references: [id])
   order                orders?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   paymentMethod        PaymentMethod?    @relation(fields: [paymentMethodId], references: [id])
   rideRequest          RideRequest?      @relation(fields: [rideRequestId], references: [id], onDelete: Cascade)
+  rentalRequest        RentalRequest?    @relation(fields: [rentalRequestId], references: [id], onDelete: Cascade)
   seller               User              @relation("SellerTransactions", fields: [sellerId], references: [id])
 
   @@index([orderId])
   @@index([rideRequestId])
+  @@index([rentalRequestId])
   @@index([customerId])
   @@index([sellerId])
   @@index([paymentMethodId])
@@ -708,6 +711,7 @@ enum RentalRequestStatus {
   PENDING_QUOTE
   QUOTED
   ACCEPTED
+  PAID
   REJECTED
   CANCELLED
   EXPIRED
@@ -742,6 +746,7 @@ model RentalRequest {
   rideService        RideService          @relation(fields: [rideServiceId], references: [id])
   riderApplication   RiderApplication?    @relation(fields: [riderApplicationId], references: [id])
   messages           RentalMessage[]
+  transactions       ExternalTransaction[]
 
   @@index([customerId])
   @@index([driverId])
@@ -1335,4 +1340,5 @@ enum ServiceStatus {
 enum AppService {
   ECOMMERCE
   RIDES
+  RENTAL
 }

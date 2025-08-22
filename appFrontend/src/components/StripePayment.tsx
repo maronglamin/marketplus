@@ -38,6 +38,7 @@ interface StripePaymentProps {
     firstName: string;
     lastName: string;
   };
+  transactionType?: 'order' | 'ride' | 'rental';
 }
 
 function StripePaymentContent(props: StripePaymentProps) {
@@ -194,7 +195,8 @@ function StripePaymentContent(props: StripePaymentProps) {
         {
           userFirstName: props.userInfo?.firstName,
           userLastName: props.userInfo?.lastName,
-          paymentMethod: 'new_card'
+          paymentMethod: 'new_card',
+          transactionType: props.transactionType || 'order'
         }
       );
       

@@ -23,27 +23,68 @@ router.post('/create-payment-intent', authenticate, async (req, res) => {
       });
     }
 
-    // Get order and user details for description
-    let description = `Order #${orderId}`;
+    // Get transaction details for description based on metadata
+    let description = `Transaction #${orderId}`;
+    const transactionType = metadata?.transactionType || 'order';
+    
     try {
-      const order = await prisma.orders.findUnique({
-        where: { id: orderId },
-        include: {
-          user: {
-            select: {
-              firstName: true,
-              lastName: true
+      if (transactionType === 'order') {
+        // Handle order payments
+        const order = await prisma.orders.findUnique({
+          where: { id: orderId },
+          include: {
+            User_orders_userIdToUser: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
             }
           }
+        });
+        
+        if (order && order.User_orders_userIdToUser) {
+          const fullName = `${order.User_orders_userIdToUser.firstName} ${order.User_orders_userIdToUser.lastName}`.trim();
+          description = `Order #${orderId} - Ordered by: ${fullName}`;
         }
-      });
-      
-      if (order && order.user) {
-        const fullName = `${order.user.firstName} ${order.user.lastName}`.trim();
-        description = `Order #${orderId} - Ordered by: ${fullName}`;
+      } else if (transactionType === 'ride') {
+        // Handle ride payments
+        const ride = await prisma.rideRequest.findUnique({
+          where: { id: orderId },
+          include: {
+            customer: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        });
+        
+        if (ride && ride.customer) {
+          const fullName = `${ride.customer.firstName} ${ride.customer.lastName}`.trim();
+          description = `Ride #${orderId} - Requested by: ${fullName}`;
+        }
+      } else if (transactionType === 'rental') {
+        // Handle rental payments
+        const rental = await prisma.rentalRequest.findUnique({
+          where: { id: orderId },
+          include: {
+            customer: {
+              select: {
+                firstName: true,
+                lastName: true
+              }
+            }
+          }
+        });
+        
+        if (rental && rental.customer) {
+          const fullName = `${rental.customer.firstName} ${rental.customer.lastName}`.trim();
+          description = `Rental #${orderId} - Requested by: ${fullName}`;
+        }
       }
     } catch (error) {
-      console.warn('Could not fetch order details for description:', error);
+      console.warn('Could not fetch transaction details for description:', error);
       // Continue with basic description
     }
 
@@ -300,8 +341,8 @@ router.post('/payment-success', authenticate, async (req, res) => {
     const order = await prisma.orders.findUnique({
       where: { id: orderId },
       include: {
-        user: true,
-        seller: true
+        User_orders_userIdToUser: true,
+        User_orders_sellerIdToUser: true
       }
     });
 

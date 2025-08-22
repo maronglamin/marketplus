@@ -5,7 +5,7 @@ const AsyncStorage = require('@react-native-async-storage/async-storage');
 async function debugAuth() {
   console.log('🔍 Debugging Authentication and Driver Profile...\n');
 
-  const API_BASE_URL = 'http://192.168.0.199:3000/api';
+  const API_BASE_URL = 'http://192.168.137.200:3000/api';
   
   try {
     // Check stored token

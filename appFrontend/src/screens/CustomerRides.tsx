@@ -1138,6 +1138,7 @@ export function CustomerRides() {
                 firstName: user?.firstName || '',
                 lastName: user?.lastName || ''
               }}
+              transactionType="ride"
             />
           </>
         )}

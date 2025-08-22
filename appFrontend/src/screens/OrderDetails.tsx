@@ -2717,6 +2717,7 @@ export function OrderDetails() {
           firstName: user?.firstName || '',
           lastName: user?.lastName || ''
         }}
+        transactionType="order"
       />
     </SafeAreaView>
   );

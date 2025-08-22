@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, StatusBar, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, StatusBar, RefreshControl, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,8 +10,12 @@ import { getAuthToken } from '../api/auth';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../navigation/AppNavigator';
+import { api } from '../api/api';
+import { StripePayment } from '../components/StripePayment';
+import { PaymentMethodSelector } from '../components/PaymentMethodSelector';
+import * as Haptics from 'expo-haptics';
 
-const STATUS_TABS = ['ALL','PENDING_QUOTE','QUOTED','ACCEPTED','REJECTED','CANCELLED'] as const;
+const STATUS_TABS = ['ALL','PENDING_QUOTE','QUOTED','ACCEPTED','PAID','REJECTED','CANCELLED'] as const;
 
 // Currency symbol mapping
 const getCurrencySymbol = (currencyCode?: string): string => {
@@ -34,6 +38,15 @@ export default function RentalRequestScreen() {
   const [status, setStatus] = useState<typeof STATUS_TABS[number]>('ALL');
   const [userLoading, setUserLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [showStripePayment, setShowStripePayment] = useState(false);
+  
+  // Debug effect to log Stripe modal state changes
+  useEffect(() => {
+    console.log('Stripe modal state changed:', showStripePayment);
+  }, [showStripePayment]);
+  const [showPaymentMethodSelector, setShowPaymentMethodSelector] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [selectedRentalForPayment, setSelectedRentalForPayment] = useState<any>(null);
 
   // Validate and refresh user data when component mounts
   useEffect(() => {
@@ -67,6 +80,8 @@ export default function RentalRequestScreen() {
         return 'pricetag' as const;
       case 'ACCEPTED':
         return 'checkmark-circle' as const;
+      case 'PAID':
+        return 'card' as const;
       case 'REJECTED':
         return 'close-circle' as const;
       case 'CANCELLED':
@@ -187,6 +202,127 @@ export default function RentalRequestScreen() {
     }
   };
 
+  // Payment functions
+  const handlePaymentMethodSelect = async (paymentMethod: any) => {
+    try {
+      setProcessingPayment(true);
+      
+      if (!selectedRentalForPayment) {
+        throw new Error('No rental selected for payment');
+      }
+
+      // Handle different payment method types
+      switch (paymentMethod.type) {
+        case 'CREDIT_CARD':
+        case 'DEBIT_CARD':
+          // Stripe payments are handled separately via onStripePayment
+          break;
+
+        case 'MOBILE_MONEY':
+        case 'BANK_TRANSFER':
+        case 'CRYPTO':
+        case 'DIGITAL_WALLET':
+          // Call the rental payment endpoint with the selected payment method
+          const response = await api.post(`/api/rentals/${selectedRentalForPayment.id}/payment`, {
+            paymentMethodId: paymentMethod.id,
+            paymentIntentId: null // We'll handle this differently for stored payment methods
+          });
+          
+          if (response.data.success) {
+            Alert.alert(
+              'Payment Successful!',
+              `Your payment of ${getCurrencySymbol(selectedRentalForPayment.currency)} ${selectedRentalForPayment.agreedPrice?.toLocaleString()} has been processed successfully using ${paymentMethod.accountName}.`,
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    setShowPaymentMethodSelector(false);
+                    setSelectedRentalForPayment(null);
+                    // Refresh the rentals list
+                    handleRefresh();
+                  },
+                },
+              ]
+            );
+            
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } else {
+            throw new Error('Failed to process payment');
+          }
+          break;
+
+        default:
+          throw new Error(`Unsupported payment method type: ${paymentMethod.type}`);
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      Alert.alert('Payment Failed', 'There was an issue processing your payment. Please try again.');
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  const handleStripePaymentSuccess = async (paymentIntentId: string) => {
+    try {
+      setProcessingPayment(true);
+      
+      if (!selectedRentalForPayment) {
+        throw new Error('No rental selected for payment');
+      }
+
+      // Call the rental payment endpoint
+      const response = await api.post(`/api/rentals/${selectedRentalForPayment.id}/payment`, {
+        paymentMethodId: 'stripe', // For Stripe payments
+        paymentIntentId: paymentIntentId
+      });
+      
+      if (response.data.success) {
+        Alert.alert(
+          'Payment Successful!',
+          `Your payment of ${getCurrencySymbol(selectedRentalForPayment.currency)} ${selectedRentalForPayment.agreedPrice?.toLocaleString()} has been processed successfully.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setShowStripePayment(false);
+                setSelectedRentalForPayment(null);
+                // Refresh the rentals list
+                handleRefresh();
+              },
+            },
+          ]
+        );
+        
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        throw new Error('Failed to update rental status');
+      }
+    } catch (error) {
+      console.error('Error updating rental after payment:', error);
+      Alert.alert('Payment Successful', 'Your payment was processed, but there was an issue updating the rental status.');
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  const handlePaymentError = (error: string) => {
+    Alert.alert('Payment Failed', error);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    setShowStripePayment(false);
+    setSelectedRentalForPayment(null);
+  };
+
+  const handlePayRental = (rental: any) => {
+    if (!rental.agreedPrice) {
+      Alert.alert('Error', 'No agreed price found for this rental request.');
+      return;
+    }
+
+    setSelectedRentalForPayment(rental);
+    setShowPaymentMethodSelector(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -197,6 +333,16 @@ export default function RentalRequestScreen() {
         <Text style={styles.title}>My Rental Requests</Text>
         <TouchableOpacity onPress={handleRefresh} style={styles.headerIconBtn}>
           <Ionicons name="refresh" size={20} color="#6B7280" />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={() => {
+            console.log('Test Stripe button pressed from header');
+            setShowStripePayment(true);
+            setSelectedRentalForPayment({ id: 'test', agreedPrice: 100, currency: 'USD' });
+          }} 
+          style={styles.headerIconBtn}
+        >
+          <Ionicons name="card-outline" size={20} color="#EF4444" />
         </TouchableOpacity>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow} style={styles.filtersContainer}>
@@ -337,6 +483,21 @@ export default function RentalRequestScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
               </View>
+              
+              {/* Payment Button for ACCEPTED status */}
+              {rental.status === 'ACCEPTED' && rental.agreedPrice && (
+                <View style={styles.paymentSection}>
+                  <TouchableOpacity
+                    style={styles.payButton}
+                    onPress={() => handlePayRental(rental)}
+                  >
+                    <Ionicons name="card-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.payButtonText}>
+                      Pay {getCurrencySymbol(rental.currency)} {rental.agreedPrice.toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </TouchableOpacity>
           ))}
           {isLoading && hasMore && (
@@ -347,6 +508,50 @@ export default function RentalRequestScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* Payment Method Selector Modal */}
+      {selectedRentalForPayment && (
+        <PaymentMethodSelector
+          visible={showPaymentMethodSelector}
+          onClose={() => {
+            setShowPaymentMethodSelector(false);
+            setSelectedRentalForPayment(null);
+          }}
+          onSelectPaymentMethod={handlePaymentMethodSelect}
+          onStripePayment={() => {
+            console.log('onStripePayment callback triggered');
+            setShowPaymentMethodSelector(false);
+            setShowStripePayment(true);
+            console.log('Stripe modal state set to true');
+          }}
+          amount={selectedRentalForPayment.agreedPrice || 0}
+          currency={selectedRentalForPayment.currency || 'USD'}
+          title="Select Payment Method"
+        />
+      )}
+
+      {/* Stripe Payment Modal */}
+      {console.log('Rendering Stripe modal section:', { showStripePayment, selectedRentalForPayment: !!selectedRentalForPayment })}
+      {selectedRentalForPayment && (
+        <StripePayment
+          visible={showStripePayment}
+          onClose={() => {
+            setShowStripePayment(false);
+            setSelectedRentalForPayment(null);
+          }}
+          amount={selectedRentalForPayment.agreedPrice || 0}
+          currency={selectedRentalForPayment.currency || 'USD'}
+          orderId={selectedRentalForPayment.id}
+          customerId={selectedRentalForPayment.customerId || user?.id || ''}
+          onPaymentSuccess={handleStripePaymentSuccess}
+          onPaymentError={handlePaymentError}
+          userInfo={{
+            firstName: user?.firstName || '',
+            lastName: user?.lastName || ''
+          }}
+          transactionType="rental"
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -355,6 +560,7 @@ const statusColors: any = {
   PENDING_QUOTE: { backgroundColor: '#FEF3C7' },
   QUOTED: { backgroundColor: '#DBEAFE' },
   ACCEPTED: { backgroundColor: '#DCFCE7' },
+  PAID: { backgroundColor: '#DCFCE7' },
   REJECTED: { backgroundColor: '#FEE2E2' },
   CANCELLED: { backgroundColor: '#F3F4F6' },
 };
@@ -363,6 +569,7 @@ const statusTextColors: any = {
   PENDING_QUOTE: { color: '#92400E' },
   QUOTED: { color: '#1E40AF' },
   ACCEPTED: { color: '#166534' },
+  PAID: { color: '#166534' },
   REJECTED: { color: '#991B1B' },
   CANCELLED: { color: '#374151' },
 };
@@ -406,6 +613,18 @@ const styles = StyleSheet.create({
 
   clearFilterButton: { marginTop: 16, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#3B82F6', borderRadius: 8 },
   clearFilterButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  paymentSection: { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  payButton: { 
+    backgroundColor: '#10B981', 
+    paddingVertical: 12, 
+    paddingHorizontal: 16, 
+    borderRadius: 8, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    gap: 8
+  },
+  payButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });
 
 
