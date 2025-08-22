@@ -31,7 +31,6 @@ interface StripePaymentProps {
   currency: string;
   orderId: string;
   customerId: string;
-  selectedPaymentMethod?: any;
   onPaymentSuccess: (paymentIntentId: string) => void;
   onPaymentError: (error: string) => void;
   userInfo?: {
@@ -46,7 +45,6 @@ function StripePaymentContent(props: StripePaymentProps) {
   const [cardDetails, setCardDetails] = useState<any>(null);
   const [processing, setProcessing] = useState(false);
   const [paymentIntent, setPaymentIntent] = useState<any>(null);
-  const [showSummary, setShowSummary] = useState(false);
 
   // Debounced card change handler to reduce excessive logging
   const handleCardChange = useCallback((details: any) => {
@@ -64,100 +62,6 @@ function StripePaymentContent(props: StripePaymentProps) {
     }
     setCardDetails(details);
   }, [cardDetails]);
-
-  // Debug: Log the selected payment method when component mounts or props change
-  React.useEffect(() => {
-    console.log('StripePayment - selectedPaymentMethod:', props.selectedPaymentMethod);
-  }, [props.selectedPaymentMethod]);
-
-  // Extract card details from selected payment method
-  const getSavedCardDetails = () => {
-    if (!props.selectedPaymentMethod || props.selectedPaymentMethod.type !== 'CREDIT_CARD') {
-      // Only log once when there's no valid payment method, not on every render
-      if (props.selectedPaymentMethod !== undefined) {
-        console.log('No selected payment method or not a credit card:', props.selectedPaymentMethod);
-      }
-      return null;
-    }
-
-    console.log('Selected payment method:', {
-      id: props.selectedPaymentMethod.id,
-      type: props.selectedPaymentMethod.type,
-      provider: props.selectedPaymentMethod.provider,
-      accountName: props.selectedPaymentMethod.accountName,
-      accountId: props.selectedPaymentMethod.accountId,
-      metadata: props.selectedPaymentMethod.metadata,
-      metadataType: typeof props.selectedPaymentMethod.metadata
-    });
-
-    const metadata = props.selectedPaymentMethod.metadata || {};
-    
-    // Handle case where metadata might be a JSON string
-    let parsedMetadata = metadata;
-    if (typeof metadata === 'string') {
-      try {
-        parsedMetadata = JSON.parse(metadata);
-        console.log('Successfully parsed metadata from string:', parsedMetadata);
-      } catch (error) {
-        console.error('Failed to parse metadata JSON:', error);
-        parsedMetadata = {};
-      }
-    } else if (metadata && typeof metadata === 'object') {
-      console.log('Metadata is already an object:', metadata);
-      parsedMetadata = metadata;
-    } else {
-      console.log('Metadata is neither string nor object:', metadata);
-      parsedMetadata = {};
-    }
-
-    console.log('Final parsed metadata:', parsedMetadata);
-
-    // Test case: If this is a mock payment method, we know the structure
-    if (props.selectedPaymentMethod.id === 'mock-1') {
-      console.log('Using mock payment method structure');
-      return {
-        cardNumber: '4242 4242 4242 4242',
-        expiryDate: '12/25',
-        cardholderName: 'John Doe',
-        last4: '4242',
-        provider: 'Visa',
-        cvv: '123'
-      };
-    }
-
-    const cardDetails = {
-      cardNumber: parsedMetadata.cardNumber || '',
-      expiryDate: parsedMetadata.expiryDate || '',
-      cardholderName: props.selectedPaymentMethod.accountName || parsedMetadata.cardholderName || '',
-      last4: props.selectedPaymentMethod.accountId || parsedMetadata.last4 || '',
-      provider: props.selectedPaymentMethod.provider || parsedMetadata.provider || 'Card',
-      cvv: parsedMetadata.cvv || ''
-    };
-
-    console.log('Extracted card details:', cardDetails);
-
-    // Only return if we have at least some card information
-    if (cardDetails.cardNumber || cardDetails.last4) {
-      return cardDetails;
-    }
-
-    console.log('No valid card details found in metadata');
-    return null;
-  };
-
-  const savedCardDetails = getSavedCardDetails();
-
-  // Debug: Log card details changes - only when significant changes occur
-  React.useEffect(() => {
-    if (cardDetails?.complete !== undefined || savedCardDetails?.cardNumber) {
-      console.log('StripePayment - payment ready state:', {
-        complete: cardDetails?.complete,
-        hasCardDetails: !!cardDetails?.complete,
-        hasSavedCard: !!savedCardDetails?.cardNumber,
-        buttonEnabled: !!(cardDetails?.complete || savedCardDetails?.cardNumber)
-      });
-    }
-  }, [cardDetails?.complete, savedCardDetails?.cardNumber]);
 
   const handlePayment = async () => {
     // Remove card completion check - let Stripe handle validation
@@ -207,7 +111,7 @@ function StripePaymentContent(props: StripePaymentProps) {
         status: intent.status
       });
       
-      // Go directly to payment confirmation without showing summary
+      // Go directly to payment confirmation
       await handleConfirmPayment(intent);
       
     } catch (error: any) {
@@ -269,17 +173,9 @@ function StripePaymentContent(props: StripePaymentProps) {
     }
   };
 
-  const formatCardNumber = (cardNumber: string) => {
-    if (!cardNumber) return '';
-    const cleaned = cardNumber.replace(/\s/g, '');
-    if (cleaned.length >= 4) {
-      return `**** **** **** ${cleaned.slice(-4)}`;
-    }
-    return cardNumber;
-  };
-
   return (
     <Modal visible={props.visible} animationType="slide" transparent={true}>
+      {(() => { console.log('🎯 StripePayment modal rendering:', { visible: props.visible, orderId: props.orderId, amount: props.amount }); return null; })()}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.modalOverlay}>
           <KeyboardAvoidingView
@@ -299,39 +195,9 @@ function StripePaymentContent(props: StripePaymentProps) {
               {stripeService.formatAmount(props.amount, props.currency)}
             </Text>
             
-            {/* Show saved card details if available */}
-            {savedCardDetails && (
-              <View style={styles.savedCardContainer}>
-                <View style={styles.savedCardHeader}>
-                  <Ionicons name="card-outline" size={20} color="#2563EB" />
-                  <Text style={styles.savedCardTitle}>Saved Card Available</Text>
-                </View>
-                <View style={styles.savedCardDetails}>
-                  <Text style={styles.savedCardName}>{savedCardDetails.cardholderName}</Text>
-                  <Text style={styles.savedCardNumber}>
-                    {formatCardNumber(savedCardDetails.cardNumber)}
-                  </Text>
-                  <Text style={styles.savedCardExpiry}>
-                    Expires: {savedCardDetails.expiryDate}
-                  </Text>
-                  <Text style={styles.savedCardProvider}>
-                    {savedCardDetails.provider}
-                  </Text>
-                </View>
-                <View style={styles.savedCardNote}>
-                  <Ionicons name="shield-checkmark" size={16} color="#10B981" />
-                  <Text style={styles.savedCardNoteText}>
-                    Your saved card is available. You can pay directly with this card or enter new details below.
-                  </Text>
-                </View>
-              </View>
-            )}
-            
             {/* Card input field */}
             <View style={styles.cardInputContainer}>
-              <Text style={styles.cardInputLabel}>
-                {savedCardDetails ? 'Enter New Card Details (Optional)' : 'Card Details'}
-              </Text>
+              <Text style={styles.cardInputLabel}>Card Details</Text>
               <CardField
                 postalCodeEnabled={false}
                 cardStyle={{
@@ -428,7 +294,16 @@ const styles = StyleSheet.create({
     height: 50,
     marginBottom: 24,
   },
-
+  cardInputContainer: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  cardInputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 8,
+  },
   payButton: {
     backgroundColor: '#2563EB',
     paddingVertical: 16,
@@ -444,70 +319,5 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: '#E5E7EB',
-  },
-  savedCardContainer: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    width: '100%',
-  },
-  savedCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  savedCardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginLeft: 8,
-  },
-  savedCardDetails: {
-    marginBottom: 12,
-  },
-  savedCardName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  savedCardNumber: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  savedCardExpiry: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  savedCardProvider: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  savedCardNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  savedCardNoteText: {
-    fontSize: 12,
-    color: '#10B981',
-    marginLeft: 4,
-  },
-  cardInputContainer: {
-    width: '100%',
-    marginBottom: 24,
-  },
-  cardInputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
   },
 }); 

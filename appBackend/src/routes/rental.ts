@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { RentalService } from '../services/rentalService';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TransactionType } from '@prisma/client';
+import UCPService from '../services/ucpService';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
@@ -776,40 +777,118 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
       }
     }
 
-    // Create external transaction record
-    const transactionData: any = {
-      customerId: rental.customerId,
-      sellerId: rental.driver?.userId || '',
-      gatewayProvider: 'stripe',
-      gatewayTransactionId: paymentIntentId || `rental-${rentalId}-${Date.now()}`,
-      paymentReference: `RENTAL-${rental.requestId}`,
-      amount: rental.agreedPrice,
-      currencyCode: rental.currency,
-      status: 'SUCCESS',
-      processedAt: new Date(),
-      appTransactionId: `rental-${rentalId}-${Date.now()}`,
-      appService: 'RENTAL',
-      rentalRequestId: rentalId,
-      gatewayResponse: { paymentIntentId },
-      gatewayRequest: { rentalId, paymentMethodId }
-    };
+    // Generate app-level transaction id shared across all records
+    const appTransactionId = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-    // Only add paymentMethodId if it's a valid stored payment method
-    if (paymentMethodId && paymentMethodId !== 'stripe' && paymentMethod) {
-      transactionData.paymentMethodId = paymentMethodId;
-    }
+    // Amounts
+    const originalAmount = Number(rental.agreedPrice);
+    const currencyCode = (rental.currency || 'USD').toUpperCase();
+    const gatewayChargeFees = calculateStripeFees(originalAmount, currencyCode);
 
-    const transaction = await prisma.externalTransaction.create({
-      data: transactionData
-    });
+    // Service fee via UCP configuration
+    const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } = await UCPService.calculateServiceFee('stripe', originalAmount, currencyCode);
 
-    // Update rental request status to PAID
-    const updatedRental = await prisma.rentalRequest.update({
-      where: { id: rentalId },
-      data: {
-        status: 'PAID',
-        updatedAt: new Date()
-      }
+    // Determine seller id (driver's user id)
+    const sellerUserId = (rental as any)?.driver?.user?.id || (rental as any)?.driver?.userId || '';
+
+    // Persist all changes atomically
+    const result = await prisma.$transaction(async (tx) => {
+      // Original transaction (customer payment)
+      const originalTransaction = await tx.externalTransaction.create({
+        data: {
+          rentalRequestId: rentalId,
+          customerId: rental.customerId,
+          sellerId: sellerUserId,
+          gatewayProvider: 'stripe',
+          gatewayTransactionId: paymentIntentId || `rental-${rentalId}-${Date.now()}`,
+          paymentReference: paymentIntentId || `RENTAL-${rental.requestId}`,
+          appTransactionId,
+          appService: 'RENTAL',
+          transactionType: TransactionType.ORIGINAL,
+          amount: originalAmount,
+          currencyCode,
+          gatewayChargeFees: null,
+          processedAmount: null,
+          paidThroughGateway: true,
+          gatewayResponse: { paymentIntentId },
+          gatewayRequest: { rentalId, paymentMethodId },
+          status: 'SUCCESS',
+          processedAt: new Date(),
+          ...(paymentMethodId && paymentMethodId !== 'stripe' && paymentMethod ? { paymentMethodId } : {})
+        }
+      });
+
+      // Fee transaction (Stripe fee)
+      const feeTransaction = await tx.externalTransaction.create({
+        data: {
+          rentalRequestId: rentalId,
+          customerId: rental.customerId,
+          sellerId: sellerUserId,
+          gatewayProvider: 'stripe',
+          gatewayTransactionId: `${paymentIntentId || `rental-${rentalId}`}-fee`,
+          paymentReference: paymentIntentId || `RENTAL-${rental.requestId}`,
+          appTransactionId,
+          appService: 'RENTAL',
+          transactionType: TransactionType.FEE,
+          amount: gatewayChargeFees,
+          currencyCode,
+          gatewayChargeFees: gatewayChargeFees,
+          processedAmount: 0,
+          paidThroughGateway: true,
+          gatewayResponse: {
+            originalPaymentIntent: paymentIntentId,
+            feeCalculation: {
+              percentage: 0.029,
+              fixedFee: 30,
+              totalFees: gatewayChargeFees
+            }
+          },
+          status: 'SUCCESS',
+          processedAt: new Date()
+        }
+      });
+
+      // Service fee transaction (platform fee via UCP)
+      const serviceFeeTransaction = await tx.externalTransaction.create({
+        data: {
+          rentalRequestId: rentalId,
+          customerId: rental.customerId,
+          sellerId: sellerUserId,
+          gatewayProvider: 'stripe',
+          gatewayTransactionId: `${paymentIntentId || `rental-${rentalId}`}-servicefee`,
+          paymentReference: paymentIntentId || `RENTAL-${rental.requestId}`,
+          appTransactionId,
+          appService: 'RENTAL',
+          transactionType: TransactionType.SERVICE_FEE,
+          amount: serviceFeeAmount,
+          currencyCode,
+          gatewayChargeFees: null,
+          processedAmount: 0,
+          paidThroughGateway: false,
+          gatewayResponse: {
+            originalPaymentIntent: paymentIntentId,
+            serviceFeeConfig: serviceFeeConfig ? {
+              name: serviceFeeConfig.name,
+              value: serviceFeeConfig.value,
+              description: serviceFeeConfig.description,
+              serviceType: serviceFeeConfig.serviceType,
+              metadata: serviceFeeConfig.metadata
+            } : null,
+            serviceFeePercentage,
+            serviceFeeAmount
+          },
+          status: 'SUCCESS',
+          processedAt: new Date()
+        }
+      });
+
+      // Update rental to PAID
+      const updatedRental = await tx.rentalRequest.update({
+        where: { id: rentalId },
+        data: { status: 'PAID', updatedAt: new Date() }
+      });
+
+      return { updatedRental, originalTransaction, feeTransaction, serviceFeeTransaction, appTransactionId };
     });
 
     // Log a chat message about the payment
@@ -830,11 +909,16 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
       // Don't fail the main operation if chat message creation fails
     }
 
-    return res.json({ 
-      success: true, 
-      data: { 
-        rental: updatedRental,
-        transaction: transaction
+    return res.json({
+      success: true,
+      data: {
+        rental: result.updatedRental,
+        transaction: {
+          appTransactionId: result.appTransactionId,
+          originalTransaction: result.originalTransaction,
+          feeTransaction: result.feeTransaction,
+          serviceFeeTransaction: result.serviceFeeTransaction
+        }
       }
     });
   } catch (error: any) {
@@ -894,3 +978,18 @@ router.get('/:rentalId/payment-status', authenticate, async (req: any, res) => {
 export default router;
 
 
+// Helper function to calculate Stripe fees
+function calculateStripeFees(amount: number, currency: string): number {
+  // Stripe fees: 2.9% + 30 cents for most currencies
+  const percentageFee = 0.029; // 2.9%
+  const fixedFee = 30; // 30 cents in smallest currency unit
+
+  // For zero-decimal currencies, adjust the fixed fee
+  const zeroDecimalCurrencies = ['jpy', 'bif', 'clp', 'djf', 'gnf', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
+  const adjustedFixedFee = zeroDecimalCurrencies.includes((currency || '').toLowerCase()) ? fixedFee : fixedFee / 100;
+
+  const percentageAmount = amount * percentageFee;
+  const totalFees = percentageAmount + adjustedFixedFee;
+
+  return totalFees;
+}

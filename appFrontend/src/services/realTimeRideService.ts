@@ -171,7 +171,7 @@ export class RealTimeRideService {
         }
 
         // Create socket connection
-        this.socket = io('http://192.168.137.200:3000', {
+        this.socket = io('http://192.168.0.200:3000', {
           auth: { token },
           transports: ['websocket', 'polling'],
           timeout: 20000,

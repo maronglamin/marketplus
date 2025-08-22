@@ -15,11 +15,11 @@ class RateLimiter {
   private requestTrackers: Map<string, RequestTracker> = new Map()
   private retryCounts: Map<string, number> = new Map()
   private config = {
-    maxRequests: 50, // Increased from 10 to 50 requests per window
-    windowMs: 60000, // 1 minute window
-    retryDelay: 2000, // Increased base delay for retries (2 seconds)
-    maxRetries: 2, // Reduced from 3 to 2 retries to prevent excessive retries
-    backoffMultiplier: 1.5, // Reduced from 2 to 1.5 for less aggressive backoff
+    maxRequests: 1000, // Increased from 10 to 50 requests per window // Now change to 1000 requests per window
+    windowMs: 5 * 60 * 1000, // 5 minutes window // Now change to 5 minutes window
+    retryDelay: 2000, // Increased base delay for retries (2 seconds) // Now change to 2 seconds
+    maxRetries: 2, // Reduced from 3 to 2 retries to prevent excessive retries // Now change to 2 retries to prevent excessive retries
+    backoffMultiplier: 2, // Reduced from 2 to 1.5 for less aggressive backoff
   }
 
   /**

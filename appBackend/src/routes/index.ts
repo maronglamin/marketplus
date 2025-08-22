@@ -11,6 +11,7 @@ import rideServiceRoutes from './rideService';
 import rideHistoryRoutes from './rideHistory';
 import rideRequestRoutes from './rideRequests';
 import paymentMethodsRoutes from './paymentMethods';
+import rentalRoutes from './rental';
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/ride-services', rideServiceRoutes);
 router.use('/ride-history', rideHistoryRoutes);
 router.use('/ride-requests', rideRequestRoutes);
 router.use('/payment-methods', paymentMethodsRoutes);
+router.use('/rental-requests', rentalRoutes);
 
 export default router; 

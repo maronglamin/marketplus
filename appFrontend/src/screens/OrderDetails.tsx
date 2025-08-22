@@ -755,7 +755,6 @@ export function OrderDetails() {
       }
       
       const allPaymentMethods = response?.data?.data || [];
-      
       console.log('Raw API response for payment methods:', {
         responseData: response?.data,
         allPaymentMethods: allPaymentMethods,
@@ -768,8 +767,15 @@ export function OrderDetails() {
         } : null
       });
       
-      // Filter payment methods by current user ID (similar to seller delivery pricing logic)
-      const userPaymentMethods = allPaymentMethods.filter((pm: any) => pm.userId === user.id);
+      // Filter payment methods by owner when possible; if backend already scopes, fallback to all
+      let userPaymentMethods = allPaymentMethods.filter((pm: any) => {
+        const ownerId = pm.userId || pm.customerId || pm.ownerId || pm.user?.id;
+        return !ownerId || ownerId === user.id;
+      });
+      if (userPaymentMethods.length === 0 && allPaymentMethods.length > 0) {
+        console.log('No explicit owner match; assuming backend already scoped to current user.');
+        userPaymentMethods = allPaymentMethods;
+      }
       
       // Parse metadata for each payment method if it's a string
       const parsedUserPaymentMethods = userPaymentMethods.map((pm: any) => {
@@ -947,8 +953,15 @@ export function OrderDetails() {
         } : null
       });
       
-      // Filter payment methods by current user ID (similar to seller delivery pricing logic)
-      const userPaymentMethods = allPaymentMethods.filter((pm: any) => pm.userId === user.id);
+      // Filter payment methods by owner when possible; if backend already scopes, fallback to all
+      let userPaymentMethods = allPaymentMethods.filter((pm: any) => {
+        const ownerId = pm.userId || pm.customerId || pm.ownerId || pm.user?.id;
+        return !ownerId || ownerId === user.id;
+      });
+      if (userPaymentMethods.length === 0 && allPaymentMethods.length > 0) {
+        console.log('No explicit owner match; assuming backend already scoped to current user.');
+        userPaymentMethods = allPaymentMethods;
+      }
       
       // Parse metadata for each payment method if it's a string
       const parsedUserPaymentMethods = userPaymentMethods.map((pm: any) => {

@@ -2,7 +2,7 @@ const axios = require('axios');
 
 // Test backend connection and user profile endpoint
 async function testBackendConnection() {
-  const LOCAL_IP = '192.168.137.200'; // Update this to your actual IP
+  const LOCAL_IP = '192.168.0.200'; // Update this to your actual IP
   const API_URL = `http://${LOCAL_IP}:3000`;
   
   console.log('🧪 Testing Backend Connection...\n');

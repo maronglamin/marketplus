@@ -13,6 +13,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AppStackParamList } from '../navigation/AppNavigator';
+import * as Haptics from 'expo-haptics';
 
 interface PaymentMethod {
   id: string;
@@ -48,6 +52,7 @@ export function PaymentMethodSelector({
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
 
   useEffect(() => {
     if (visible) {
@@ -59,107 +64,25 @@ export function PaymentMethodSelector({
     try {
       setLoading(true);
       setError(null);
-      
-      // Force using mock data for testing
-      console.log('Loading payment methods...');
-      
-      // Use mock data to test the UI flow
-      const mockPaymentMethods = [
-        {
-          id: 'mock-1',
-          type: 'CREDIT_CARD',
-          provider: 'Visa',
-          accountName: 'John Doe',
-          accountId: '1234',
-          isDefault: true,
-          status: 'ACTIVE',
-          metadata: {
-            cardNumber: '4242 4242 4242 4242',
-            expiryDate: '12/25',
-            cvv: '123'
-          }
-        },
-        {
-          id: 'mock-2',
-          type: 'MOBILE_MONEY',
-          provider: 'M-Pesa',
-          accountName: 'Mobile Money',
-          accountId: '+1234567890',
-          isDefault: false,
-          status: 'ACTIVE',
-          metadata: {
-            phoneNumber: '+1234567890',
-            walletType: 'Mobile Money',
-            providerId: 'mpesa'
-          }
-        }
-      ];
-      
-      console.log('Using mock payment methods:', mockPaymentMethods);
-      setPaymentMethods(mockPaymentMethods);
-      
-      // Comment out the API call for now to test with mock data
-      /*
       const response = await api.get('/api/payment-methods');
-      
-      if (response.data.success) {
+      if (response.data?.success) {
         console.log('Payment methods loaded:', response.data.data);
-        setPaymentMethods(response.data.data);
+        setPaymentMethods(response.data.data || []);
       } else {
         setError('Failed to load payment methods');
+        setPaymentMethods([]);
       }
-      */
     } catch (error: any) {
       console.error('Error loading payment methods:', error);
-      
-      // If it's a 500 error, the endpoint might not be implemented yet
-      if (error.response?.status === 500) {
-        console.log('Payment methods endpoint returned 500 - using mock data');
-        
-        // Use mock data to test the UI flow
-        const mockPaymentMethods = [
-          {
-            id: 'mock-1',
-            type: 'CREDIT_CARD',
-            provider: 'Visa',
-            accountName: 'John Doe',
-            accountId: '1234',
-            isDefault: true,
-            status: 'ACTIVE',
-            metadata: {
-              cardNumber: '4242 4242 4242 4242',
-              expiryDate: '12/25',
-              cvv: '123'
-            }
-          },
-          {
-            id: 'mock-2',
-            type: 'MOBILE_MONEY',
-            provider: 'M-Pesa',
-            accountName: 'Mobile Money',
-            accountId: '+1234567890',
-            isDefault: false,
-            status: 'ACTIVE',
-            metadata: {
-              phoneNumber: '+1234567890',
-              walletType: 'Mobile Money',
-              providerId: 'mpesa'
-            }
-          }
-        ];
-        
-        console.log('Using mock payment methods:', mockPaymentMethods);
-        setPaymentMethods(mockPaymentMethods);
-      } else {
-        setError(error.response?.data?.message || 'Failed to load payment methods');
-      }
+      setError(error.response?.data?.message || 'Failed to load payment methods');
+      setPaymentMethods([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSelectPaymentMethod = (paymentMethod: PaymentMethod) => {
-    console.log('Payment method selected:', {
+    console.log('🎯 Payment method selected:', {
       id: paymentMethod.id,
       type: paymentMethod.type,
       provider: paymentMethod.provider,
@@ -171,9 +94,13 @@ export function PaymentMethodSelector({
       case 'CREDIT_CARD':
       case 'DEBIT_CARD':
         // Use Stripe for card payments
-        console.log('Card payment selected, opening Stripe modal');
-        onClose();
-        onStripePayment();
+        console.log('🎯 Card payment selected, opening Stripe modal');
+        // Trigger Stripe first, then close the selector so selectedRental remains intact
+        try {
+          onStripePayment();
+        } finally {
+          onClose();
+        }
         break;
 
       case 'MOBILE_MONEY':
@@ -340,6 +267,8 @@ export function PaymentMethodSelector({
     >
       <SafeAreaView style={styles.modalOverlay}>
         <View style={styles.modalContent}>
+          {/* Handle Bar */}
+          <View style={styles.handleBar} />
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>{title}</Text>
@@ -409,24 +338,24 @@ export function PaymentMethodSelector({
             )}
           </ScrollView>
 
-          {/* Add New Payment Method Button */}
-          <TouchableOpacity style={styles.addPaymentMethodButton} onPress={onClose}>
-            <Ionicons name="add-circle-outline" size={20} color="#3B82F6" />
-            <Text style={styles.addPaymentMethodText}>Add New Payment Method</Text>
-          </TouchableOpacity>
+          {/* Footer - Add New Payment Method CTA */}
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.addPaymentCTA}
+              activeOpacity={0.85}
+              onPress={() => {
+                try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
+                onClose();
+                // Navigate to Account Settings -> Payment Methods
+                navigation.navigate('PaymentMethods');
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.addPaymentCTAText}>Add New Payment Method</Text>
+            </TouchableOpacity>
+          </View>
           
-          {/* Test Stripe Button */}
-          <TouchableOpacity 
-            style={[styles.addPaymentMethodButton, { marginTop: 8, backgroundColor: '#10B981' }]} 
-            onPress={() => {
-              console.log('Test Stripe button pressed');
-              onClose();
-              onStripePayment();
-            }}
-          >
-            <Ionicons name="card-outline" size={20} color="#FFFFFF" />
-            <Text style={[styles.addPaymentMethodText, { color: '#FFFFFF' }]}>Test Stripe Payment</Text>
-          </TouchableOpacity>
+
         </View>
       </SafeAreaView>
     </Modal>
@@ -444,6 +373,16 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     height: '85%',
+    paddingBottom: 12,
+  },
+  handleBar: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 8,
   },
   header: {
     flexDirection: 'row',
@@ -583,19 +522,27 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#FFFFFF',
   },
-  addPaymentMethodButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
+  footer: {
     paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
-  addPaymentMethodText: {
+  addPaymentCTA: {
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  addPaymentCTAText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-    color: '#3B82F6',
     marginLeft: 8,
   },
 });

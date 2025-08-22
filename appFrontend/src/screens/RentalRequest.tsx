@@ -40,10 +40,7 @@ export default function RentalRequestScreen() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [showStripePayment, setShowStripePayment] = useState(false);
   
-  // Debug effect to log Stripe modal state changes
-  useEffect(() => {
-    console.log('Stripe modal state changed:', showStripePayment);
-  }, [showStripePayment]);
+
   const [showPaymentMethodSelector, setShowPaymentMethodSelector] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [selectedRentalForPayment, setSelectedRentalForPayment] = useState<any>(null);
@@ -223,7 +220,7 @@ export default function RentalRequestScreen() {
         case 'CRYPTO':
         case 'DIGITAL_WALLET':
           // Call the rental payment endpoint with the selected payment method
-          const response = await api.post(`/api/rentals/${selectedRentalForPayment.id}/payment`, {
+          const response = await api.post(`/api/rental-requests/${selectedRentalForPayment.id}/payment`, {
             paymentMethodId: paymentMethod.id,
             paymentIntentId: null // We'll handle this differently for stored payment methods
           });
@@ -271,7 +268,7 @@ export default function RentalRequestScreen() {
       }
 
       // Call the rental payment endpoint
-      const response = await api.post(`/api/rentals/${selectedRentalForPayment.id}/payment`, {
+      const response = await api.post(`/api/rental-requests/${selectedRentalForPayment.id}/payment`, {
         paymentMethodId: 'stripe', // For Stripe payments
         paymentIntentId: paymentIntentId
       });
@@ -313,6 +310,14 @@ export default function RentalRequestScreen() {
   };
 
   const handlePayRental = (rental: any) => {
+    console.log('🎯 handlePayRental called for rental:', rental.id);
+    console.log('🎯 Rental details:', {
+      id: rental.id,
+      agreedPrice: rental.agreedPrice,
+      currency: rental.currency,
+      status: rental.status
+    });
+    
     if (!rental.agreedPrice) {
       Alert.alert('Error', 'No agreed price found for this rental request.');
       return;
@@ -320,6 +325,7 @@ export default function RentalRequestScreen() {
 
     setSelectedRentalForPayment(rental);
     setShowPaymentMethodSelector(true);
+    console.log('🎯 Payment method selector should be visible now');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
@@ -334,16 +340,7 @@ export default function RentalRequestScreen() {
         <TouchableOpacity onPress={handleRefresh} style={styles.headerIconBtn}>
           <Ionicons name="refresh" size={20} color="#6B7280" />
         </TouchableOpacity>
-        <TouchableOpacity 
-          onPress={() => {
-            console.log('Test Stripe button pressed from header');
-            setShowStripePayment(true);
-            setSelectedRentalForPayment({ id: 'test', agreedPrice: 100, currency: 'USD' });
-          }} 
-          style={styles.headerIconBtn}
-        >
-          <Ionicons name="card-outline" size={20} color="#EF4444" />
-        </TouchableOpacity>
+
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow} style={styles.filtersContainer}>
         {STATUS_TABS.map((tab) => (
@@ -514,15 +511,15 @@ export default function RentalRequestScreen() {
         <PaymentMethodSelector
           visible={showPaymentMethodSelector}
           onClose={() => {
+            // Keep selectedRentalForPayment so Stripe modal can open reliably after close
             setShowPaymentMethodSelector(false);
-            setSelectedRentalForPayment(null);
           }}
           onSelectPaymentMethod={handlePaymentMethodSelect}
           onStripePayment={() => {
-            console.log('onStripePayment callback triggered');
+            console.log('🎯 onStripePayment callback triggered');
             setShowPaymentMethodSelector(false);
             setShowStripePayment(true);
-            console.log('Stripe modal state set to true');
+            console.log('🎯 Stripe modal state set to true');
           }}
           amount={selectedRentalForPayment.agreedPrice || 0}
           currency={selectedRentalForPayment.currency || 'USD'}
@@ -531,7 +528,7 @@ export default function RentalRequestScreen() {
       )}
 
       {/* Stripe Payment Modal */}
-      {console.log('Rendering Stripe modal section:', { showStripePayment, selectedRentalForPayment: !!selectedRentalForPayment })}
+      {(() => { console.log('🎯 Rendering Stripe modal section:', { showStripePayment, selectedRentalForPayment: !!selectedRentalForPayment }); return null; })()}
       {selectedRentalForPayment && (
         <StripePayment
           visible={showStripePayment}
