@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { getAuthToken } from '../api/auth';
+import { API_URL } from '../config/env';
 
 export interface RideUpdate {
   type: string;
@@ -171,7 +172,7 @@ export class RealTimeRideService {
         }
 
         // Create socket connection
-        this.socket = io('http://192.168.0.200:3000', {
+        this.socket = io(API_URL, {
           auth: { token },
           transports: ['websocket', 'polling'],
           timeout: 20000,

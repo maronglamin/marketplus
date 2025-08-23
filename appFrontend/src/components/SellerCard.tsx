@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
+import { getImageUrl } from '../config/env';
 import { Ionicons } from '@expo/vector-icons';
 
 interface SellerCardProps {
@@ -19,7 +20,7 @@ export function SellerCard({
 }: SellerCardProps) {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
-      <Image source={{ uri: image }} style={styles.image} />
+      <Image source={{ uri: getImageUrl(image) }} style={styles.image} />
       <View style={styles.content}>
         <Text style={styles.name}>{name}</Text>
         <View style={styles.ratingContainer}>

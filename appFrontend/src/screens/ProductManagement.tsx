@@ -11,6 +11,7 @@ import {
   StatusBar,
   Platform,
 } from 'react-native'
+import { getImageUrl } from '../config/env'
 import { Camera, Image as ImageIcon, X } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -90,7 +91,7 @@ export function ProductManagement() {
             <View style={styles.imageGrid}>
               {images.map((image, index) => (
                 <View key={index} style={styles.imageContainer}>
-                  <Image source={{ uri: image }} style={styles.image} />
+                  <Image source={{ uri: getImageUrl(image) }} style={styles.image} />
                   <TouchableOpacity
                     style={styles.removeImageButton}
                     onPress={() => removeImage(index)}

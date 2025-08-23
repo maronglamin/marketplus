@@ -1,10 +1,6 @@
 import axios from 'axios';
-import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.200';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+import { API_URL } from '../config/env';
 
 export interface DeliveryOption {
   id?: string;

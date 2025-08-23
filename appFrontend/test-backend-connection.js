@@ -2,8 +2,7 @@ const axios = require('axios');
 
 // Test backend connection and user profile endpoint
 async function testBackendConnection() {
-  const LOCAL_IP = '192.168.0.200'; // Update this to your actual IP
-  const API_URL = `http://${LOCAL_IP}:3000`;
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
   
   console.log('🧪 Testing Backend Connection...\n');
   console.log('📍 API URL:', API_URL);
@@ -53,7 +52,7 @@ async function testBackendConnection() {
     const ports = [3000, 3001, 8080, 5000];
     for (const port of ports) {
       try {
-        const response = await axios.get(`http://${LOCAL_IP}:${port}/api/health`, {
+        const response = await axios.get(`${process.env.EXPO_PUBLIC_API_URL ? process.env.EXPO_PUBLIC_API_URL.replace(/:\\d+$/, ':'+port) : `http://localhost:${port}`}/api/health`, {
           timeout: 2000
         });
         console.log(`✅ Server found on port ${port}:`, response.data);

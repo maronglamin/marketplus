@@ -7,13 +7,79 @@ import { authenticate } from '../middleware/auth';
 const router = Router();
 const prisma = new PrismaClient();
 
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, async (req: any, res) => {
   try {
-    const rental = await RentalService.createRentalRequest(req.body);
+    const {
+      customerId,
+      rideServiceId,
+      driverId,
+      riderApplicationId,
+      pickupAddress,
+      pickupLatitude,
+      pickupLongitude,
+      startDate,
+      endDate,
+      notes,
+    } = req.body || {};
+
+    // Basic validation
+    if (!customerId || !rideServiceId || !pickupAddress || !startDate || !endDate) {
+      return res.status(400).json({ success: false, message: 'Missing required fields: customerId, rideServiceId, pickupAddress, startDate, endDate' });
+    }
+
+    // Ensure the authenticated user is the customer creating the rental
+    if (!req.user?.id || req.user.id !== customerId) {
+      return res.status(403).json({ success: false, message: 'Access denied - can only create rentals for yourself' });
+    }
+
+    // Validate dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid startDate or endDate' });
+    }
+    if (end.getTime() <= start.getTime()) {
+      return res.status(400).json({ success: false, message: 'endDate must be after startDate' });
+    }
+
+    // Validate existence of related entities to avoid FK failures
+    const rideService = await prisma.rideService.findUnique({ where: { id: rideServiceId } });
+    if (!rideService) {
+      return res.status(404).json({ success: false, message: 'Ride service not found' });
+    }
+
+    if (driverId) {
+      const driver = await prisma.driver.findUnique({ where: { id: driverId } });
+      if (!driver) {
+        return res.status(404).json({ success: false, message: 'Driver not found' });
+      }
+    }
+
+    if (riderApplicationId) {
+      const riderApp = await prisma.riderApplication.findUnique({ where: { id: riderApplicationId } });
+      if (!riderApp) {
+        return res.status(404).json({ success: false, message: 'Rider application not found' });
+      }
+    }
+
+    const rental = await RentalService.createRentalRequest({
+      customerId,
+      rideServiceId,
+      driverId,
+      riderApplicationId,
+      pickupAddress,
+      pickupLatitude: pickupLatitude ?? null,
+      pickupLongitude: pickupLongitude ?? null,
+      startDate,
+      endDate,
+      notes,
+    });
     return res.json({ success: true, data: rental });
   } catch (error: any) {
     console.error('Error creating rental request:', error);
-    return res.status(500).json({ success: false, message: 'Failed to create rental request', error: error?.message || String(error) });
+    // Surface Prisma validation errors cleanly
+    const message = error?.message || 'Failed to create rental request';
+    return res.status(500).json({ success: false, message });
   }
 });
 

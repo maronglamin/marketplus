@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { createOTP, verifyOTP } from '../utils/otp';
 import { generateToken } from '../utils/jwt';
-import { sendOTP, sendPIN } from '../services/sms';
+import { sendOTP } from '../services/sms';
 import twilio from 'twilio';
 import { driverService } from '../services/driverService';
 
@@ -135,23 +135,31 @@ export const initiateLogin = async (req: Request, res: Response) => {
       });
     }
 
-    // Generate and store OTP
-    console.log('Generating verification OTP');
-    const otp = await createOTP(phoneNumber, 'VERIFICATION');
-    console.log('OTP generated for:', phoneNumber);
+    // Determine if this is a first-time user (needs to set PIN)
+    const isFirstTime = !user;
 
-    // Send OTP via SMS
-    try {
-      console.log('Attempting to send OTP via SMS');
-      await sendOTP(phoneNumber, otp);
-      console.log('OTP sent successfully to:', phoneNumber);
-    } catch (smsError) {
-      console.error('Failed to send OTP:', smsError);
-      // In development, log the OTP
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[DEV] Verification OTP for ${phoneNumber}: ${otp}`);
-      }
+    // Generate codes according to the scenario
+    console.log('Generating verification OTP');
+    let pinForFirstTime: string | null = null;
+
+    if (isFirstTime) {
+      // Generate PIN first but skip sending; we'll include it in combined SMS
+      pinForFirstTime = await createOTP(phoneNumber, 'PIN_RESET', { skipSending: true });
+      console.log('Generated first-time PIN');
+
+      // Generate verification OTP and send combined (OTP + PIN) once
+      await createOTP(phoneNumber, 'VERIFICATION', {
+        sendCombined: true,
+        includeVerificationCode: pinForFirstTime,
+      });
+      console.log('Sent combined OTP + PIN for first-time user');
+    } else {
+      // Existing user - only send verification OTP
+      await createOTP(phoneNumber, 'VERIFICATION');
+      console.log('Sent verification OTP for existing user');
     }
+
+    // Note: createOTP handles sending. For first-time users, combined message is already sent above.
     
     return res.status(200).json({
       message: 'OTP sent successfully',
@@ -240,10 +248,9 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
     // Check if user needs to set PIN
     const needsPin = !user.pin || user.pin.trim() === '';
 
+    // For non-first-time flows, if user needs to set PIN (rare), send PIN only
     if (needsPin) {
-      // Generate PIN for first-time login
-      const pin = await createOTP(phoneNumber, 'PIN_RESET');
-      await sendPIN(phoneNumber, pin);
+      await createOTP(phoneNumber, 'PIN_RESET');
     }
 
     return res.status(200).json({
@@ -653,17 +660,7 @@ export const requestNewPin = async (req: Request, res: Response) => {
       data: { pin: hashedNewPin }
     });
 
-    // Send new PIN via SMS
-    try {
-      await sendPIN(phoneNumber, newPin);
-      console.log('New PIN sent successfully to:', phoneNumber);
-    } catch (smsError) {
-      console.error('Failed to send new PIN:', smsError);
-      // In development, log the PIN
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[DEV] New Login PIN for ${phoneNumber}: ${newPin}`);
-      }
-    }
+    // Note: createOTP already sends the PIN SMS
 
     return res.status(200).json({
       message: 'New PIN has been sent to your phone.',

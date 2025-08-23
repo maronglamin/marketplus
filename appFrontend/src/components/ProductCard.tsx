@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { getImageUrl } from '../config/env';
 
 interface ProductCardProps {
   name: string;
@@ -28,7 +29,7 @@ export function ProductCard({
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
       <Image
-        source={{ uri: image }}
+        source={{ uri: getImageUrl(image) }}
         style={styles.image}
         resizeMode="cover"
       />

@@ -20,11 +20,9 @@ import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
-import Constants from 'expo-constants';
-import { getImageUrl } from '../config/env';
+import { API_URL, getImageUrl } from '../config/env';
 
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.200';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+// API_URL is imported from env; removed duplicate declaration
 
 type SellerInterestDetailNavigationProp = NativeStackNavigationProp<AppStackParamList, 'SellerInterestDetail'>;
 

@@ -23,11 +23,9 @@ import { generateAndSharePDF } from '../services/pdfExportService';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { orderService, type Order } from '../services/orderService';
 import { kycService } from '../services/kycService';
-import Constants from 'expo-constants';
+import { API_URL } from '../config/env';
 
-// Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.200';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+// API_URL is provided by env; removed duplicate declaration
 
 type CustomerOrdersNavigationProp = NativeStackNavigationProp<AppStackParamList, 'CustomerOrders'>;
 
@@ -140,7 +138,8 @@ const rateLimiter = new RateLimiter();
 export function CustomerOrders() {
   const navigation = useNavigation<CustomerOrdersNavigationProp>();
   const route = useRoute();
-  const { user, token } = useAuth();
+  const { user, token, refreshUser } = useAuth();
+  const [freshUser, setFreshUser] = useState<any>(null);
   
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,6 +183,21 @@ export function CustomerOrders() {
   useEffect(() => {
     checkKycStatus();
   }, []);
+  // Fetch fresh user via JWT and prefer it for seller/buyer logic
+  useEffect(() => {
+    const fetchFreshUser = async () => {
+      try {
+        const response = await api.get('/api/users/me');
+        setFreshUser(response.data);
+        await refreshUser();
+      } catch (e) {
+        console.log('Failed to fetch fresh user:', e);
+      }
+    };
+    fetchFreshUser();
+  }, [refreshUser]);
+
+  // Also refresh on focus (attached after loadOrders is defined)
 
   useEffect(() => {
     if (!kycLoading) {
@@ -258,6 +272,21 @@ export function CustomerOrders() {
       setIsInitialLoad(false);
     }
   }, [activeTab, page]);
+
+  // Attach focus listener after loadOrders is defined
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', async () => {
+      try {
+        const response = await api.get('/api/users/me');
+        setFreshUser(response.data);
+        await refreshUser();
+        await loadOrders();
+      } catch (e) {
+        console.log('Focus refresh user/orders failed:', e);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, loadOrders, refreshUser]);
 
   const handleLoadMore = useCallback(() => {
     if (!loadingMore && hasMore && !loadMoreTimeout.current) {

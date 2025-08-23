@@ -23,10 +23,9 @@ import { productService, type Product } from '../services/productService';
 import { deliveryOptionsService, type DeliveryOption } from '../services/deliveryOptionsService';
 import { orderService } from '../services/orderService';
 import { getImageUrl } from '../config/env';
-import Constants from 'expo-constants';
+import { API_URL } from '../config/env';
 
 // Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.200';
 
 type SellerProductDetailNavigationProp = NativeStackNavigationProp<AppStackParamList, 'SellerProductDetail'>;
 type SellerProductDetailRouteProp = RouteProp<AppStackParamList, 'SellerProductDetail'>;

@@ -29,11 +29,10 @@ import { deliveryOptionsService, type DeliveryOption } from '../services/deliver
 import { WorldCurrencyPicker } from '../components/WorldCurrencyPicker';
 import { StripePayment } from '../components/StripePayment';
 import { stripeService } from '../services/stripeService';
-import Constants from 'expo-constants';
+import { API_URL } from '../config/env';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.40.48';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+// Use centralized API_URL from env
 const { height: screenHeight } = Dimensions.get('window');
 
 type OrderDetailsNavigationProp = NativeStackNavigationProp<AppStackParamList, 'OrderDetails'>;
@@ -98,6 +97,7 @@ export function OrderDetails() {
   const { orderId } = route.params as { orderId: string };
   
   const { user, token, refreshUser } = useAuth();
+  const [freshUser, setFreshUser] = useState<any>(null);
   
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -477,7 +477,8 @@ export function OrderDetails() {
   };
 
   const handleProceedToPayment = () => {
-    if (!order || !user || !selectedPaymentMethod) {
+    const currentUserId = freshUser?.id || user?.id;
+    if (!order || !currentUserId || !selectedPaymentMethod) {
       Alert.alert('Error', 'Order, user, or payment method information is missing.');
       return;
     }
@@ -568,7 +569,8 @@ export function OrderDetails() {
   useEffect(() => {
     const preCheckPaymentMethods = async () => {
       // Only check if we have all required data, user is authenticated, and order is fully loaded
-      if (user?.id && order && !loading && order.status.toLowerCase() === 'authorized' && order.sellerId !== user.id) {
+      const currentUserId = freshUser?.id || user?.id;
+      if (currentUserId && order && !loading && order.status.toLowerCase() === 'authorized' && order.sellerId !== currentUserId) {
         // Add a shorter delay to ensure API is ready and authentication is properly set
         setTimeout(async () => {
           try {
@@ -582,7 +584,7 @@ export function OrderDetails() {
     };
 
     preCheckPaymentMethods();
-  }, [user, order, loading]);
+  }, [user, freshUser, order, loading]);
 
   // Set default payment method when payment methods are loaded
   useEffect(() => {
@@ -621,6 +623,7 @@ export function OrderDetails() {
     const checkAndRefreshUserData = async () => {
       try {
         const response = await api.get('/api/users/me');
+        setFreshUser(response.data);
         
         // Check if there's a mismatch between AuthContext and API
         if (response.data && response.data.id !== user?.id) {
@@ -636,6 +639,21 @@ export function OrderDetails() {
       checkAndRefreshUserData();
     }
   }, [user, refreshUser]);
+
+  // Also refresh on focus to avoid stale user after switching accounts
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', async () => {
+      try {
+        const response = await api.get('/api/users/me');
+        setFreshUser(response.data);
+        await refreshUser();
+        await loadOrderDetails();
+      } catch (e) {
+        console.log('Focus refresh failed:', e);
+      }
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const loadOrderDetails = async () => {
     try {

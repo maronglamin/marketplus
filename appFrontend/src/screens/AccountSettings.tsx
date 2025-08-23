@@ -110,7 +110,7 @@ type RootStackParamList = {
   UserProfile: undefined
   SecuritySettings: undefined
   PaymentMethods: undefined
-  Addresses: undefined
+  Delivery: undefined
   NotificationsSettings: undefined
   PrivacySettings: undefined
   HelpSupport: undefined
@@ -138,6 +138,7 @@ export function AccountSettings() {
   const [userProfile, setUserProfile] = React.useState<UserProfileData | null>(null)
   const [loadingProfile, setLoadingProfile] = React.useState(true)
   const [refreshing, setRefreshing] = React.useState(false)
+  // Delivery addresses moved to dedicated screen
   
 
 
@@ -331,6 +332,7 @@ export function AccountSettings() {
       const timer = setTimeout(() => {
         loadUserProfile()
       }, 100)
+      // Delivery addresses moved to dedicated screen
       return () => clearTimeout(timer)
     } else {
       console.log('⚠️ No user available, clearing data...')
@@ -338,6 +340,7 @@ export function AccountSettings() {
       setFreshUserData(null)
       setUserProfile(null)
       setLoadingProfile(false)
+      // Delivery addresses moved to dedicated screen
     }
   }, [user?.id, loadUserProfile, loadFreshUserDataWithRetry])
 
@@ -509,6 +512,8 @@ export function AccountSettings() {
     })
   }
 
+  // Delivery addresses helpers moved to dedicated screen
+
   const categories: Category[] = [
     {
       id: 'profile',
@@ -568,7 +573,7 @@ export function AccountSettings() {
           id: 'addresses',
           title: 'Delivery Addresses',
           icon: <MapPin size={20} color="#DC2626" />,
-          onPress: () => navigation.navigate('Addresses'),
+          onPress: () => navigation.navigate('Delivery'),
           subtitle: 'Manage delivery locations',
           showChevron: true,
         },
@@ -770,6 +775,8 @@ export function AccountSettings() {
           </View>
           </View>
 
+        {/* Delivery Addresses moved to dedicated Delivery screen */}
+
         {/* Settings List */}
         <ScrollView 
           style={styles.content} 
@@ -868,6 +875,115 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     width: 40,
+  },
+  sectionContainer: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  sectionLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sectionLoadingText: {
+    color: '#6B7280',
+  },
+  noDeliveryOptions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  noDeliveryOptionsTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+    marginTop: 10,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  noDeliveryOptionsText: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  addressList: {
+    marginTop: 4,
+    marginBottom: 8,
+    gap: 10,
+  },
+  addressItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  selectedAddressItem: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  addressItemContent: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  addressItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  addressItemLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    marginLeft: 6,
+    marginRight: 8,
+  },
+  addressItemText: {
+    fontSize: 13,
+    color: '#374151',
+    marginBottom: 2,
+  },
+  deleteAddressButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+    marginLeft: 8,
+  },
+  addNewAddressButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+  },
+  addNewAddressButtonText: {
+    color: '#2563EB',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   profileCard: {
     flexDirection: 'row',

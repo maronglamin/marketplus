@@ -4,6 +4,7 @@ import { Home } from '../screens/Home';
 import { Settings } from '../screens/Settings';
 import { Notifications } from '../screens/Notifications';
 import { AccountSettings } from '../screens/AccountSettings';
+import Delivery from '@screens/account-settings/Delivery';
 import { AccountType } from '../screens/account-settings/AccountType';
 import Permissions from '../screens/account-settings/Permissions';
 import { ServiceTerms } from '../screens/account-settings/ServiceTerms';
@@ -69,6 +70,7 @@ export type AppStackParamList = {
   ServiceTerms: undefined;
   NotificationsSettings: undefined;
   PaymentMethods: undefined;
+  Delivery: undefined;
   ProductDetail: { productId: string };
   SellerDashboard: undefined;
   AddProduct: { productId?: string };
@@ -265,6 +267,7 @@ export function AppNavigator() {
         <Stack.Screen name="ServiceTerms" component={ServiceTerms} />
         <Stack.Screen name="NotificationsSettings" component={NotificationsSettings} />
         <Stack.Screen name="PaymentMethods" component={PaymentMethods} />
+        <Stack.Screen name="Delivery" component={Delivery} />
         <Stack.Screen name="ProductDetail" component={ProductDetail} />
         <Stack.Screen name="SellerDashboard" component={SellerDashboard} />
         <Stack.Screen name="AddProduct" component={AddProduct} />

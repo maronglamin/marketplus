@@ -1,8 +1,7 @@
 import Constants from 'expo-constants';
+import { API_URL } from '../config/env';
 
-// Get the API base URL and Google Places API key
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.200';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+// Get the Google Places API key
 const GOOGLE_PLACES_API_KEY = Constants.expoConfig?.extra?.googlePlacesApiKey;
 
 export interface LocationData {

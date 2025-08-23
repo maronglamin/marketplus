@@ -10,6 +10,7 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
+import { getImageUrl } from '../config/env';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,7 +58,7 @@ export function SellerProfile() {
         <ScrollView style={styles.content}>
           <View style={styles.sellerInfo}>
             <Image
-              source={{ uri: seller.image }}
+              source={{ uri: getImageUrl(seller.image) }}
               style={styles.sellerImage}
             />
             <Text style={styles.sellerName}>{seller.name}</Text>

@@ -11,6 +11,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { getImageUrl } from '../config/env';
 
 interface AssetImage {
   id: string;
@@ -89,7 +90,7 @@ export function ImageSlideshowModal({ visible, onClose, images, title = 'Asset I
           {images.map((image, index) => (
             <View key={image.id} style={styles.imageContainer}>
               <Image
-                source={{ uri: image.fileUrl }}
+                source={{ uri: getImageUrl(image.fileUrl) }}
                 style={styles.image}
                 resizeMode="contain"
               />

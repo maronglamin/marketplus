@@ -20,10 +20,9 @@ import type { AppStackParamList } from '../navigation/AppNavigator';
 import { productService, type CustomerProduct } from '../services/productService';
 import { categoryService, type Category } from '../services/categoryService';
 import { useAuth } from '../contexts/AuthContext';
-import Constants from 'expo-constants';
+import { API_URL } from '../config/env';
 
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.208.48';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+// Use centralized API_URL from env
 
 type NewArrivalsNavigationProp = NativeStackNavigationProp<AppStackParamList, 'NewArrivals'>;
 

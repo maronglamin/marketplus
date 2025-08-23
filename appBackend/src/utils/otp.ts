@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { sendOTP, sendPIN } from '../services/sms';
+import { sendOTP, sendPIN, sendCombinedVerification } from '../services/sms';
 import crypto from 'crypto';
 import { z } from 'zod';
 
@@ -34,7 +34,8 @@ export const generatePIN = (): string => {
 
 export const createOTP = async (
   phoneNumber: string,
-  type: 'VERIFICATION' | 'PIN_RESET'
+  type: 'VERIFICATION' | 'PIN_RESET',
+  options?: { sendCombined?: boolean; includeVerificationCode?: string; skipSending?: boolean }
 ): Promise<string> => {
   console.log(`Creating ${type} for ${phoneNumber}`);
   
@@ -93,9 +94,17 @@ export const createOTP = async (
   });
 
   try {
-    if (type === 'VERIFICATION') {
-      console.log(`Sending OTP to ${phoneNumber}`);
-      await sendOTP(phoneNumber, code);
+    if (options?.skipSending) {
+      console.log('Skipping SMS send as per options');
+    } else if (type === 'VERIFICATION') {
+      const shouldSendCombined = options?.sendCombined && options?.includeVerificationCode;
+      if (shouldSendCombined) {
+        console.log(`Sending combined OTP + verification to ${phoneNumber}`);
+        await sendCombinedVerification(phoneNumber, code, options!.includeVerificationCode!);
+      } else {
+        console.log(`Sending OTP to ${phoneNumber}`);
+        await sendOTP(phoneNumber, code);
+      }
     } else {
       console.log(`Sending PIN to ${phoneNumber}`);
       await sendPIN(phoneNumber, code);

@@ -22,6 +22,9 @@ import RideServicesModal from './RideServicesModal';
 import DriversModal from './DriversModal';
 import { rentalApi } from '../services/rentalApi';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AppStackParamList } from '../navigation/AppNavigator';
 
 interface ScheduleRideModalProps {
   isVisible: boolean;
@@ -48,6 +51,8 @@ interface ScheduleRideData {
 }
 
 export default function ScheduleRideModal({ isVisible, onClose, onSave }: ScheduleRideModalProps) {
+
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
 
   // Form state
   const [pickupLocation, setPickupLocation] = useState('');
@@ -344,6 +349,19 @@ export default function ScheduleRideModal({ isVisible, onClose, onSave }: Schedu
     return errors;
   };
 
+  const resetForm = () => {
+    setPickupLocation('');
+    setPickupType('current');
+    setPickupAddress('');
+    setStartDate(null);
+    setEndDate(null);
+    setCurrentMonth(new Date());
+    setLocationSuggestions([]);
+    setShowSuggestions(false);
+    setSelectedService(null);
+    setSelectedDriver(null);
+  };
+
   const handleSave = async () => {
     const validationErrors = validateForm();
     
@@ -389,8 +407,16 @@ export default function ScheduleRideModal({ isVisible, onClose, onSave }: Schedu
       await rentalApi.createRental(payload);
 
       await onSave(scheduleData);
-      Alert.alert('Success', 'Vehicle rental booked successfully!');
-      onClose();
+      Alert.alert('Success', 'Vehicle rental booked successfully!', [
+        {
+          text: 'OK',
+          onPress: () => {
+            resetForm();
+            onClose();
+            navigation.navigate('RentalRequest');
+          },
+        },
+      ]);
     } catch (error: any) {
       console.error('Error booking rental:', error);
       Alert.alert('Error', 'Failed to book vehicle rental. Please try again.');

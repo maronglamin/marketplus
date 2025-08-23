@@ -309,7 +309,7 @@ export function ProductDetail() {
                 <Image
                   key={index}
                   source={{ 
-                    uri: imageUrl
+                    uri: getImageUrl(imageUrl)
                   }}
                   style={styles.productImage}
                   resizeMode="cover"
@@ -318,7 +318,7 @@ export function ProductDetail() {
                     console.error('Failed image URL:', imageUrl);
                   }}
                   onLoad={() => {
-                    console.log('Image loaded successfully:', imageUrl);
+                    console.log('Image loaded successfully:', getImageUrl(imageUrl));
                   }}
                   defaultSource={{ uri: 'https://via.placeholder.com/400x300?text=Loading...' }}
                 />

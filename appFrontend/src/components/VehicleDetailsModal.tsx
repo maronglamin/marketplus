@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { rentalApi } from '../services/rentalApi';
 import { RentalDriver, RentalRideService } from '../services/rentalService';
-import { ENV_CONFIG } from '../config/env';
+import { getImageUrl } from '../config/env';
 
 interface VehicleDetailsModalProps {
   isVisible: boolean;
@@ -67,7 +67,7 @@ export default function VehicleDetailsModal({
         }))
       });
       
-      console.log('VehicleDetailsModal: ENV_CONFIG.API_BASE_URL:', ENV_CONFIG.API_BASE_URL);
+      // Base URL comes from env via getImageUrl
       
       const images = {
         interior: documents.filter(doc => doc.documentType === 'CAR_INTERIOR_PHOTO'),
@@ -166,7 +166,7 @@ export default function VehicleDetailsModal({
             setActiveIndex(index);
           }}
           renderItem={({ item }) => {
-            const imageUrl = `${ENV_CONFIG.API_BASE_URL}${item.fileUrl}`;
+            const imageUrl = getImageUrl(item.fileUrl);
             console.log('VehicleDetailsModal: Loading image:', {
               originalFileUrl: item.fileUrl,
               fullImageUrl: imageUrl,

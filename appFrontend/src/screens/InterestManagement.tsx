@@ -22,12 +22,9 @@ import { generateAndSharePDF } from '../services/pdfExportService';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { interestService, type Interest } from '../services/interestService';
 import { kycService } from '../services/kycService';
-import Constants from 'expo-constants';
-import { getImageUrl } from '../config/env';
+import { API_URL, getImageUrl } from '../config/env';
 
-// Get the API base URL
-const LOCAL_IP = Constants.expoConfig?.extra?.localIp || '192.168.0.200';
-const API_URL = process.env.EXPO_PUBLIC_API_URL || `http://${LOCAL_IP}:3000`;
+// API_URL is imported from env; remove duplicate declaration
 
 type InterestManagementNavigationProp = NativeStackNavigationProp<AppStackParamList, 'InterestManagement'>;
 

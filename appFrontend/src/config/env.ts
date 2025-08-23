@@ -3,11 +3,11 @@ import Constants from 'expo-constants';
 // Centralized environment configuration
 export const ENV_CONFIG = {
   // API Configuration
-  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || `http://192.168.0.200:3000`,
-  API_TIMEOUT: 10000,
+  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000',
+  API_TIMEOUT: 30000,
   
-  // Local IP for development
-  LOCAL_IP: Constants.expoConfig?.extra?.localIp || '192.168.0.200',
+  // Local IP for development (used for diagnostics only)
+  LOCAL_IP: Constants.expoConfig?.extra?.localIp || 'localhost',
   
   // App Configuration
   APP_NAME: 'SNAP',
@@ -19,9 +19,7 @@ export const ENV_CONFIG = {
 };
 
 // Helper function to get API URL
-export const getApiUrl = (): string => {
-  return ENV_CONFIG.API_BASE_URL;
-};
+export const getApiUrl = (): string => ENV_CONFIG.API_BASE_URL;
 
 // Helper function to get image URL
 export const getImageUrl = (imagePath: string): string => {

@@ -13,11 +13,12 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
+import { getAuthToken } from '../api/auth';
 import { rentalApi } from '../services/rentalApi';
 
 type RentalChatNavigationProp = NativeStackNavigationProp<AppStackParamList, 'RentalChat'>;
@@ -28,13 +29,14 @@ interface Message {
   senderId: string;
   senderName: string;
   createdAt: string;
+  senderType?: 'CUSTOMER' | 'DRIVER' | string;
 }
 
 export default function RentalChatScreen() {
   const navigation = useNavigation<RentalChatNavigationProp>();
   const route = useRoute();
   const { rentalId } = route.params as { rentalId: string };
-  const { user } = useAuth();
+  const { user, validateAndRefreshUser } = useAuth();
   
   const [rental, setRental] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -42,10 +44,44 @@ export default function RentalChatScreen() {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  const decodeJwtUserId = (token: string | null): string | null => {
+    try {
+      if (!token) return null;
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const parsed = JSON.parse(jsonPayload);
+      return parsed.userId || parsed.sub || null;
+    } catch (_) {
+      return null;
+    }
+  };
 
   useEffect(() => {
     loadRentalDetails();
   }, [rentalId]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // Ensure user context reflects the current JWT when screen is focused
+      (async () => {
+        try {
+          await validateAndRefreshUser();
+          loadRentalDetails();
+        } catch {
+          // ignore
+        }
+      })();
+      return () => {};
+    }, [rentalId, validateAndRefreshUser])
+  );
 
   const loadRentalDetails = async () => {
     try {
@@ -53,11 +89,17 @@ export default function RentalChatScreen() {
       setError(null);
       
       console.log('RentalChat: Loading rental details for ID:', rentalId);
-      console.log('RentalChat: User:', user?.id);
-      
-      if (!user?.id) {
+
+      // Ensure current userId is derived from latest auth state or JWT
+      let effectiveUserId = user?.id || null;
+      if (!effectiveUserId) {
+        const token = await getAuthToken();
+        effectiveUserId = decodeJwtUserId(token);
+      }
+      if (!effectiveUserId) {
         throw new Error('User not authenticated');
       }
+      setCurrentUserId(effectiveUserId);
       
       // Load rental details and messages in parallel
       const [rentalData, messagesData] = await Promise.all([
@@ -69,7 +111,9 @@ export default function RentalChatScreen() {
       console.log('RentalChat: Messages loaded:', messagesData?.length || 0);
       
       setRental(rentalData);
-      setMessages(messagesData || []);
+      // Filter messages to only those sent by current user as CUSTOMER
+      const filtered = (messagesData || []).filter((m: any) => m?.senderId === effectiveUserId && (m?.senderType === 'CUSTOMER' || m?.senderType === 'customer'));
+      setMessages(filtered);
     } catch (e: any) {
       console.error('RentalChat: Failed to load rental details', e);
       setError(e.message || 'Failed to load rental details');
@@ -92,7 +136,10 @@ export default function RentalChatScreen() {
       console.log('RentalChat: Message sent successfully:', sentMessage?.id);
       
       setMessage('');
-      setMessages(prev => [...prev, sentMessage]);
+      // Only append if the message matches current user and senderType CUSTOMER
+      if (sentMessage?.senderId === currentUserId && (sentMessage?.senderType === 'CUSTOMER' || sentMessage?.senderType === 'customer')) {
+        setMessages(prev => [...prev, sentMessage]);
+      }
     } catch (error: any) {
       console.error('RentalChat: Error sending message:', error);
       Alert.alert('Error', error.message || 'Failed to send message. Please try again.');

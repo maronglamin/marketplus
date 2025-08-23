@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 // Test configuration
-const API_BASE_URL = 'http://192.168.0.200:3000/api';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000/api';
 const TEST_TOKEN = 'your-test-jwt-token-here'; // Replace with actual token
 
 // Test functions
