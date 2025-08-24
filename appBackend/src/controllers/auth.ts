@@ -3,7 +3,6 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { createOTP, verifyOTP } from '../utils/otp';
 import { generateToken } from '../utils/jwt';
-import { sendOTP } from '../services/sms';
 import twilio from 'twilio';
 import { driverService } from '../services/driverService';
 
@@ -143,19 +142,57 @@ export const initiateLogin = async (req: Request, res: Response) => {
     let pinForFirstTime: string | null = null;
 
     if (isFirstTime) {
-      // Generate PIN first but skip sending; we'll include it in combined SMS
-      pinForFirstTime = await createOTP(phoneNumber, 'PIN_RESET', { skipSending: true });
-      console.log('Generated first-time PIN');
+      // For first-time users, we need to create the user and device first
+      const tempPin = await createOTP(phoneNumber, 'PIN_RESET', { skipSending: true, context: 'initiateLogin:first_time_pin' });
+      const hashedPin = await bcrypt.hash(tempPin, 10);
+
+      // Create new user with unverified device
+      const newUser = await prisma.user.create({
+        data: {
+          phoneNumber,
+          firstName: '', // Will be updated during registration
+          lastName: '',  // Will be updated during registration
+          pin: hashedPin,
+          devices: {
+            create: {
+              deviceId: deviceInfo.deviceId,
+              deviceName: deviceInfo.deviceName,
+              deviceType: deviceInfo.deviceType,
+              brand: deviceInfo.brand,
+              modelName: deviceInfo.modelName,
+              osVersion: deviceInfo.osVersion,
+              phoneNumber,
+              isVerified: false,
+            },
+          },
+        },
+        include: { devices: true }
+      });
+
+      const device = newUser.devices[0];
+      pinForFirstTime = tempPin;
 
       // Generate verification OTP and send combined (OTP + PIN) once
       await createOTP(phoneNumber, 'VERIFICATION', {
         sendCombined: true,
         includeVerificationCode: pinForFirstTime,
+        userId: newUser.id,
+        deviceId: device.id,
+        deviceInfo,
+        context: 'initiateLogin:first_time_combined',
       });
       console.log('Sent combined OTP + PIN for first-time user');
     } else {
-      // Existing user - only send verification OTP
-      await createOTP(phoneNumber, 'VERIFICATION');
+      // Existing user - get or create device to get the database ID
+      const device = await upsertDevice(user!.id, { ...deviceInfo, phoneNumber });
+      
+      // Only send verification OTP
+      await createOTP(phoneNumber, 'VERIFICATION', { 
+        userId: user!.id, 
+        deviceId: device.id, 
+        deviceInfo, 
+        context: 'initiateLogin:existing_user' 
+      });
       console.log('Sent verification OTP for existing user');
     }
 
@@ -250,7 +287,12 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
 
     // For non-first-time flows, if user needs to set PIN (rare), send PIN only
     if (needsPin) {
-      await createOTP(phoneNumber, 'PIN_RESET');
+      await createOTP(phoneNumber, 'PIN_RESET', { 
+        userId: user.id,
+        deviceId: device.id, 
+        deviceInfo, 
+        context: 'verifyOTPAndRegister:needs_pin' 
+      });
     }
 
     return res.status(200).json({
@@ -551,21 +593,9 @@ export const resendOTP = async (req: Request, res: Response) => {
 
     console.log('Resending OTP to:', phoneNumber);
 
-    // Generate and store new OTP
-    const otp = await createOTP(phoneNumber, 'VERIFICATION');
-    console.log('New OTP generated for:', phoneNumber);
-
-    // Send OTP via SMS
-    try {
-      await sendOTP(phoneNumber, otp);
-      console.log('OTP sent successfully to:', phoneNumber);
-    } catch (smsError) {
-      console.error('Failed to send OTP:', smsError);
-      // In development, log the OTP
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[DEV] Verification OTP for ${phoneNumber}: ${otp}`);
-      }
-    }
+    // Generate and send OTP (sending handled inside createOTP and logged)
+    await createOTP(phoneNumber, 'VERIFICATION', { context: 'resendOTP' });
+    console.log('OTP generated and sent for:', phoneNumber);
 
     return res.status(200).json({
       message: 'OTP sent successfully'
@@ -651,7 +681,13 @@ export const requestNewPin = async (req: Request, res: Response) => {
     }
 
     // Generate new PIN
-    const newPin = await createOTP(phoneNumber, 'PIN_RESET');
+    const device = user.devices[0]; // We know there's at least one device from the query above
+    const newPin = await createOTP(phoneNumber, 'PIN_RESET', { 
+      userId: user.id,
+      deviceId: device.id, 
+      deviceInfo, 
+      context: 'requestNewPin' 
+    });
     const hashedNewPin = await bcrypt.hash(newPin, 10);
     
     // Update user's PIN

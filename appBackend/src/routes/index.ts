@@ -10,6 +10,7 @@ import driverRoutes from './driver';
 import rideServiceRoutes from './rideService';
 import rideHistoryRoutes from './rideHistory';
 import rideRequestRoutes from './rideRequests';
+import twilioRoutes from './twilio';
 import paymentMethodsRoutes from './paymentMethods';
 import rentalRoutes from './rental';
 
@@ -28,5 +29,6 @@ router.use('/ride-history', rideHistoryRoutes);
 router.use('/ride-requests', rideRequestRoutes);
 router.use('/payment-methods', paymentMethodsRoutes);
 router.use('/rental-requests', rentalRoutes);
+router.use('/twilio', twilioRoutes);
 
 export default router; 

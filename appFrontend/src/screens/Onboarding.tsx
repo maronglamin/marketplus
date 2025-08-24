@@ -189,6 +189,12 @@ export function Onboarding() {
       </View>
 
       <View style={styles.footer}>
+        <Text style={styles.termsText}>
+          By continuing, you agree to our{' '}
+          <Text style={styles.linkText}>Terms of Use</Text>
+          {' '}and{' '}
+          <Text style={styles.linkText}>Privacy Policy</Text>
+        </Text>
         <TouchableOpacity
           style={styles.button}
           onPress={() => navigation.navigate('Auth')}
@@ -340,6 +346,17 @@ const styles = StyleSheet.create({
   footer: {
     marginTop: 'auto',
     paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+  },
+  termsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  linkText: {
+    color: '#2563EB',
+    fontWeight: 'bold',
   },
   button: {
     backgroundColor: '#2563EB',

@@ -35,7 +35,15 @@ export const generatePIN = (): string => {
 export const createOTP = async (
   phoneNumber: string,
   type: 'VERIFICATION' | 'PIN_RESET',
-  options?: { sendCombined?: boolean; includeVerificationCode?: string; skipSending?: boolean }
+  options?: {
+    sendCombined?: boolean;
+    includeVerificationCode?: string;
+    skipSending?: boolean;
+    userId?: string;
+    deviceId?: string;
+    deviceInfo?: any;
+    context?: string;
+  }
 ): Promise<string> => {
   console.log(`Creating ${type} for ${phoneNumber}`);
   
@@ -100,14 +108,29 @@ export const createOTP = async (
       const shouldSendCombined = options?.sendCombined && options?.includeVerificationCode;
       if (shouldSendCombined) {
         console.log(`Sending combined OTP + verification to ${phoneNumber}`);
-        await sendCombinedVerification(phoneNumber, code, options!.includeVerificationCode!);
+        await sendCombinedVerification(phoneNumber, code, options!.includeVerificationCode!, {
+          userId: options?.userId,
+          deviceId: options?.deviceId,
+          deviceInfo: options?.deviceInfo,
+          context: options?.context,
+        });
       } else {
         console.log(`Sending OTP to ${phoneNumber}`);
-        await sendOTP(phoneNumber, code);
+        await sendOTP(phoneNumber, code, {
+          userId: options?.userId,
+          deviceId: options?.deviceId,
+          deviceInfo: options?.deviceInfo,
+          context: options?.context,
+        });
       }
     } else {
       console.log(`Sending PIN to ${phoneNumber}`);
-      await sendPIN(phoneNumber, code);
+      await sendPIN(phoneNumber, code, {
+        userId: options?.userId,
+        deviceId: options?.deviceId,
+        deviceInfo: options?.deviceInfo,
+        context: options?.context,
+      });
     }
   } catch (error) {
     console.error('Error sending SMS:', error);

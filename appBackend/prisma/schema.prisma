@@ -90,11 +90,12 @@ model User {
   orders_orders_userIdToUser   orders[]               @relation("orders_userIdToUser")
   productOrderInterests        ProductOrderInterest[]
   productViews                 ProductView[]
+  rentalMessages               RentalMessage[]
+  customerRentalRequests       RentalRequest[]
   customerRideRequests         RideRequest[]          @relation("CustomerRideRequests")
   riderApplications            RiderApplication[]
   customerRides                Ride[]                 @relation("CustomerRides")
-  customerRentalRequests       RentalRequest[]
-  rentalMessages               RentalMessage[]
+  twilioNotifications          TwilioNotification[]
 
   @@index([phoneNumber])
   @@index([createdAt])
@@ -147,22 +148,23 @@ model PaymentGatewayServiceProvider {
 }
 
 model Device {
-  id           String    @id @default(uuid())
-  deviceId     String
-  deviceName   String
-  deviceType   String
-  isVerified   Boolean   @default(false)
-  lastLoginAt  DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  userId       String
-  brand        String
-  modelName    String
-  osVersion    String
-  phoneNumber  String
-  lastLogoutAt DateTime?
-  user         User      @relation(fields: [userId], references: [id])
-  sessions     Session[]
+  id                  String               @id @default(uuid())
+  deviceId            String
+  deviceName          String
+  deviceType          String
+  isVerified          Boolean              @default(false)
+  lastLoginAt         DateTime             @default(now())
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  userId              String
+  brand               String
+  modelName           String
+  osVersion           String
+  phoneNumber         String
+  lastLogoutAt        DateTime?
+  user                User                 @relation(fields: [userId], references: [id])
+  sessions            Session[]
+  twilioNotifications TwilioNotification[]
 
   @@unique([userId, deviceId])
   @@index([userId])
@@ -606,8 +608,8 @@ model ExternalTransaction {
   customer             User              @relation("CustomerTransactions", fields: [customerId], references: [id])
   order                orders?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   paymentMethod        PaymentMethod?    @relation(fields: [paymentMethodId], references: [id])
-  rideRequest          RideRequest?      @relation(fields: [rideRequestId], references: [id], onDelete: Cascade)
   rentalRequest        RentalRequest?    @relation(fields: [rentalRequestId], references: [id], onDelete: Cascade)
+  rideRequest          RideRequest?      @relation(fields: [rideRequestId], references: [id], onDelete: Cascade)
   seller               User              @relation("SellerTransactions", fields: [sellerId], references: [id])
 
   @@index([orderId])
@@ -676,9 +678,9 @@ model RiderApplication {
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
   driver           Driver?
+  rentalRequests   RentalRequest[]
   user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents        RiderDocument[]
-  rentalRequests   RentalRequest[]
 
   @@index([userId])
   @@index([vehicleType])
@@ -707,24 +709,14 @@ model RiderDocument {
   @@map("rider_documents")
 }
 
-enum RentalRequestStatus {
-  PENDING_QUOTE
-  QUOTED
-  ACCEPTED
-  PAID
-  REJECTED
-  CANCELLED
-  EXPIRED
-}
-
 model RentalRequest {
-  id                 String               @id @default(uuid())
-  requestId          String               @unique
+  id                 String                @id @default(uuid())
+  requestId          String                @unique
   customerId         String
   driverId           String?
   riderApplicationId String?
   rideServiceId      String
-  status             RentalRequestStatus  @default(PENDING_QUOTE)
+  status             RentalRequestStatus   @default(PENDING_QUOTE)
   pickupAddress      String
   pickupLocation     Json?
   pickupLatitude     Float?
@@ -732,21 +724,19 @@ model RentalRequest {
   startDate          DateTime
   endDate            DateTime
   days               Int
-  proposedPrice      Decimal?             @db.Decimal(10, 2)
-  agreedPrice        Decimal?             @db.Decimal(10, 2)
-  currency           String               @default("GMD")
+  proposedPrice      Decimal?              @db.Decimal(10, 2)
+  agreedPrice        Decimal?              @db.Decimal(10, 2)
+  currency           String                @default("GMD")
   notes              String?
-  chatMeta           Json?                // Store chat metadata like last message, unread count, etc.
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-
-  // Relations
-  customer           User                 @relation(fields: [customerId], references: [id])
-  driver             Driver?              @relation(fields: [driverId], references: [id])
-  rideService        RideService          @relation(fields: [rideServiceId], references: [id])
-  riderApplication   RiderApplication?    @relation(fields: [riderApplicationId], references: [id])
-  messages           RentalMessage[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  chatMeta           Json?
   transactions       ExternalTransaction[]
+  messages           RentalMessage[]
+  customer           User                  @relation(fields: [customerId], references: [id])
+  driver             Driver?               @relation(fields: [driverId], references: [id])
+  rideService        RideService           @relation(fields: [rideServiceId], references: [id])
+  riderApplication   RiderApplication?     @relation(fields: [riderApplicationId], references: [id])
 
   @@index([customerId])
   @@index([driverId])
@@ -756,28 +746,21 @@ model RentalRequest {
 }
 
 model RentalMessage {
-  id            String        @id @default(uuid())
-  rentalId      String
-  senderId      String
-  senderType    SenderType    // CUSTOMER or DRIVER
-  content       String
-  isRead        Boolean       @default(false)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  // Relations
-  rental        RentalRequest @relation(fields: [rentalId], references: [id], onDelete: Cascade)
-  sender        User          @relation(fields: [senderId], references: [id])
+  id         String        @id @default(uuid())
+  rentalId   String
+  senderId   String
+  senderType SenderType
+  content    String
+  isRead     Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  rental     RentalRequest @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  sender     User          @relation(fields: [senderId], references: [id])
 
   @@index([rentalId])
   @@index([senderId])
   @@index([createdAt])
   @@map("rental_messages")
-}
-
-enum SenderType {
-  CUSTOMER
-  DRIVER
 }
 
 model Driver {
@@ -798,19 +781,19 @@ model Driver {
   preferences        Json?
   isVerified         Boolean          @default(false)
   isActive           Boolean          @default(true)
-  isRentalType       Boolean          @default(false)
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   rideServiceId      String?
   updatedBy          String?
+  isRentalType       Boolean          @default(false)
   earnings           DriverEarning[]
   locationHistory    DriverLocation[]
   rideService        RideService?     @relation(fields: [rideServiceId], references: [id])
   riderApplication   RiderApplication @relation(fields: [riderApplicationId], references: [id])
   user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rentalRequests     RentalRequest[]
   rideRequests       RideRequest[]
   rides              Ride[]
-  rentalRequests     RentalRequest[]
 
   @@index([userId])
   @@index([driverId])
@@ -998,7 +981,6 @@ model RideService {
   vehicleType              RiderVehicleType
   isActive                 Boolean          @default(true)
   isDefault                Boolean          @default(false)
-  isRentalType             Boolean          @default(false)
   distanceUnit             DistanceUnit     @default(KILOMETER)
   baseDistance             Float            @default(1.0)
   maxDistance              Float?
@@ -1025,10 +1007,11 @@ model RideService {
   updatedAt                DateTime         @updatedAt
   createdBy                String?
   updatedBy                String?
+  isRentalType             Boolean          @default(false)
   drivers                  Driver[]
+  rentalRequests           RentalRequest[]
   rideRequests             RideRequest[]
   rides                    Ride[]
-  rentalRequests           RentalRequest[]
 
   @@index([serviceId])
   @@index([vehicleType])
@@ -1082,6 +1065,53 @@ model orders {
   @@index([sellerId])
   @@index([status])
   @@index([userId])
+}
+
+model TwilioNotification {
+  id                  String            @id @default(uuid())
+  userId              String?
+  deviceId            String?
+  to                  String
+  from                String?
+  messagingServiceSid String?
+  messageBody         String
+  messageType         TwilioMessageType @default(OTHER)
+  twilioSid           String?
+  twilioStatus        String?
+  segments            Int?
+  price               Decimal?          @db.Decimal(10, 4)
+  priceUnit           String?
+  currencyCode        String?
+  errorCode           String?
+  errorMessage        String?
+  environment         String?
+  apiRequest          Json?
+  apiResponse         Json?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  device              Device?           @relation(fields: [deviceId], references: [id])
+  user                User?             @relation(fields: [userId], references: [id])
+
+  @@index([to])
+  @@index([twilioSid])
+  @@index([messageType])
+  @@index([createdAt])
+  @@map("twilio_notifications")
+}
+
+enum RentalRequestStatus {
+  PENDING_QUOTE
+  QUOTED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  EXPIRED
+  PAID
+}
+
+enum SenderType {
+  CUSTOMER
+  DRIVER
 }
 
 enum AdminRole {
@@ -1341,4 +1371,11 @@ enum AppService {
   ECOMMERCE
   RIDES
   RENTAL
+}
+
+enum TwilioMessageType {
+  OTP
+  PIN
+  COMBINED
+  OTHER
 }
