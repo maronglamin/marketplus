@@ -8,6 +8,7 @@ import {
   StatusBar,
   Image,
   Animated,
+  Dimensions,
 } from 'react-native'
 import { ShoppingBag, ShoppingCart, Heart, CreditCard, Car } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
@@ -23,6 +24,14 @@ export function Onboarding() {
   const [poweredByError, setPoweredByError] = useState(false)
   const [displayText, setDisplayText] = useState('')
   const fadeAnim = useRef(new Animated.Value(0)).current
+  const { width } = Dimensions.get('window')
+  
+  const features = [
+    { title: 'Browse Products', description: 'Discover quality items nearby', Icon: ShoppingCart },
+    { title: 'Reserve Products', description: 'Show interest and reserve easily', Icon: Heart },
+    { title: 'Flexible Payments', description: 'Wallet or card — you choose', Icon: CreditCard },
+    { title: 'Ride Services', description: 'Quick rides and rentals available', Icon: Car },
+  ]
 
   useEffect(() => {
     // Type "SNAP" character by character
@@ -53,6 +62,8 @@ export function Onboarding() {
       clearInterval(typeInterval)
     }
   }, [fadeAnim])
+
+  // No extra animations for a cleaner, more professional look
 
   if (!showContent) {
     return (
@@ -85,23 +96,7 @@ export function Onboarding() {
         </View>
         
         <View style={styles.poweredByContainer}>
-          <View style={styles.poweredByWrapper}>
-            {poweredByError ? (
-              <View style={styles.poweredByFallback}>
-                <Text style={styles.poweredByFallbackText}>CN</Text>
-              </View>
-            ) : (
-              <Image
-                source={require('../../assets/poweredby.png')}
-                style={styles.poweredByImage}
-                resizeMode="cover"
-                onError={(error) => {
-                  console.error('Failed to load powered by image:', error.nativeEvent.error);
-                  setPoweredByError(true);
-                }}
-              />
-            )}
-          </View>
+
           <Text style={styles.poweredByLabel}>Powered by Cloud Nexus</Text>
         </View>
       </View>
@@ -109,12 +104,14 @@ export function Onboarding() {
   }
 
   return (
-    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}> 
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
         translucent
       />
+      {/* Simplified background for a professional, minimal look */}
+
       <View style={styles.content}>
         <View style={styles.logoContainer}>
           {imageError ? (
@@ -133,58 +130,20 @@ export function Onboarding() {
         </View>
 
         <Text style={styles.mainTitle}>SNAP</Text>
-        <Text style={styles.subtitle}>
-          Get started today and find products you love.
-        </Text>
+        <Text style={styles.subtitle}>Commerce and mobility — unified for speed and trust.</Text>
 
-        <View style={styles.features}>
-          <View style={styles.featureItem}>
-            <View style={styles.featureIcon}>
-              <ShoppingCart size={24} color="#2563EB" />
+        <View style={styles.featureChips}>
+          {features.map((f, idx) => (
+            <View key={idx} style={styles.chip}>
+              <View style={styles.chipIconBox}>
+                <f.Icon size={18} color="#2563EB" />
+              </View>
+              <View style={styles.chipTexts}>
+                <Text style={styles.chipTitle}>{f.title}</Text>
+                <Text style={styles.chipDesc}>{f.description}</Text>
+              </View>
             </View>
-            <View style={styles.featureText}>
-              <Text style={styles.featureTitle}>Browse Products</Text>
-              <Text style={styles.featureDescription}>
-                Find products from local businesses
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.featureItem}>
-            <View style={styles.featureIcon}>
-              <Heart size={24} color="#2563EB" />
-            </View>
-            <View style={styles.featureText}>
-              <Text style={styles.featureTitle}>Reserve Products</Text>
-              <Text style={styles.featureDescription}>
-                Show interest and reserve items
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.featureItem}>
-            <View style={styles.featureIcon}>
-              <CreditCard size={24} color="#2563EB" />
-            </View>
-            <View style={styles.featureText}>
-              <Text style={styles.featureTitle}>Flexible Payments</Text>
-              <Text style={styles.featureDescription}>
-                Pay with wallet, card, or cash
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.featureItem}>
-            <View style={styles.featureIcon}>
-              <Car size={24} color="#2563EB" />
-            </View>
-            <View style={styles.featureText}>
-              <Text style={styles.featureTitle}>SNAP Riders</Text>
-              <Text style={styles.featureDescription}>
-                Get rides and delivery services
-              </Text>
-            </View>
-          </View>
+          ))}
         </View>
       </View>
 
@@ -198,6 +157,7 @@ export function Onboarding() {
         <TouchableOpacity
           style={styles.button}
           onPress={() => navigation.navigate('Auth')}
+          activeOpacity={0.9}
         >
           <Text style={styles.buttonText}>Get Started</Text>
         </TouchableOpacity>
@@ -279,6 +239,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  
   logoContainer: {
     marginBottom: 32,
     alignItems: 'center',
@@ -311,37 +272,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
-  features: {
+  featureChips: {
     width: '100%',
-    gap: 24,
+    marginTop: 12,
+    rowGap: 10,
   },
-  featureItem: {
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
-  featureIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#EFF6FF',
+  chipIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  featureText: {
-    marginLeft: 16,
+  chipTexts: {
+    marginLeft: 12,
     flex: 1,
   },
-  featureTitle: {
-    fontSize: 16,
-    fontWeight: '500',
+  chipTitle: {
+    fontSize: 15,
+    fontWeight: '600',
     color: '#111827',
-    marginBottom: 4,
   },
-  featureDescription: {
-    fontSize: 14,
+  chipDesc: {
+    fontSize: 13,
     color: '#6B7280',
+    marginTop: 2,
   },
   footer: {
     marginTop: 'auto',
@@ -361,7 +329,7 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#2563EB',
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 24,
     alignItems: 'center',
   },
   buttonText: {

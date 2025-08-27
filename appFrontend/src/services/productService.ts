@@ -153,6 +153,15 @@ export const productService = {
     return response.data;
   },
 
+  async getPopularProducts(page: number = 1, limit: number = 30): Promise<CustomerProductListResponse> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString()
+    });
+    const response = await api.get(`/api/products/popular?${params.toString()}`);
+    return response.data;
+  },
+
   async getProductById(productId: string, allowOwn: boolean = false): Promise<ProductDetail> {
     const params = new URLSearchParams();
     if (allowOwn) {

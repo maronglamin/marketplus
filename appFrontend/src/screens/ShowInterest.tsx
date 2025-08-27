@@ -717,8 +717,11 @@ export function ShowInterest() {
           <View style={styles.productCard}>
             <Image
               source={{ 
-                uri: product.images[0] || 'https://via.placeholder.com/400x300?text=No+Image'
+                uri: product.images && product.images[0]
+                  ? getImageUrl(product.images[0])
+                  : 'https://via.placeholder.com/400x300?text=No+Image'
               }}
+              defaultSource={{ uri: 'https://via.placeholder.com/400x300?text=Loading' }}
               style={styles.productImage}
             />
             <View style={styles.productInfo}>
@@ -953,9 +956,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   productInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 4,
   },
   productName: {
     fontSize: 18,

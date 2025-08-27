@@ -455,6 +455,117 @@ router.get('/featured', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Get popular products for customers ordered by total orders (highest first)
+router.get('/popular', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 30;
+    const skip = (page - 1) * limit;
+
+    logger.info('Fetching popular products (by orders):', {
+      userId: req.user.id,
+      page,
+      limit
+    });
+
+    // Base visibility filter for customer
+    const whereClause: any = {
+      sellerId: {
+        not: req.user.id // Exclude current user's products
+      },
+      status: 'ACTIVE',
+      deletedAt: null
+    };
+
+    // Get total count of visible products (for pagination metadata)
+    const total = await prisma.product.count({ where: whereClause });
+
+    // Fetch products including order items count and order by that count desc
+    const products = await prisma.product.findMany({
+      where: whereClause,
+      include: {
+        images: {
+          where: { isPrimary: true },
+          take: 1
+        },
+        seller: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phoneNumber: true,
+            sellerKyc: {
+              select: {
+                businessName: true,
+                status: true
+              }
+            }
+          }
+        },
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true
+          }
+        }
+      },
+      orderBy: [
+        // Order by number of order items (highest first), then newest products
+        { orderItems: { _count: 'desc' } as any },
+        { createdAt: 'desc' }
+      ],
+      skip,
+      take: limit
+    });
+
+    // Transform data
+    const transformedProducts = products
+      .filter(product => product.seller)
+      .map(product => ({
+        id: product.id,
+        name: product.title,
+        price: parseFloat(product.price.toString()),
+        currencyCode: product.currencyCode,
+        image: product.images[0]?.imageUrl || null,
+        seller: product.seller.sellerKyc?.businessName || `${product.seller.firstName} ${product.seller.lastName}`,
+        stock: product.quantity,
+        views: product.views,
+        rating: product.rating ? parseFloat(product.rating.toString()) : null,
+        ratingCount: product.ratingCount,
+        condition: product.condition,
+        category: product.category?.name || 'Uncategorized',
+        description: product.description,
+        createdAt: product.createdAt,
+        isFeatured: product.isFeatured
+      }));
+
+    logger.info('Popular products fetched successfully:', {
+      userId: req.user.id,
+      count: transformedProducts.length,
+      total
+    });
+
+    res.json({
+      products: transformedProducts,
+      total,
+      page,
+      limit,
+      hasMore: skip + transformedProducts.length < total
+    });
+  } catch (error) {
+    logger.error('Error fetching popular products:', error);
+    res.status(500).json({
+      error: 'Failed to fetch popular products',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Test route
 router.get('/test', (req, res) => {
   logger.info('Products test route hit');

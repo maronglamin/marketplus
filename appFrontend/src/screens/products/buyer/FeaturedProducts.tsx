@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../../../navigation/AppNavigator';
 import { productService, type CustomerProduct } from '../../../services/productService';
 import { interestService } from '../../../services/interestService';
+import { categoryService, type Category } from '../../../services/categoryService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { API_URL } from '../../../config/env';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -54,6 +55,11 @@ export function FeaturedProducts() {
   const scrollViewRef = useRef<ScrollView>(null);
   const fabWidth = useRef(new Animated.Value(140)).current;
   
+  // Category filter state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  
   // Enhanced request management
   const [isRequestInProgress, setIsRequestInProgress] = useState(false);
   const [lastLoadMoreTime, setLastLoadMoreTime] = useState(0);
@@ -64,10 +70,6 @@ export function FeaturedProducts() {
   const requestQueueRef = useRef<Array<() => void>>([]);
   const isProcessingQueueRef = useRef(false);
   
-  // Search modal state
-  const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
-  const [searchText, setSearchText] = useState('');
-  const searchInputRef = useRef<TextInput>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Decode JWT token to get user info
@@ -82,6 +84,23 @@ export function FeaturedProducts() {
     } catch (error) {
       console.error('Error decoding token:', error);
       return null;
+    }
+  };
+
+  // Load categories from database
+  const loadCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      console.log('Loading categories...');
+      const categoriesData = await categoryService.getCategories();
+      console.log('Categories loaded:', categoriesData);
+      console.log('Categories count:', categoriesData.length);
+      setCategories(categoriesData);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      setCategories([]);
+    } finally {
+      setLoadingCategories(false);
     }
   };
 
@@ -245,6 +264,14 @@ export function FeaturedProducts() {
         total: products.total 
       });
       
+      // Log some product categories for debugging
+      const uniqueCategories = [...new Set(products.products.map((p: CustomerProduct) => p.category))];
+      console.log('Unique product categories:', uniqueCategories);
+      console.log('Sample products with categories:', products.products.slice(0, 3).map((p: CustomerProduct) => ({
+        name: p.name,
+        category: p.category
+      })));
+      
       // Reset error count on successful request
       setConsecutiveErrors(0);
       setRetryCount(0);
@@ -263,13 +290,33 @@ export function FeaturedProducts() {
       if (isLoadMore) {
         const newProducts = [...featuredProducts, ...shuffleProducts(products.products)];
         setFeaturedProducts(newProducts);
-        setFilteredProducts(newProducts);
+        // Apply current category filter to new products
+        if (selectedCategory) {
+          const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
+          const categoryName = selectedCategoryData?.name;
+          const filtered = newProducts.filter(product => 
+            product.category?.toLowerCase() === categoryName?.toLowerCase()
+          );
+          setFilteredProducts(filtered);
+        } else {
+          setFilteredProducts(newProducts);
+        }
         setPage(currentPage);
         setHasMore(products.hasMore);
       } else {
         const shuffledProducts = shuffleProducts(products.products);
         setFeaturedProducts(shuffledProducts);
-        setFilteredProducts(shuffledProducts);
+        // Apply current category filter to new products
+        if (selectedCategory) {
+          const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
+          const categoryName = selectedCategoryData?.name;
+          const filtered = shuffledProducts.filter(product => 
+            product.category?.toLowerCase() === categoryName?.toLowerCase()
+          );
+          setFilteredProducts(filtered);
+        } else {
+          setFilteredProducts(shuffledProducts);
+        }
         setPage(1);
         setHasMore(products.hasMore);
       }
@@ -411,38 +458,35 @@ export function FeaturedProducts() {
     loadFeaturedProducts();
   }, []);
 
-  // Search modal functions
-  const openSearchModal = () => {
-    setIsSearchModalVisible(true);
-    // Focus the input after modal is shown
-    setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 300);
+  // Search functions
+  const openSearchScreen = () => {
+    navigation.navigate('UserSearch');
   };
 
-  const closeSearchModal = () => {
-    setIsSearchModalVisible(false);
-    setSearchText('');
-    // Reset to show all products when closing search
-    setFilteredProducts(featuredProducts);
-  };
-
-  const handleSearchSubmit = () => {
-    console.log('Search submitted:', searchText);
-    if (searchText.trim()) {
-      // Filter products based on search text
-      const filtered = featuredProducts.filter(product => 
-        product.name.toLowerCase().includes(searchText.toLowerCase()) ||
-        product.seller.toLowerCase().includes(searchText.toLowerCase()) ||
-        (product.description && product.description.toLowerCase().includes(searchText.toLowerCase()))
-      );
-      
-      setFilteredProducts(filtered);
-    } else {
-      // If search is empty, show all products
+  // Handle category selection
+  const handleCategorySelect = (categoryId: string | null) => {
+    console.log('Category selected:', categoryId);
+    setSelectedCategory(categoryId);
+    
+    if (categoryId === null) {
+      // Show all products
+      console.log('Showing all products');
       setFilteredProducts(featuredProducts);
+    } else {
+      // Find the selected category name
+      const selectedCategoryData = categories.find(cat => cat.id === categoryId);
+      const categoryName = selectedCategoryData?.name;
+      console.log('Filtering by category:', categoryName);
+      
+      // Filter products by selected category name
+      const filtered = featuredProducts.filter(product => {
+        console.log(`Product: ${product.name}, Category: ${product.category}, Matching: ${categoryName}`);
+        return product.category?.toLowerCase() === categoryName?.toLowerCase();
+      });
+      
+      console.log(`Filtered ${filtered.length} products out of ${featuredProducts.length}`);
+      setFilteredProducts(filtered);
     }
-    closeSearchModal();
   };
 
   const getStockStatus = (stock: number) => {
@@ -495,6 +539,7 @@ export function FeaturedProducts() {
       .catch(error => console.error('API test error:', error));
     
     loadFeaturedProducts();
+    loadCategories();
     
     // Cleanup function to clear timeouts
     return () => {
@@ -633,20 +678,60 @@ export function FeaturedProducts() {
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
           <Text style={styles.title}>
-            {searchText.trim() ? `Search: ${searchText}` : 'Featured Products'}
+            Featured Products
           </Text>
-          {searchText.trim() && (
-            <TouchableOpacity 
-              onPress={() => {
-                setSearchText('');
-                setFilteredProducts(featuredProducts);
-              }}
-              style={styles.clearSearchButton}
+          <View style={styles.placeholder} />
+        </View>
+
+        {/* Category Filter */}
+        <View style={styles.categoryFilterContainer}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryFilterScroll}
+          >
+            {/* All Categories Button */}
+            <TouchableOpacity
+              style={[
+                styles.categoryButton,
+                selectedCategory === null && styles.categoryButtonActive
+              ]}
+              onPress={() => handleCategorySelect(null)}
             >
-              <Ionicons name="close-circle" size={20} color="#6B7280" />
+              <Text style={[
+                styles.categoryButtonText,
+                selectedCategory === null && styles.categoryButtonTextActive
+              ]}>
+                All
+              </Text>
             </TouchableOpacity>
-          )}
-          {!searchText.trim() && <View style={styles.placeholder} />}
+            
+            {/* Category Buttons */}
+            {loadingCategories ? (
+              <View style={styles.categoryLoadingContainer}>
+                <ActivityIndicator size="small" color="#2563EB" />
+                <Text style={styles.categoryLoadingText}>Loading categories...</Text>
+              </View>
+            ) : (
+              categories.map((category) => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[
+                    styles.categoryButton,
+                    selectedCategory === category.id && styles.categoryButtonActive
+                  ]}
+                  onPress={() => handleCategorySelect(category.id)}
+                >
+                  <Text style={[
+                    styles.categoryButtonText,
+                    selectedCategory === category.id && styles.categoryButtonTextActive
+                  ]}>
+                    {category.name}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
         </View>
 
         <ScrollView
@@ -676,7 +761,7 @@ export function FeaturedProducts() {
             <View style={styles.emptyContainer}>
               <Ionicons name="bag-outline" size={64} color="#9CA3AF" />
               <Text style={styles.emptyText}>
-                {searchText.trim() ? 'No products found matching your search' : 'No featured products available'}
+                No featured products available
               </Text>
             </View>
           ) : (
@@ -723,7 +808,7 @@ export function FeaturedProducts() {
         <Animated.View style={[styles.fab, { width: fabWidth }]}>
           <TouchableOpacity
             style={styles.fabTouchable}
-            onPress={openSearchModal}
+            onPress={openSearchScreen}
             activeOpacity={0.8}
           >
             {isScrolled ? (
@@ -738,83 +823,10 @@ export function FeaturedProducts() {
         </Animated.View>
       </View>
 
-      {/* Search Modal */}
-      <Modal
-        visible={isSearchModalVisible}
-        transparent={false}
-        animationType="slide"
-        onRequestClose={closeSearchModal}
-        statusBarTranslucent={true}
-      >
-        <View style={styles.searchModalContainer}>
-          <SafeAreaView edges={['top']} style={styles.searchModalContent}>
-                <View style={styles.searchModalHeader}>
-                  <TouchableOpacity onPress={closeSearchModal} style={styles.closeButton}>
-                    <Ionicons name="arrow-back" size={24} color="#6B7280" />
-                  </TouchableOpacity>
-                  <View style={styles.searchModalInputContainer}>
-                    <Ionicons name="search-outline" size={20} color="#6B7280" />
-                    <TextInput
-                      ref={searchInputRef}
-                      style={styles.searchModalInput}
-                      placeholder="Search products or destinations..."
-                      placeholderTextColor="#9CA3AF"
-                      value={searchText}
-                      onChangeText={setSearchText}
-                      onSubmitEditing={handleSearchSubmit}
-                      returnKeyType="search"
-                      autoFocus={true}
-                    />
-                    {searchText.length > 0 && (
-                      <TouchableOpacity onPress={() => setSearchText('')}>
-                        <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-                
-                {/* Search suggestions can be added here */}
-                <View style={styles.searchSuggestions}>
-                  <Text style={styles.suggestionsTitle}>Recent Searches</Text>
-                  <TouchableOpacity 
-                    style={styles.suggestionItem}
-                    onPress={() => {
-                      setSearchText('iPhone');
-                      handleSearchSubmit();
-                    }}
-                  >
-                    <Ionicons name="time-outline" size={16} color="#6B7280" />
-                    <Text style={styles.suggestionText}>iPhone 13</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.suggestionItem}
-                    onPress={() => {
-                      setSearchText('Laptop');
-                      handleSearchSubmit();
-                    }}
-                  >
-                    <Ionicons name="time-outline" size={16} color="#6B7280" />
-                    <Text style={styles.suggestionText}>Laptop</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.suggestionItem}
-                    onPress={() => {
-                      setSearchText('Electronics');
-                      handleSearchSubmit();
-                    }}
-                  >
-                    <Ionicons name="time-outline" size={16} color="#6B7280" />
-                    <Text style={styles.suggestionText}>Electronics</Text>
-                  </TouchableOpacity>
-                </View>
-              </SafeAreaView>
-            </View>
-          </Modal>
-
-        {/* Token Notification Card */}
-        <TokenNotificationCard />
-      </SafeAreaView>
-    );
+      {/* Token Notification Card */}
+      <TokenNotificationCard />
+    </SafeAreaView>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -1058,73 +1070,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // Search Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-start',
-  },
-  searchModalContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  searchModalContent: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-  },
-  searchModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  searchModalInputContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  searchModalInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  searchSuggestions: {
-    padding: 16,
-  },
-  suggestionsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  suggestionText: {
-    fontSize: 16,
-    color: '#374151',
-    marginLeft: 12,
-  },
   manualLoadMoreContainer: {
     alignItems: 'center',
     padding: 20,
@@ -1147,5 +1092,45 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  categoryFilterContainer: {
+    backgroundColor: '#F9FAFB',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  categoryFilterScroll: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  categoryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  categoryButtonActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  categoryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  categoryButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  categoryLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  categoryLoadingText: {
+    fontSize: 14,
+    color: '#6B7280',
   },
 }); 

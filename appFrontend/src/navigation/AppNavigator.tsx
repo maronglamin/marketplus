@@ -59,6 +59,8 @@ import CustomerRidesRecordsScreen from '../screens/CustomerRidesRecords';
 import FeaturedByCategoriesScreen from '../screens/FeaturedByCategories';
 import PopularProductsScreen from '../screens/PopularProducts';
 import NewArrivalsScreen from '../screens/NewArrivals';
+import UserSearch from '../screens/UserSearch';
+import { ProductCategoryOptions } from '../screens/ProductCategoryOptions';
 
 export type AppStackParamList = {
   Home: { openSearch?: boolean } | undefined;
@@ -200,6 +202,8 @@ export type AppStackParamList = {
   FeaturedByCategories: { categoryId: string; categoryName: string };
   PopularProducts: undefined;
   NewArrivals: undefined;
+  UserSearch: undefined;
+  ProductCategoryOptions: undefined;
   RentalRequest: undefined;
   RentalDetail: { rentalId: string };
   RentalChat: { rentalId: string };
@@ -307,6 +311,8 @@ export function AppNavigator() {
         <Stack.Screen name="FeaturedByCategories" component={FeaturedByCategoriesScreen} />
         <Stack.Screen name="PopularProducts" component={PopularProductsScreen} />
         <Stack.Screen name="NewArrivals" component={NewArrivalsScreen} />
+        <Stack.Screen name="UserSearch" component={UserSearch} />
+        <Stack.Screen name="ProductCategoryOptions" component={ProductCategoryOptions} />
         <Stack.Screen name="RentalRequest" component={RentalRequestScreen} />
         <Stack.Screen name="RentalDetail" component={RentalDetailScreen} />
         <Stack.Screen name="RentalChat" component={RentalChatScreen} />

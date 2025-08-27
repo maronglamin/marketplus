@@ -18,6 +18,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 import { productService, type CustomerProduct } from '../services/productService';
+import { categoryService, type Category } from '../services/categoryService';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/env';
 
@@ -30,11 +31,17 @@ export default function PopularProductsScreen() {
   const { user } = useAuth();
   
   const [popularProducts, setPopularProducts] = useState<CustomerProduct[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<CustomerProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  
+  // Category filter state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [loadingCategories, setLoadingCategories] = useState(true);
 
   const loadPopularProducts = async (isLoadMore: boolean = false) => {
     try {
@@ -46,18 +53,39 @@ export default function PopularProductsScreen() {
         setHasMore(true);
       }
       setError(null);
-      
       const currentPage = isLoadMore ? page + 1 : 1;
-      
-      // For now, use regular products until we implement the popular products endpoint
-      const products = await productService.getCustomerProducts(currentPage, 30);
+      // Fetch products ordered by highest number of orders
+      const products = await productService.getPopularProducts(currentPage, 30);
       
       if (isLoadMore) {
-        setPopularProducts(prev => [...prev, ...products.products]);
+        const newProducts = [...popularProducts, ...products.products];
+        setPopularProducts(newProducts);
+        // Apply current category filter to new products
+        if (selectedCategory) {
+          const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
+          const categoryName = selectedCategoryData?.name;
+          const filtered = newProducts.filter(product => 
+            product.category?.toLowerCase() === categoryName?.toLowerCase()
+          );
+          setFilteredProducts(filtered);
+        } else {
+          setFilteredProducts(newProducts);
+        }
         setPage(currentPage);
         setHasMore(products.hasMore);
       } else {
         setPopularProducts(products.products);
+        // Apply current category filter to new products
+        if (selectedCategory) {
+          const selectedCategoryData = categories.find(cat => cat.id === selectedCategory);
+          const categoryName = selectedCategoryData?.name;
+          const filtered = products.products.filter(product => 
+            product.category?.toLowerCase() === categoryName?.toLowerCase()
+          );
+          setFilteredProducts(filtered);
+        } else {
+          setFilteredProducts(products.products);
+        }
         setPage(1);
         setHasMore(products.hasMore);
       }
@@ -70,6 +98,49 @@ export default function PopularProductsScreen() {
     } finally {
       setLoading(false);
       setLoadingMore(false);
+    }
+  };
+
+  // Load categories from database
+  const loadCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      console.log('Loading categories...');
+      const categoriesData = await categoryService.getCategories();
+      console.log('Categories loaded:', categoriesData);
+      console.log('Categories count:', categoriesData.length);
+      setCategories(categoriesData);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      setCategories([]);
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
+
+  // Handle category selection
+  const handleCategorySelect = (categoryId: string | null) => {
+    console.log('Category selected:', categoryId);
+    setSelectedCategory(categoryId);
+    
+    if (categoryId === null) {
+      // Show all products
+      console.log('Showing all products');
+      setFilteredProducts(popularProducts);
+    } else {
+      // Find the selected category name
+      const selectedCategoryData = categories.find(cat => cat.id === categoryId);
+      const categoryName = selectedCategoryData?.name;
+      console.log('Filtering by category:', categoryName);
+      
+      // Filter products by selected category name
+      const filtered = popularProducts.filter(product => {
+        console.log(`Product: ${product.name}, Category: ${product.category}, Matching: ${categoryName}`);
+        return product.category?.toLowerCase() === categoryName?.toLowerCase();
+      });
+      
+      console.log(`Filtered ${filtered.length} products out of ${popularProducts.length}`);
+      setFilteredProducts(filtered);
     }
   };
 
@@ -96,6 +167,7 @@ export default function PopularProductsScreen() {
 
   useEffect(() => {
     loadPopularProducts();
+    loadCategories(); // Load categories when the screen mounts
   }, []);
 
   const getStockStatus = (stock: number) => {
@@ -200,7 +272,7 @@ export default function PopularProductsScreen() {
             </View>
             <View style={styles.heroStats}>
               <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{popularProducts.length}</Text>
+                <Text style={styles.statNumber}>{filteredProducts.length}</Text>
                 <Text style={styles.statLabel}>Products</Text>
               </View>
               <View style={styles.statDivider} />
@@ -211,6 +283,57 @@ export default function PopularProductsScreen() {
             </View>
           </View>
 
+          {/* Category Filter */}
+          <View style={styles.categoryFilterContainer}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryFilterScroll}
+            >
+              {/* All Categories Button */}
+              <TouchableOpacity
+                style={[
+                  styles.categoryButton,
+                  selectedCategory === null && styles.categoryButtonActive
+                ]}
+                onPress={() => handleCategorySelect(null)}
+              >
+                <Text style={[
+                  styles.categoryButtonText,
+                  selectedCategory === null && styles.categoryButtonTextActive
+                ]}>
+                  All
+                </Text>
+              </TouchableOpacity>
+              
+              {/* Category Buttons */}
+              {loadingCategories ? (
+                <View style={styles.categoryLoadingContainer}>
+                  <ActivityIndicator size="small" color="#2563EB" />
+                  <Text style={styles.categoryLoadingText}>Loading categories...</Text>
+                </View>
+              ) : (
+                categories.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.categoryButton,
+                      selectedCategory === category.id && styles.categoryButtonActive
+                    ]}
+                    onPress={() => handleCategorySelect(category.id)}
+                  >
+                    <Text style={[
+                      styles.categoryButtonText,
+                      selectedCategory === category.id && styles.categoryButtonTextActive
+                    ]}>
+                      {category.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+
           {error ? (
             <View style={styles.errorContainer}>
               <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
@@ -219,18 +342,23 @@ export default function PopularProductsScreen() {
                 <Text style={styles.retryButtonText}>Retry</Text>
               </TouchableOpacity>
             </View>
-          ) : popularProducts.length === 0 ? (
+          ) : filteredProducts.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="trending-up-outline" size={64} color="#9CA3AF" />
-              <Text style={styles.emptyTitle}>No Popular Products</Text>
+              <Text style={styles.emptyTitle}>
+                {selectedCategory ? 'No Products in Category' : 'No Popular Products'}
+              </Text>
               <Text style={styles.emptyText}>
-                Popular products will appear here based on customer orders.
+                {selectedCategory 
+                  ? 'No popular products found in this category.'
+                  : 'Popular products will appear here based on customer orders.'
+                }
               </Text>
             </View>
           ) : (
             <>
               <View style={styles.productsGrid}>
-                {popularProducts.map((product, index) => (
+                {filteredProducts.map((product, index) => (
                   <View key={product.id} style={styles.productCard}>
                     <TouchableOpacity
                       style={styles.productCardTouchable}
@@ -612,6 +740,49 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   endOfListText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  categoryFilterContainer: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    marginTop: 16,
+  },
+  categoryFilterScroll: {
+    alignItems: 'center',
+  },
+  categoryButton: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  categoryButtonActive: {
+    backgroundColor: '#667eea',
+    borderColor: '#667eea',
+  },
+  categoryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  categoryButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  categoryLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  categoryLoadingText: {
+    marginLeft: 8,
     fontSize: 14,
     color: '#6B7280',
   },

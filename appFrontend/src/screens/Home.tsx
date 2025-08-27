@@ -47,8 +47,7 @@ export function Home() {
   const { user, logout } = useAuth();
   const { checkActiveTokens } = useTokenNotification();
   
-  // Search modal state
-  const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
+
   
   // Fresh user data state (fetched from backend using JWT)
   const [freshUserData, setFreshUserData] = useState<any>(null);
@@ -74,8 +73,7 @@ export function Home() {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
 
-  const [searchText, setSearchText] = useState('');
-  const searchInputRef = useRef<TextInput>(null);
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   // Load fresh user data from backend using JWT token
@@ -564,27 +562,9 @@ export function Home() {
     { message: 'Fatou sold a phone in your area', time: '5 mins ago' },
   ];
 
-  // Search modal functions
-  const openSearchModal = () => {
-    if (!isSearchModalVisible) {
-      setIsSearchModalVisible(true);
-      // Focus the input after modal is shown
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 300);
-    }
-  };
-
-  const closeSearchModal = () => {
-    setIsSearchModalVisible(false);
-    setSearchText('');
-    Keyboard.dismiss();
-  };
-
-  const handleSearchSubmit = () => {
-    // Handle search submission here
-    console.log('Searching for:', searchText);
-    closeSearchModal();
+  // Search functions
+  const openSearchScreen = () => {
+    navigation.navigate('UserSearch');
   };
 
   const handleQuickActionPress = (action: string) => {
@@ -711,14 +691,14 @@ export function Home() {
               <Ionicons name="search-outline" size={20} color="#6B7280" />
               <TouchableOpacity 
                 style={styles.searchInput}
-                onPress={openSearchModal}
+                onPress={openSearchScreen}
                 activeOpacity={0.7}
               >
                 <Text style={styles.searchPlaceholder}>
-                  Search products or destinations...
+                  Search products, orders, rides, rentals...
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={openSearchModal}>
+              <TouchableOpacity onPress={openSearchScreen}>
                 <Ionicons name="mic-outline" size={20} color="#14B8A6" />
               </TouchableOpacity>
             </View>
@@ -897,13 +877,7 @@ export function Home() {
               <View style={styles.serviceHeader}>
                 <View style={styles.serviceTitleContainer}>
                   <Text style={styles.serviceTitle}>Shop Online</Text>
-                  <View style={[styles.serviceBadge, styles.blueBadge]}>
-                    <Text style={[styles.serviceBadgeText, styles.blueBadgeText]}>Near You</Text>
-                  </View>
                 </View>
-                <TouchableOpacity>
-                  <Text style={[styles.viewAllText, styles.blueText]}>View All</Text>
-                </TouchableOpacity>
               </View>
               
               <View style={styles.shopGrid}>
@@ -929,7 +903,16 @@ export function Home() {
                 </TouchableOpacity>
               </View>
               
-              <Text style={styles.categoriesTitle}>Categories</Text>
+              <View style={styles.categoriesHeader}>
+                <Text style={styles.categoriesTitle}>Categories</Text>
+                <TouchableOpacity 
+                  style={styles.viewAllButton}
+                  onPress={() => navigation.navigate('ProductCategoryOptions')}
+                >
+                  <Text style={styles.viewAllText}>View All</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#0EA5E9" />
+                </TouchableOpacity>
+              </View>
               {isLoadingCategories ? (
                 <View style={styles.categoriesLoading}>
                   <ActivityIndicator size="small" color="#3B82F6" />
@@ -1266,60 +1249,7 @@ export function Home() {
         </SafeAreaView>
       </SafeAreaView>
 
-      {/* Search Modal */}
-      <Modal
-        visible={isSearchModalVisible}
-        transparent={false}
-        animationType="slide"
-        onRequestClose={closeSearchModal}
-        statusBarTranslucent={true}
-      >
-        <View style={styles.searchModalContainer}>
-          <SafeAreaView edges={['top']} style={styles.searchModalContent}>
-                <View style={styles.searchModalHeader}>
-                  <TouchableOpacity onPress={closeSearchModal} style={styles.closeButton}>
-                    <Ionicons name="arrow-back" size={24} color="#6B7280" />
-                  </TouchableOpacity>
-                  <View style={styles.searchModalInputContainer}>
-                    <Ionicons name="search-outline" size={20} color="#6B7280" />
-                    <TextInput
-                      ref={searchInputRef}
-                      style={styles.searchModalInput}
-                      placeholder="Search products or destinations..."
-                      placeholderTextColor="#9CA3AF"
-                      value={searchText}
-                      onChangeText={setSearchText}
-                      onSubmitEditing={handleSearchSubmit}
-                      returnKeyType="search"
-                      autoFocus={true}
-                    />
-                    {searchText.length > 0 && (
-                      <TouchableOpacity onPress={() => setSearchText('')}>
-                        <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-                
-                {/* Search suggestions can be added here */}
-                <View style={styles.searchSuggestions}>
-                  <Text style={styles.suggestionsTitle}>Recent Searches</Text>
-                  <TouchableOpacity style={styles.suggestionItem}>
-                    <Ionicons name="time-outline" size={16} color="#6B7280" />
-                    <Text style={styles.suggestionText}>iPhone 13</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.suggestionItem}>
-                    <Ionicons name="time-outline" size={16} color="#6B7280" />
-                    <Text style={styles.suggestionText}>Laptop</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.suggestionItem}>
-                    <Ionicons name="time-outline" size={16} color="#6B7280" />
-                    <Text style={styles.suggestionText}>Home delivery</Text>
-                  </TouchableOpacity>
-                </View>
-              </SafeAreaView>
-            </View>
-          </Modal>
+
     </View>
   );
 }
@@ -1811,10 +1741,15 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
   },
+  categoriesHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   categoriesTitle: {
     fontSize: 14,
     color: '#6B7280',
-    marginBottom: 8,
   },
   categoryItem: {
     alignItems: 'center',
@@ -2014,83 +1949,7 @@ const styles = StyleSheet.create({
   activeNavText: {
     color: '#14B8A6',
   },
-  // Search Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalKeyboardAvoidingView: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  searchModalContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  searchModalContent: {
-    backgroundColor: '#FFFFFF',
-    flex: 1,
-  },
-  searchModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  searchModalInputContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  searchModalInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  searchSuggestions: {
-    padding: 16,
-  },
-  suggestionsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
-  },
-  suggestionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  suggestionText: {
-    fontSize: 16,
-    color: '#374151',
-    marginLeft: 12,
-  },
+
   // Become Rider Section Styles
   becomeRiderContainer: {
     padding: 20,

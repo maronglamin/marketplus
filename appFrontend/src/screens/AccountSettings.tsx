@@ -501,7 +501,7 @@ export function AccountSettings() {
 
 
   const handleContactSupport = () => {
-    Linking.openURL('tel:+2203547128').catch(err => {
+    Linking.openURL('tel:+2206738885').catch(err => {
       console.error('Error opening phone app:', err)
     })
   }
