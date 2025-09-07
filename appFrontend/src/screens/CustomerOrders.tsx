@@ -426,6 +426,32 @@ export function CustomerOrders() {
     return `${symbol}${formattedPrice}`;
   };
 
+  // Compute order total from items to ensure consistency with header/title display
+  const computeOrderItemsTotal = (order: Order): number => {
+    try {
+      if (Array.isArray(order.items)) {
+        return order.items.reduce((sum, item) => {
+          const itemTotal = typeof item.totalPrice === 'number'
+            ? item.totalPrice
+            : (Number(item.unitPrice) || 0) * (Number(item.quantity) || 0);
+          return sum + (Number(itemTotal) || 0);
+        }, 0);
+      }
+      return Number(order.totalAmount) || 0;
+    } catch {
+      return Number(order.totalAmount) || 0;
+    }
+  };
+
+  // Compute payable total = items total + shipping - discount
+  const computeOrderPayableTotal = (order: Order): number => {
+    const itemsTotal = computeOrderItemsTotal(order);
+    const shipping = Number(order.shippingAmount) || 0;
+    const discount = Number(order.discountAmount) || 0;
+    const total = itemsTotal + shipping - discount;
+    return total >= 0 ? total : 0;
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -796,7 +822,7 @@ export function CustomerOrders() {
                       <View style={styles.orderTotal}>
                         <Text style={styles.totalLabel}>Total</Text>
                         <Text style={styles.orderTotalPrice}>
-                          {formatPrice(order.totalAmount, order.currencyCode)}
+                          {formatPrice(computeOrderPayableTotal(order), order.currencyCode)}
                         </Text>
                       </View>
                       <View style={styles.orderFooterDetails}>
