@@ -238,7 +238,11 @@ export function DriverDashboard() {
 
   const loadDriverStats = async () => {
     try {
+      console.log('📊 Loading driver stats from API...');
       const driverStats = await driverService.getDriverStats();
+      console.log('📊 Driver stats received:', driverStats);
+      console.log('📊 Today online hours:', driverStats.todayOnlineHours);
+      console.log('📊 General online hours:', driverStats.onlineHours);
       setStats(driverStats);
     } catch (error) {
       console.error('Error loading driver stats:', error);
@@ -249,8 +253,14 @@ export function DriverDashboard() {
         rating: 4.8,
         onlineHours: 156,
         todayEarnings: 45.50,
+        todayCurrency: 'GMD',
         weeklyEarnings: 320.25,
         monthlyEarnings: 1250.80,
+        currency: 'GMD',
+        currencySymbol: 'D',
+        todayRidesCount: 0,
+        todayRidesWithRatings: 0,
+        todayOnlineHours: 0,
       });
     }
   };
@@ -503,7 +513,7 @@ export function DriverDashboard() {
   };
 
   const handleSettings = () => {
-    Alert.alert('Settings', 'Driver settings coming soon!');
+    navigation.navigate('DriverSettings');
   };
 
   const handleRequestPress = () => {
@@ -1101,7 +1111,12 @@ export function DriverDashboard() {
         
         <View style={styles.statItem}>
           <Ionicons name="cash" size={16} color="#3B82F6" />
-          <Text style={styles.statValue}>${stats.todayEarnings.toFixed(2)}</Text>
+          <Text style={styles.statValue}>
+            {stats.todayEarnings > 0 
+              ? `${stats.currencySymbol || 'D'}${stats.todayEarnings.toFixed(2)}`
+              : '0'
+            }
+          </Text>
           <Text style={styles.statLabel}>Today</Text>
         </View>
         
@@ -1117,8 +1132,8 @@ export function DriverDashboard() {
         
         <View style={styles.statItem}>
           <Ionicons name="time" size={16} color="#3B82F6" />
-          <Text style={styles.statValue}>{stats.onlineHours}h</Text>
-          <Text style={styles.statLabel}>Online</Text>
+          <Text style={styles.statValue}>{stats.todayOnlineHours || stats.onlineHours}h</Text>
+          <Text style={styles.statLabel}>Online Today</Text>
         </View>
       </View>
 

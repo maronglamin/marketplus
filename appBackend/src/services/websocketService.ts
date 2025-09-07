@@ -250,6 +250,30 @@ export class WebSocketService {
     }
   }
 
+  // Send ride token notification to customer
+  public async sendRideTokenNotification(rideId: string, token: string, driverName: string, customerId: string) {
+    try {
+      const tokenPayload = {
+        type: 'ride_token',
+        rideId,
+        data: {
+          token,
+          driverName,
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 minutes from now
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      // Send to customer's user room and ride room
+      this.io.to(`user:${customerId}`).emit('ride_token', tokenPayload);
+      this.io.to(`ride:${rideId}`).emit('ride_token', tokenPayload);
+
+      console.log(`🎫 Ride token notification sent to customer ${customerId} for ride ${rideId}`);
+    } catch (error) {
+      console.error('❌ Error sending ride token notification:', error);
+    }
+  }
+
   // Get connected users count
   public getConnectedUsersCount(): number {
     return this.connectedUsers.size;

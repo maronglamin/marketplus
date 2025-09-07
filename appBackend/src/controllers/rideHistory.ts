@@ -4,6 +4,7 @@ import { RideTokenService } from '../services/rideTokenService';
 import { notificationService } from '../services/notificationService';
 import { PrismaClient, RideStatus } from '@prisma/client';
 import { RideService } from '../services/rideService';
+import { webSocketService } from '../services/websocketService';
 
 const prisma = new PrismaClient();
 
@@ -372,7 +373,21 @@ export class RideHistoryController {
       // Generate new token
       const rideToken = await RideTokenService.generateToken(rideId);
 
-      // Send notification to customer
+      // Send WebSocket notification to customer
+      try {
+        await webSocketService.sendRideTokenNotification(
+          rideId,
+          rideToken.token,
+          `${driver.user.firstName} ${driver.user.lastName}`,
+          ride.customer.id
+        );
+        console.log('✅ WebSocket ride token notification sent successfully');
+      } catch (websocketError) {
+        console.error('❌ Failed to send WebSocket token notification:', websocketError);
+        // Don't fail the token generation if WebSocket fails
+      }
+
+      // Also send push notification as fallback
       try {
         await notificationService.sendRideTokenNotificationToCustomer(
           ride.customer.id,
@@ -380,8 +395,9 @@ export class RideHistoryController {
           rideToken.token,
           rideId
         );
+        console.log('✅ Push notification sent as fallback');
       } catch (notificationError) {
-        console.error('Failed to send token notification to customer:', notificationError);
+        console.error('❌ Failed to send push notification:', notificationError);
         // Don't fail the token generation if notification fails
       }
 

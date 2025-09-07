@@ -64,10 +64,22 @@ export interface NewRideRequest {
   timestamp: string;
 }
 
+export interface RideTokenNotification {
+  type: string;
+  rideId: string;
+  data: {
+    token: string;
+    driverName: string;
+    expiresAt: string;
+    timestamp: string;
+  };
+}
+
 export type RideUpdateCallback = (update: RideUpdate) => void;
 export type DriverLocationCallback = (update: DriverLocationUpdate) => void;
 export type RideAcceptedCallback = (notification: RideAcceptedNotification) => void;
 export type NewRideRequestCallback = (request: NewRideRequest) => void;
+export type RideTokenCallback = (notification: RideTokenNotification) => void;
 
 export class RealTimeRideService {
   private socket: Socket | null = null;
@@ -81,6 +93,7 @@ export class RealTimeRideService {
   private driverLocationCallbacks: DriverLocationCallback[] = [];
   private rideAcceptedCallbacks: RideAcceptedCallback[] = [];
   private newRideRequestCallbacks: NewRideRequestCallback[] = [];
+  private rideTokenCallbacks: RideTokenCallback[] = [];
 
   // Connection state
   private connectionPromise: Promise<void> | null = null;
@@ -136,6 +149,11 @@ export class RealTimeRideService {
       this.socket.on('new_ride_request', (request: NewRideRequest) => {
         console.log('🚗 Received new ride request:', request);
         this.newRideRequestCallbacks.forEach(callback => callback(request));
+      });
+
+      this.socket.on('ride_token', (notification: RideTokenNotification) => {
+        console.log('🎫 Received ride token notification:', notification);
+        this.rideTokenCallbacks.forEach(callback => callback(notification));
       });
     }
   }
@@ -292,6 +310,19 @@ export class RealTimeRideService {
       const index = this.newRideRequestCallbacks.indexOf(callback);
       if (index > -1) {
         this.newRideRequestCallbacks.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * Subscribe to ride token notifications (for customers)
+   */
+  onRideToken(callback: RideTokenCallback) {
+    this.rideTokenCallbacks.push(callback);
+    return () => {
+      const index = this.rideTokenCallbacks.indexOf(callback);
+      if (index > -1) {
+        this.rideTokenCallbacks.splice(index, 1);
       }
     };
   }

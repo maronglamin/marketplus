@@ -20,6 +20,7 @@ import { TokenNotificationProvider } from './src/contexts/TokenNotificationConte
 import { useTokenNotification } from './src/contexts/TokenNotificationContext';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import * as ExpoNotifications from 'expo-notifications';
+import { realTimeRideService } from './src/services/realTimeRideService';
 import { useEffect } from 'react';
 import { Platform, StatusBar, View } from 'react-native';
 import { enableScreens } from 'react-native-screens';
@@ -54,11 +55,39 @@ function NotificationHandler() {
   const { user } = useAuth();
 
   useEffect(() => {
+    // Connect to WebSocket service
+    const connectWebSocket = async () => {
+      try {
+        await realTimeRideService.connect();
+        console.log('✅ WebSocket connected for ride token notifications');
+      } catch (error) {
+        console.error('❌ Failed to connect WebSocket:', error);
+      }
+    };
+
+    connectWebSocket();
+
+    // Subscribe to ride token notifications via WebSocket
+    const unsubscribeRideToken = realTimeRideService.onRideToken((notification) => {
+      console.log('🎫 WebSocket ride token notification received:', notification);
+      
+      // Show the floating notification for the customer
+      showTokenNotification({
+        token: notification.data.token,
+        rideId: notification.rideId,
+        customerName: 'You', // This is for the customer
+        customerId: user?.id || 'current-user', // Use actual user ID
+        driverName: notification.data.driverName,
+        expiresAt: notification.data.expiresAt,
+      });
+    });
+
+    // Keep push notification listener as fallback
     const subscription = ExpoNotifications.addNotificationReceivedListener((notification: ExpoNotifications.Notification) => {
       const data = notification.request.content.data as any;
       
       if (data?.type === 'ride_token') {
-        console.log('Ride token notification received:', data);
+        console.log('📱 Push notification ride token received (fallback):', data);
         
         // Show the floating notification for the customer
         showTokenNotification({
@@ -72,7 +101,11 @@ function NotificationHandler() {
       }
     });
 
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      unsubscribeRideToken();
+      realTimeRideService.disconnect();
+    };
   }, [showTokenNotification, user?.id]);
 
   return null;

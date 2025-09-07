@@ -994,7 +994,7 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res) => {
         startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     }
 
-    // Get completed rides with earnings
+    // Get completed rides with earnings and ratings
     const completedRides = await prisma.ride.findMany({
       where: {
         driverId: driver.id,
@@ -1009,6 +1009,14 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res) => {
         totalFare: true,
         createdAt: true,
         completedAt: true,
+        startedAt: true,
+        customerRating: true,
+        rideRequest: {
+          select: {
+            currency: true,
+            currencySymbol: true
+          }
+        },
         customer: {
           select: {
             firstName: true,
@@ -1018,6 +1026,27 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res) => {
       },
       orderBy: {
         createdAt: 'desc'
+      }
+    });
+
+    // Get today's rides for online hours calculation
+    const todayStartForHours = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayRidesForHours = await prisma.ride.findMany({
+      where: {
+        driverId: driver.id,
+        status: 'COMPLETED',
+        createdAt: {
+          gte: todayStartForHours
+        }
+      },
+      select: {
+        id: true,
+        startedAt: true,
+        completedAt: true,
+        createdAt: true
+      },
+      orderBy: {
+        createdAt: 'asc'
       }
     });
 
@@ -1046,11 +1075,43 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res) => {
     );
     const monthlyEarnings = monthlyRides.reduce((sum, ride) => sum + Number(ride.driverEarnings), 0);
 
-    // Calculate online hours (mock data for now)
-    const onlineHours = Math.floor(Math.random() * 24) + 1;
+    // Calculate real online hours from today's first ride startedAt to today's last ride completedAt
+    let onlineHours = 0;
+    console.log(`📊 Today's rides count for online hours: ${todayRidesForHours.length}`);
+    
+    if (todayRidesForHours.length > 0) {
+      const firstRide = todayRidesForHours[0];
+      const lastRide = todayRidesForHours[todayRidesForHours.length - 1];
+      
+      console.log(`📊 First ride startedAt: ${firstRide.startedAt}`);
+      console.log(`📊 Last ride completedAt: ${lastRide.completedAt}`);
+      
+      if (firstRide.startedAt && lastRide.completedAt) {
+        const startTime = new Date(firstRide.startedAt);
+        const endTime = new Date(lastRide.completedAt);
+        const diffInMs = endTime.getTime() - startTime.getTime();
+        onlineHours = Math.round(diffInMs / (1000 * 60 * 60) * 10) / 10; // Round to 1 decimal place
+        
+        console.log(`📊 Online hours calculated: ${onlineHours} hours`);
+        console.log(`📊 Time difference: ${diffInMs}ms (${diffInMs / (1000 * 60 * 60)} hours)`);
+      } else {
+        console.log(`📊 Missing start or end time for online hours calculation`);
+      }
+    } else {
+      console.log(`📊 No rides today, online hours = 0`);
+    }
 
-    // Calculate average rating (mock data for now)
-    const rating = 4.5 + (Math.random() * 0.5);
+    // Calculate real average customer rating from today's rides
+    let rating = 0;
+    const todayRidesWithRatings = todayRides.filter(ride => ride.customerRating && ride.customerRating > 0);
+    if (todayRidesWithRatings.length > 0) {
+      const totalRating = todayRidesWithRatings.reduce((sum, ride) => sum + Number(ride.customerRating), 0);
+      rating = Math.round((totalRating / todayRidesWithRatings.length) * 10) / 10; // Round to 1 decimal place
+    }
+
+    // Get currency from the most recent ride or default to GMD
+    const currency = completedRides.length > 0 ? (completedRides[0].rideRequest?.currency || 'GMD') : 'GMD';
+    const currencySymbol = completedRides.length > 0 ? (completedRides[0].rideRequest?.currencySymbol || 'D') : 'D';
 
     res.json({
       success: true,
@@ -1061,9 +1122,13 @@ router.get('/stats', authenticateToken, async (req: AuthRequest, res) => {
         weeklyEarnings,
         monthlyEarnings,
         onlineHours,
-        rating: parseFloat(rating.toFixed(1)),
-        currency: 'GMD',
-        currencySymbol: 'D'
+        rating,
+        currency,
+        currencySymbol,
+        todayCurrency: currency,
+        todayRidesCount: todayRidesForHours.length,
+        todayRidesWithRatings: todayRidesWithRatings.length,
+        todayOnlineHours: onlineHours
       }
     });
 

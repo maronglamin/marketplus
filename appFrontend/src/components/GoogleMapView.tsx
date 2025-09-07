@@ -296,7 +296,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
             .status-indicator {
               position: absolute;
               top: 20px;
-              right: 20px;
+              left: 20px;
               background: ${isOnline ? '#3B82F6' : '#EF4444'};
               color: white;
               padding: 8px 16px;
@@ -343,7 +343,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
         </head>
         <body>
           <div id="map"></div>
-          ${mode === 'driver' ? `<div class="status-indicator">${isOnline ? 'ONLINE' : 'OFFLINE'}</div>` : ''}
+          ${mode === 'driver' ? `<div class="status-indicator">${isOnline ? 'online' : 'offline'}</div>` : ''}
           ${mode === 'driver' ? '<div class="driver-marker" style="top: 50%; left: 50%; transform: translate(-50%, -50%);">🚗</div>' : ''}
           <div id="locationLoading" class="location-loading" style="display: none;">
             Getting your location...

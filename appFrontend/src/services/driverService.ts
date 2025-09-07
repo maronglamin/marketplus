@@ -11,6 +11,11 @@ export interface DriverStats {
   todayCurrency: string;
   weeklyEarnings: number;
   monthlyEarnings: number;
+  currency: string;
+  currencySymbol: string;
+  todayRidesCount: number;
+  todayRidesWithRatings: number;
+  todayOnlineHours: number;
 }
 
 export interface RideRequest {
@@ -237,9 +242,14 @@ export class DriverService {
         rating: 0,
         onlineHours: 0,
         todayEarnings: 0,
-        todayCurrency: 'D', // Added todayCurrency to fallback
+        todayCurrency: 'GMD',
         weeklyEarnings: 0,
         monthlyEarnings: 0,
+        currency: 'GMD',
+        currencySymbol: 'D',
+        todayRidesCount: 0,
+        todayRidesWithRatings: 0,
+        todayOnlineHours: 0,
       };
     }
   }

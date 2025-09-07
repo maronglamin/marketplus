@@ -47,6 +47,13 @@ import { BecomeRider } from '../screens/riders/BecomeRider';
 import { DriverDashboard } from '../screens/DriverDashboard';
 import { DriverRequests } from '../screens/DriverRequests';
 import { DriverEarnings } from '../screens/DriverEarnings';
+import { DriverSettings } from '../screens/driverManagement/DriverSettings';
+import { DriverProfile } from '../screens/driverManagement/DriverProfile';
+import { VehicleManagement } from '../screens/driverManagement/VehicleManagement';
+import { DriverDocuments } from '../screens/driverManagement/DriverDocuments';
+import { DriverNotifications } from '../screens/driverManagement/DriverNotifications';
+import { DriverSupport } from '../screens/driverManagement/DriverSupport';
+import { DriverPrivacy } from '../screens/driverManagement/DriverPrivacy';
 import { JourneyMapView } from '../screens/JourneyMapView';
 import { CustomerRides } from '../screens/CustomerRides';
 import { CustomerRideHistory } from '../screens/CustomerRideHistory';
@@ -185,6 +192,13 @@ export type AppStackParamList = {
   DriverDashboard: undefined;
   DriverRequests: undefined;
   DriverEarnings: undefined;
+  DriverSettings: undefined;
+  DriverProfile: undefined;
+  VehicleManagement: undefined;
+  DriverDocuments: undefined;
+  DriverNotifications: undefined;
+  DriverSupport: undefined;
+  DriverPrivacy: undefined;
   JourneyMapView: {
     rideId: string;
     pickupLocation: {
@@ -315,6 +329,13 @@ export function AppNavigator() {
         <Stack.Screen name="DriverDashboard" component={DriverDashboard} options={{ gestureEnabled: true }} />
         <Stack.Screen name="DriverRequests" component={DriverRequests} options={{ gestureEnabled: true }} />
         <Stack.Screen name="DriverEarnings" component={DriverEarnings} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="DriverSettings" component={DriverSettings} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="DriverProfile" component={DriverProfile} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="VehicleManagement" component={VehicleManagement} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="DriverDocuments" component={DriverDocuments} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="DriverNotifications" component={DriverNotifications} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="DriverSupport" component={DriverSupport} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="DriverPrivacy" component={DriverPrivacy} options={{ gestureEnabled: true }} />
         <Stack.Screen name="JourneyMapView" component={JourneyMapView} options={{ gestureEnabled: true }} />
         <Stack.Screen name="CustomerRideService" component={CustomerRideService} />
         <Stack.Screen name="CustomerRides" component={CustomerRides} />
