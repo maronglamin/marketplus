@@ -1277,6 +1277,268 @@ router.get('/seller/test-orders', authenticate, async (req: AuthenticatedRequest
   }
 });
 
+// Get orders for a specific sales rep (for parent sellers)
+router.get('/sales-rep-orders/:salesRepId', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const parentUserId = req.user?.id;
+    const { salesRepId } = req.params;
+
+    if (!parentUserId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    // Verify that the sales rep belongs to this parent seller
+    logger.info('Looking for sales rep:', { salesRepId, parentUserId });
+    
+    const salesRep = await prisma.salesRep.findFirst({
+      where: {
+        id: salesRepId,
+        parentSellerId: parentUserId
+      }
+    });
+
+    if (!salesRep) {
+      logger.warn('Sales rep not found or not authorized:', { salesRepId, parentUserId });
+      return res.status(404).json({ message: 'Sales rep not found or not authorized' });
+    }
+
+    logger.info('Sales rep found:', { 
+      salesRepId: salesRep.id, 
+      userId: salesRep.userId, 
+      parentSellerId: salesRep.parentSellerId 
+    });
+
+    // Get paid orders for this sales rep
+    logger.info('Looking for orders for sales rep:', { 
+      salesRepUserId: salesRep.userId,
+      salesRepId: salesRep.id 
+    });
+
+    // First, let's check all orders for this sales rep
+    const allOrders = await prisma.orders.findMany({
+      where: {
+        sellerId: salesRep.userId
+      },
+      select: {
+        id: true,
+        status: true,
+        paymentStatus: true,
+        totalAmount: true,
+        currencyCode: true
+      }
+    });
+
+    logger.info('All orders for sales rep:', { 
+      salesRepUserId: salesRep.userId,
+      totalOrders: allOrders.length,
+      orders: allOrders.map(order => ({
+        id: order.id,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        totalAmount: order.totalAmount,
+        currencyCode: order.currencyCode
+      }))
+    });
+
+    // Check external transactions for these orders
+    const orderIds = allOrders.map(order => order.id);
+    const externalTransactions = await prisma.externalTransaction.findMany({
+      where: {
+        orderId: {
+          in: orderIds
+        }
+      },
+      select: {
+        id: true,
+        orderId: true,
+        status: true,
+        amount: true
+      }
+    });
+
+    logger.info('External transactions for sales rep orders:', {
+      salesRepUserId: salesRep.userId,
+      totalTransactions: externalTransactions.length,
+      transactions: externalTransactions.map(tx => ({
+        id: tx.id,
+        orderId: tx.orderId,
+        status: tx.status,
+        amount: tx.amount
+      }))
+    });
+
+    const orders = await prisma.orders.findMany({
+      where: {
+        sellerId: salesRep.userId,
+        status: {
+          in: ['CONFIRMED', 'DELIVERED', 'COMPLETED']
+        },
+        paymentStatus: 'PAID',  // Ensure payment status is PAID
+        // Check if there's a corresponding paid external transaction
+        externalTransactions: {
+          some: {
+            status: 'SUCCESS'
+          }
+        }
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                seller: true,
+                images: {
+                  where: { isPrimary: true },
+                  take: 1
+                }
+              }
+            }
+          }
+        },
+        User_orders_userIdToUser: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phoneNumber: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    logger.info('Paid orders found for sales rep:', { 
+      salesRepUserId: salesRep.userId,
+      paidOrdersCount: orders.length,
+      orders: orders.map(order => ({
+        id: order.id,
+        status: order.status,
+        totalAmount: order.totalAmount
+      }))
+    });
+
+    // Transform orders to match frontend interface
+    const transformedOrders = orders.map(order => ({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      totalAmount: order.totalAmount,
+      currencyCode: order.currencyCode,
+      status: order.status,
+      createdAt: order.createdAt.toISOString(),
+      customer: order.User_orders_userIdToUser ? {
+        id: order.User_orders_userIdToUser.id,
+        name: `${order.User_orders_userIdToUser.firstName} ${order.User_orders_userIdToUser.lastName}`,
+        phone: order.User_orders_userIdToUser.phoneNumber
+      } : null,
+      items: order.items.map(item => ({
+        id: item.id,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        product: {
+          id: item.product.id,
+          title: item.product.title,
+          price: item.product.price,
+          images: item.product.images.map(img => img.imageUrl),
+          seller: {
+            id: item.product.seller.id,
+            name: `${item.product.seller.firstName} ${item.product.seller.lastName}`
+          }
+        }
+      }))
+    }));
+
+    // Get sales rep details with user and branch info
+    const salesRepWithDetails = await prisma.salesRep.findUnique({
+      where: { id: salesRep.id },
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true
+          }
+        },
+        branch: {
+          select: {
+            name: true,
+            city: true,
+            state: true
+          }
+        }
+      }
+    });
+
+    // Get service fees for these orders to calculate net amounts
+    const transformedOrderIds = transformedOrders.map(order => order.id);
+    const serviceFees = await prisma.externalTransaction.findMany({
+      where: {
+        orderId: { in: transformedOrderIds },
+        transactionType: 'SERVICE_FEE',
+        status: 'SUCCESS'
+      },
+      select: {
+        orderId: true,
+        amount: true,
+        currencyCode: true
+      }
+    });
+
+    // Group orders by currency and calculate net amounts (gross - service fees)
+    const ordersByCurrency = transformedOrders.reduce((acc, order) => {
+      const currency = order.currencyCode || 'USD';
+      if (!acc[currency]) {
+        acc[currency] = {
+          currency,
+          orders: [],
+          totalAmount: 0,
+          orderCount: 0
+        };
+      }
+      
+      // Calculate service fees for this order
+      const orderServiceFees = serviceFees
+        .filter(fee => fee.orderId === order.id && fee.currencyCode === currency)
+        .reduce((sum, fee) => sum + parseFloat(fee.amount.toString()), 0);
+      
+      // Use net amount (gross - service fees) for settlement calculations
+      const netAmount = Math.max(0, parseFloat(order.totalAmount.toString()) - orderServiceFees);
+      
+      acc[currency].orders.push(order);
+      acc[currency].totalAmount += netAmount; // Use net amount instead of gross
+      acc[currency].orderCount += 1;
+      return acc;
+    }, {} as Record<string, { currency: string; orders: any[]; totalAmount: number; orderCount: number }>);
+
+    // Calculate overall totals using net amounts
+    const totalOrders = transformedOrders.length;
+    const totalAmount = Object.values(ordersByCurrency).reduce((sum, currencyData) => sum + currencyData.totalAmount, 0);
+
+    res.json({
+      orders: transformedOrders,
+      ordersByCurrency: Object.values(ordersByCurrency),
+      totalCount: totalOrders,
+      totalAmount: totalAmount,
+      salesRep: {
+        id: salesRep.id,
+        firstName: salesRepWithDetails?.user.firstName || '',
+        lastName: salesRepWithDetails?.user.lastName || '',
+        branchName: salesRepWithDetails?.branch.name || '',
+        branchLocation: salesRepWithDetails?.branch ? 
+          `${salesRepWithDetails.branch.city || ''}${salesRepWithDetails.branch.city && salesRepWithDetails.branch.state ? ', ' : ''}${salesRepWithDetails.branch.state || ''}` : ''
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error fetching sales rep orders:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch sales rep orders',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Helper function to get currency symbol
 function getCurrencySymbol(currencyCode: string): string {
   const currencySymbols: { [key: string]: string } = {
@@ -1461,6 +1723,108 @@ router.patch('/:orderId/product-price', authenticate, async (req: AuthenticatedR
     logger.error('Error applying discount:', error);
     res.status(500).json({ 
       error: 'Failed to apply discount',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Update discount amount for order
+router.patch('/:orderId/discount', authenticate, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { orderId } = req.params;
+    const { discountAmount, currency } = req.body;
+
+    if (!discountAmount && discountAmount !== 0) {
+      return res.status(400).json({ error: 'Discount amount is required.' });
+    }
+
+    const discount = parseFloat(discountAmount.toString());
+    if (isNaN(discount) || discount < 0) {
+      return res.status(400).json({ error: 'Discount amount must be a valid positive number.' });
+    }
+
+    // Get the order
+    const order = await prisma.orders.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    // Security check - only seller can update discount
+    if (order.sellerId !== req.user?.id) {
+      return res.status(403).json({ error: 'Access denied. Only the product owner can update discount.' });
+    }
+
+    // Check if payment is completed
+    if (order.paymentStatus?.toLowerCase() === 'paid') {
+      return res.status(400).json({ error: 'Discount cannot be updated after payment is completed.' });
+    }
+
+    // Calculate the original total (without any existing discount)
+    const originalSubtotal = order.items.reduce((total: number, item: any) => {
+      return total + parseFloat(item.unitPrice.toString()) * item.quantity;
+    }, 0);
+    
+    const originalTotal = originalSubtotal + parseFloat(order.shippingAmount.toString());
+
+    // Validate discount is not negative or exceeds total
+    if (discount >= originalTotal) {
+      return res.status(400).json({ error: 'Discount amount cannot exceed or equal the total order amount.' });
+    }
+
+    // Calculate the new total by subtracting the discount from the original total
+    const newTotal = originalTotal - discount;
+
+    // Update the order with new total and discount
+    const updatedOrder = await prisma.orders.update({
+      where: { id: orderId },
+      data: {
+        totalAmount: newTotal,
+        discountAmount: discount,
+        currencyCode: currency || order.currencyCode
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                seller: true
+              }
+            }
+          }
+        },
+        customer: true,
+        seller: true
+      }
+    });
+
+    logger.info('Discount updated successfully:', {
+      orderId,
+      originalTotal,
+      newTotal,
+      discountAmount: discount
+    });
+
+    res.json({
+      success: true,
+      message: 'Discount updated successfully',
+      order: {
+        id: updatedOrder.id,
+        totalAmount: updatedOrder.totalAmount,
+        discountAmount: updatedOrder.discountAmount,
+        currencyCode: updatedOrder.currencyCode
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error updating discount:', error);
+    res.status(500).json({ 
+      error: 'Failed to update discount',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

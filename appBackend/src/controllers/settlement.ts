@@ -1,6 +1,6 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
@@ -14,21 +14,60 @@ export const getAvailableRevenue = async (req: AuthRequest, res: Response) => {
 
     logger.info('Fetching available revenue for settlement:', { userId: req.user.id });
 
-    // Get all PAID orders (excluding SETTLED orders) grouped by currency
+    // First, get all sales rep user IDs for this parent seller
+    const salesReps = await prisma.salesRep.findMany({
+      where: {
+        parentSellerId: req.user.id,
+        status: 'ACTIVE'
+      },
+      select: {
+        userId: true
+      }
+    });
+
+    const salesRepUserIds = salesReps.map(rep => rep.userId);
+    logger.info('Sales rep user IDs found:', { salesRepUserIds, salesRepsCount: salesReps.length });
+
+    // Get all PAID orders (excluding SETTLED orders) for parent seller and their sales reps
     const paidOrders = await prisma.orders.findMany({
       where: {
-        sellerId: req.user.id,
-        paymentStatus: 'PAID' // Only include PAID orders, SETTLED orders are excluded
+        OR: [
+          // Parent seller's own orders
+          {
+            sellerId: req.user.id,
+            paymentStatus: 'PAID'
+          },
+          // Sales rep orders (where sellerId is a sales rep's userId and that sales rep belongs to this parent)
+          {
+            sellerId: {
+              in: salesRepUserIds
+            },
+            paymentStatus: 'PAID'
+          }
+        ]
       },
       select: {
         id: true,
         totalAmount: true,
         currencyCode: true,
-        createdAt: true
+        createdAt: true,
+        sellerId: true
       },
       orderBy: {
         createdAt: 'desc'
       }
+    });
+
+    logger.info('Paid orders found for available revenue:', { 
+      totalOrders: paidOrders.length,
+      orders: paidOrders.map(order => ({
+        id: order.id,
+        sellerId: order.sellerId,
+        totalAmount: order.totalAmount.toString(),
+        currency: order.currencyCode,
+        isParentOrder: order.sellerId === req.user.id,
+        isSalesRepOrder: salesRepUserIds.includes(order.sellerId)
+      }))
     });
 
     // Group orders by currency and calculate totals
@@ -49,59 +88,176 @@ export const getAvailableRevenue = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    // Calculate revenue per currency with proper service fee deduction
-    const currencyData = new Map<string, { grossAmount: number; serviceFees: number }>();
-    
-    // Initialize currency data
-    paidOrders.forEach(order => {
+    // Separate parent and sales rep orders
+    const parentOrders = paidOrders.filter(order => order.sellerId === req.user.id);
+    const salesRepOrders = paidOrders.filter(order => salesRepUserIds.includes(order.sellerId));
+
+    // Calculate parent revenue per currency
+    const parentCurrencyData = new Map<string, { grossAmount: number; serviceFees: number }>();
+    const parentOrderIds = parentOrders.map(order => order.id);
+    const parentServiceFees = serviceFees.filter(fee => parentOrderIds.includes(fee.orderId));
+
+    parentOrders.forEach(order => {
       const currency = order.currencyCode;
       const amount = parseFloat(order.totalAmount.toString());
       
-      if (!currencyData.has(currency)) {
-        currencyData.set(currency, { grossAmount: 0, serviceFees: 0 });
+      if (!parentCurrencyData.has(currency)) {
+        parentCurrencyData.set(currency, { grossAmount: 0, serviceFees: 0 });
       }
       
-      const data = currencyData.get(currency)!;
+      const data = parentCurrencyData.get(currency)!;
       data.grossAmount += amount;
     });
 
-    // Add service fees per order
-    serviceFees.forEach(fee => {
+    parentServiceFees.forEach(fee => {
       const currency = fee.currencyCode;
       const feeAmount = parseFloat(fee.amount.toString());
       
-      if (currencyData.has(currency)) {
-        const data = currencyData.get(currency)!;
+      if (parentCurrencyData.has(currency)) {
+        const data = parentCurrencyData.get(currency)!;
         data.serviceFees += feeAmount;
       }
     });
 
-    // Calculate net revenue per currency
-    currencyData.forEach((data, currency) => {
-      const netAmount = Math.max(0, data.grossAmount - data.serviceFees);
-      const roundedAmount = Math.round(netAmount * 100) / 100;
+    // Calculate sales rep revenue per currency
+    const salesRepCurrencyData = new Map<string, { grossAmount: number; serviceFees: number }>();
+    const salesRepOrderIds = salesRepOrders.map(order => order.id);
+    const salesRepServiceFees = serviceFees.filter(fee => salesRepOrderIds.includes(fee.orderId));
+
+    salesRepOrders.forEach(order => {
+      const currency = order.currencyCode;
+      const amount = parseFloat(order.totalAmount.toString());
       
-      if (roundedAmount > 0) {
-        revenueByCurrency.set(currency, roundedAmount);
+      if (!salesRepCurrencyData.has(currency)) {
+        salesRepCurrencyData.set(currency, { grossAmount: 0, serviceFees: 0 });
+      }
+      
+      const data = salesRepCurrencyData.get(currency)!;
+      data.grossAmount += amount;
+    });
+
+    salesRepServiceFees.forEach(fee => {
+      const currency = fee.currencyCode;
+      const feeAmount = parseFloat(fee.amount.toString());
+      
+      if (salesRepCurrencyData.has(currency)) {
+        const data = salesRepCurrencyData.get(currency)!;
+        data.serviceFees += feeAmount;
       }
     });
 
-    // Convert to array format with currency symbols
-    const revenues = Array.from(revenueByCurrency.entries())
-      .map(([currency, amount]) => ({
-        currency,
-        amount,
-        currencySymbol: getCurrencySymbol(currency)
-      }));
+    // Calculate net revenue per currency for parent
+    const parentRevenues = Array.from(parentCurrencyData.entries())
+      .map(([currency, data]) => {
+        const netAmount = Math.max(0, data.grossAmount - data.serviceFees);
+        const roundedAmount = Math.round(netAmount * 100) / 100;
+        return { currency, amount: roundedAmount, currencySymbol: getCurrencySymbol(currency) };
+      })
+      .filter(revenue => revenue.amount > 0);
+
+    // Calculate net revenue per currency for sales reps
+    const salesRepRevenues = Array.from(salesRepCurrencyData.entries())
+      .map(([currency, data]) => {
+        const netAmount = Math.max(0, data.grossAmount - data.serviceFees);
+        const roundedAmount = Math.round(netAmount * 100) / 100;
+        return { currency, amount: roundedAmount, currencySymbol: getCurrencySymbol(currency) };
+      })
+      .filter(revenue => revenue.amount > 0);
+
+    // Get sales rep details for the response
+    const salesRepDetails = await prisma.salesRep.findMany({
+      where: {
+        parentSellerId: req.user.id,
+        status: 'ACTIVE'
+      },
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true
+          }
+        }
+      }
+    });
+
+    // Group sales rep orders by sales rep
+    const salesRepOrderGroups = new Map<string, any[]>();
+    salesRepOrders.forEach(order => {
+      const salesRepId = salesReps.find(rep => rep.userId === order.sellerId)?.userId;
+      if (salesRepId) {
+        if (!salesRepOrderGroups.has(salesRepId)) {
+          salesRepOrderGroups.set(salesRepId, []);
+        }
+        salesRepOrderGroups.get(salesRepId)!.push(order);
+      }
+    });
+
+    // Calculate revenue per sales rep
+    const salesRepRevenueDetails = salesRepDetails.map(rep => {
+      const repOrders = salesRepOrderGroups.get(rep.userId) || [];
+      const repOrderIds = repOrders.map(order => order.id);
+      const repServiceFees = serviceFees.filter(fee => repOrderIds.includes(fee.orderId));
+
+      const repCurrencyData = new Map<string, { grossAmount: number; serviceFees: number }>();
+      
+      repOrders.forEach(order => {
+        const currency = order.currencyCode;
+        const amount = parseFloat(order.totalAmount.toString());
+        
+        if (!repCurrencyData.has(currency)) {
+          repCurrencyData.set(currency, { grossAmount: 0, serviceFees: 0 });
+        }
+        
+        const data = repCurrencyData.get(currency)!;
+        data.grossAmount += amount;
+      });
+
+      repServiceFees.forEach(fee => {
+        const currency = fee.currencyCode;
+        const feeAmount = parseFloat(fee.amount.toString());
+        
+        if (repCurrencyData.has(currency)) {
+          const data = repCurrencyData.get(currency)!;
+          data.serviceFees += feeAmount;
+        }
+      });
+
+      const repRevenues = Array.from(repCurrencyData.entries())
+        .map(([currency, data]) => {
+          const netAmount = Math.max(0, data.grossAmount - data.serviceFees);
+          const roundedAmount = Math.round(netAmount * 100) / 100;
+          return { currency, amount: roundedAmount, currencySymbol: getCurrencySymbol(currency) };
+        })
+        .filter(revenue => revenue.amount > 0);
+
+      return {
+        salesRepId: rep.id,
+        userId: rep.userId,
+        name: `${rep.user.firstName} ${rep.user.lastName}`,
+        revenues: repRevenues,
+        totalAmount: repRevenues.reduce((sum, rev) => sum + rev.amount, 0)
+      };
+    }).filter(rep => rep.totalAmount > 0);
 
     logger.info('Available revenue calculated successfully:', { 
       userId: req.user.id,
-      revenues: revenues.map(r => ({ currency: r.currency, amount: r.amount }))
+      parentRevenues: parentRevenues.map(r => ({ currency: r.currency, amount: r.amount })),
+      salesRepRevenueDetails: salesRepRevenueDetails.map(rep => ({
+        name: rep.name,
+        totalAmount: rep.totalAmount,
+        revenues: rep.revenues.map(r => ({ currency: r.currency, amount: r.amount }))
+      }))
     });
 
     res.json({
-      revenues,
-      count: revenues.length
+      parentRevenue: {
+        revenues: parentRevenues,
+        count: parentRevenues.length
+      },
+      salesRepRevenue: {
+        salesReps: salesRepRevenueDetails,
+        count: salesRepRevenueDetails.length
+      }
     });
   } catch (error) {
     logger.error('Error getting available revenue:', error);
@@ -363,10 +519,13 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
       walletId
     });
 
+    // Get sales rep ID from route parameter if this is a sales rep settlement request
+    const salesRepId = req.params?.salesRepId;
+
     // Calculate settlement data based on channel
-    let settlementData;
+    let settlementData: any;
     if (channel === 'ECOMMERCE') {
-      settlementData = await calculateEcommerceSettlementData(req.user.id, currency, amount);
+      settlementData = await calculateEcommerceSettlementData(req.user.id, currency, amount, salesRepId);
     } else {
       settlementData = await calculateRidesSettlementData(req.user.id, currency, amount);
     }
@@ -430,7 +589,10 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
       reference: settlement.reference,
       channel,
       ordersUpdated: channel === 'ECOMMERCE' ? settlementData.totalOrdersCount : 0,
-      ridesUpdated: channel === 'RIDES' ? settlementData.totalRidesCount : 0
+      ridesUpdated: channel === 'RIDES' ? settlementData.totalRidesCount : 0,
+      includedOrderIds: channel === 'ECOMMERCE' ? settlementData.includedOrderIds : null,
+      settlementAmount: settlement.amount,
+      currency: settlement.currency
     });
 
     res.status(201).json({
@@ -904,34 +1066,82 @@ export const getSettlementDetails = async (req: AuthRequest, res: Response) => {
 };
 
 // Helper function to calculate ecommerce settlement data
-async function calculateEcommerceSettlementData(userId: string, currency: string, requestedAmount: number) {
+async function calculateEcommerceSettlementData(userId: string, currency: string, requestedAmount: number, salesRepId?: string) {
   try {
     logger.info('Starting ecommerce settlement calculation:', {
       userId,
       currency,
-      requestedAmount
+      requestedAmount,
+      salesRepId
     });
 
-    // Get all PAID orders for this currency that haven't been settled yet
-    const availableOrders = await prisma.orders.findMany({
-      where: {
-        sellerId: userId,
-        paymentStatus: 'PAID', // Only include PAID orders, not SETTLED
-        currencyCode: currency
-      },
-      select: {
-        id: true,
-        totalAmount: true,
-        orderNumber: true
-      },
-      orderBy: {
-        paidAt: 'asc' // Process oldest orders first (FIFO)
+    let availableOrders: any[];
+
+    if (salesRepId) {
+      // Settlement request for a specific sales rep
+      const salesRep = await prisma.salesRep.findFirst({
+        where: {
+          id: salesRepId,
+          parentSellerId: userId,
+          status: 'ACTIVE'
+        },
+        select: {
+          userId: true
+        }
+      });
+
+      if (!salesRep) {
+        return {
+          isValid: false,
+          error: 'Sales rep not found or not authorized'
+        };
       }
-    });
+
+      // Get orders for this specific sales rep only
+      availableOrders = await prisma.orders.findMany({
+        where: {
+          sellerId: salesRep.userId,
+          paymentStatus: 'PAID',
+          currencyCode: currency
+        },
+        select: {
+          id: true,
+          totalAmount: true,
+          orderNumber: true,
+          sellerId: true
+        },
+        orderBy: {
+          paidAt: 'asc' // Process oldest orders first (FIFO)
+        }
+      });
+    } else {
+      // Settlement request for parent seller only
+      availableOrders = await prisma.orders.findMany({
+        where: {
+          sellerId: userId,
+          paymentStatus: 'PAID',
+          currencyCode: currency
+        },
+        select: {
+          id: true,
+          totalAmount: true,
+          orderNumber: true,
+          sellerId: true
+        },
+        orderBy: {
+          paidAt: 'asc' // Process oldest orders first (FIFO)
+        }
+      });
+    }
 
     logger.info('Available orders found:', {
       count: availableOrders.length,
-      orders: availableOrders.map(o => ({ id: o.id, amount: o.totalAmount.toString() }))
+      isSalesRepSettlement: !!salesRepId,
+      orders: availableOrders.map(o => ({ 
+        id: o.id, 
+        amount: o.totalAmount.toString(),
+        sellerId: o.sellerId
+      }))
     });
 
     if (availableOrders.length === 0) {
@@ -1010,7 +1220,16 @@ async function calculateEcommerceSettlementData(userId: string, currency: string
 
     // If requested amount equals available amount, include all orders
     if (Math.abs(roundedRequestedAmount - roundedAvailableAmount) < 0.01) {
-      logger.info('Requested amount equals available amount, including all orders');
+      logger.info('Requested amount equals available amount, including all orders', {
+        totalOrdersCount: orderDetails.length,
+        includedOrderIds: orderDetails.map(order => order.orderId),
+        orderBreakdown: orderDetails.map(order => ({
+          orderId: order.orderId,
+          orderNumber: order.orderNumber,
+          netAmount: order.netAmount,
+          isSalesRepOrder: availableOrders.find(o => o.id === order.orderId)?.salesRep ? true : false
+        }))
+      });
       return {
         isValid: true,
         includedOrderIds: orderDetails.map(order => order.orderId),
@@ -1059,7 +1278,8 @@ async function calculateEcommerceSettlementData(userId: string, currency: string
       includedServiceFees,
       finalNetAmount,
       roundedFinalAmount,
-      remainingAmount
+      remainingAmount,
+      includedOrderIds: includedOrders.map(order => order.orderId)
     });
 
     return {
@@ -1276,7 +1496,7 @@ async function calculateRidesSettlementData(userId: string, currency: string, re
   }
 }
 
-// Helper function to update orders to SETTLED status
+// Helper function to update orders to SETTLED status (both parent and sales rep orders)
 async function updateOrdersToSettled(orderIds: string[]) {
   try {
     const result = await prisma.orders.updateMany({

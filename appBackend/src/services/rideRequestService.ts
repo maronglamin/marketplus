@@ -804,6 +804,12 @@ export class RideRequestService {
    * Clean up expired requests for a specific customer
    */
   static async cleanupExpiredRequestsForCustomer(customerId: string): Promise<void> {
+    // Defensive: avoid crashing if client accessors aren't initialized for any reason
+    // @ts-expect-error optional chaining to guard against unexpected undefined
+    if (!prisma?.rideRequest?.updateMany) {
+      console.warn('rideRequestService.cleanupExpiredRequestsForCustomer: prisma.rideRequest.updateMany is unavailable');
+      return;
+    }
     await prisma.rideRequest.updateMany({
       where: {
         customerId,
@@ -822,6 +828,12 @@ export class RideRequestService {
    * Clean up all expired requests
    */
   static async cleanupExpiredRequests(): Promise<void> {
+    // Defensive: avoid crashing if client accessors aren't initialized for any reason
+    // @ts-expect-error optional chaining to guard against unexpected undefined
+    if (!prisma?.rideRequest?.updateMany) {
+      console.warn('rideRequestService.cleanupExpiredRequests: prisma.rideRequest.updateMany is unavailable');
+      return;
+    }
     await prisma.rideRequest.updateMany({
       where: {
         status: RideStatus.REQUESTED,

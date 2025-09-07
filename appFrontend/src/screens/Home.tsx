@@ -1079,10 +1079,6 @@ export function Home() {
                         <Text style={styles.benefitText}>Flexible working hours</Text>
                       </View>
                       <View style={styles.benefitItem}>
-                        <Ionicons name="shield-checkmark-outline" size={20} color="#0EA5E9" />
-                        <Text style={styles.benefitText}>Insurance coverage included</Text>
-                      </View>
-                      <View style={styles.benefitItem}>
                         <Ionicons name="trending-up-outline" size={20} color="#0EA5E9" />
                         <Text style={styles.benefitText}>Request settlement any time</Text>
                       </View>

@@ -28,6 +28,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { kycService, type SellerKycResponse } from '../services/kycService'
 import { interestService, type Interest } from '../services/interestService'
 import { productService, type SellerStats } from '../services/productService'
+import { salesRepService, type SalesRep } from '../services/salesRepService'
 import { getImageUrl } from '../utils/imageUtils'
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -38,6 +39,7 @@ export function SellerDashboard() {
   const navigation = useNavigation<SellerDashboardNavigationProp>()
   const { user, token } = useAuth()
   const [kycStatus, setKycStatus] = useState<SellerKycResponse | null>(null)
+  const [salesRepStatus, setSalesRepStatus] = useState<SalesRep | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [customerInterests, setCustomerInterests] = useState<Interest[]>([])
@@ -52,6 +54,33 @@ export function SellerDashboard() {
     hasOtherCurrencies: false
   })
   const [statsLoading, setStatsLoading] = useState(false)
+
+  // Get current user from JWT token to ensure fresh data
+  const getCurrentUserFromToken = async () => {
+    try {
+      const storedToken = await AsyncStorage.getItem('token')
+      if (!storedToken) {
+        console.log('No token found')
+        return null
+      }
+
+      // Decode JWT token to get user info
+      const tokenParts = storedToken.split('.')
+      if (tokenParts.length !== 3) {
+        console.log('Invalid token format')
+        return null
+      }
+
+      const payload = JSON.parse(atob(tokenParts[1]))
+      const currentUserId = payload.userId || payload.sub || payload.id
+      
+      console.log('Current user ID from token:', currentUserId)
+      return currentUserId
+    } catch (error) {
+      console.error('Error getting user from token:', error)
+      return null
+    }
+  }
 
   const checkKycStatus = useCallback(async (forceRefresh = false) => {
     try {
@@ -87,8 +116,41 @@ export function SellerDashboard() {
     }
   }, [])
 
+  const checkSalesRepStatus = useCallback(async () => {
+    const currentUserId = await getCurrentUserFromToken()
+    if (!currentUserId) return
+
+    try {
+      console.log('Checking sales rep status for user:', currentUserId)
+      
+      // Use cached sales rep check for better performance
+      const { isSalesRep, salesRepData } = await salesRepService.getSalesRepStatusCached(currentUserId)
+      
+      if (isSalesRep && salesRepData && salesRepData.status === 'ACTIVE' && salesRepData.userId === currentUserId) {
+        console.log('User is an active sales rep:', salesRepData)
+        setSalesRepStatus(salesRepData)
+        // Sales reps don't need their own KYC, they inherit access from parent
+        // Set a mock KYC status to allow dashboard access
+        setKycStatus({
+          status: 'APPROVED',
+          id: 'sales-rep-inherited',
+          userId: currentUserId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        })
+      } else {
+        console.log('User is not an active sales rep or user ID mismatch')
+        setSalesRepStatus(null)
+      }
+    } catch (error) {
+      console.error('Error checking sales rep status:', error)
+      setSalesRepStatus(null)
+    }
+  }, [])
+
   const loadCustomerInterests = useCallback(async () => {
-    if (kycStatus?.status !== 'APPROVED') return
+    const isApproved = kycStatus?.status === 'APPROVED' || salesRepStatus?.status === 'ACTIVE'
+    if (!isApproved) return
     
     try {
       setInterestsLoading(true)
@@ -105,10 +167,11 @@ export function SellerDashboard() {
     } finally {
       setInterestsLoading(false)
     }
-  }, [kycStatus?.status])
+  }, [kycStatus?.status, salesRepStatus?.status])
 
   const loadSellerStats = useCallback(async () => {
-    if (kycStatus?.status !== 'APPROVED') return
+    const isApproved = kycStatus?.status === 'APPROVED' || salesRepStatus?.status === 'ACTIVE'
+    if (!isApproved) return
     
     try {
       setStatsLoading(true)
@@ -119,29 +182,76 @@ export function SellerDashboard() {
     } finally {
       setStatsLoading(false)
     }
-  }, [kycStatus?.status])
+  }, [kycStatus?.status, salesRepStatus?.status])
 
   // Add focus listener to refresh data when screen comes into focus
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      checkKycStatus(true)
+    const unsubscribe = navigation.addListener('focus', async () => {
+      // Always get fresh user from token on focus
+      const currentUserId = await getCurrentUserFromToken()
+      if (!currentUserId) return
+      
+      // Clear state first to ensure fresh data
+      setKycStatus(null)
+      setSalesRepStatus(null)
+      setCustomerInterests([])
+      setStats({
+        totalProducts: 0,
+        activeProducts: 0,
+        totalSales: 0,
+        pendingOrders: 0,
+        totalRevenue: 0,
+        revenueCurrency: 'USD',
+        hasOtherCurrencies: false
+      })
+      
+      // Then check status with fresh data
+      await checkSalesRepStatus()
+      await checkKycStatus(true)
     })
 
     return unsubscribe
-  }, [navigation, checkKycStatus])
+  }, [navigation, checkKycStatus, checkSalesRepStatus])
 
-  // Initial load
+  // Initial load - always get fresh user from token
   useEffect(() => {
-    checkKycStatus()
-  }, [token, checkKycStatus])
+    const initializeDashboard = async () => {
+      const currentUserId = await getCurrentUserFromToken()
+      if (!currentUserId) {
+        setLoading(false)
+        return
+      }
+      
+      // Clear any existing state
+      setKycStatus(null)
+      setSalesRepStatus(null)
+      setCustomerInterests([])
+      setStats({
+        totalProducts: 0,
+        activeProducts: 0,
+        totalSales: 0,
+        pendingOrders: 0,
+        totalRevenue: 0,
+        revenueCurrency: 'USD',
+        hasOtherCurrencies: false
+      })
+      
+      // Load fresh data
+      await checkSalesRepStatus()
+      await checkKycStatus()
+    }
+    
+    initializeDashboard()
+  }, [token, checkKycStatus, checkSalesRepStatus])
 
-  // Load customer interests and stats when KYC is approved
+  // Load customer interests and stats when KYC is approved or user is active sales rep
   useEffect(() => {
-    if (kycStatus?.status === 'APPROVED') {
+    const isApproved = kycStatus?.status === 'APPROVED' || salesRepStatus?.status === 'ACTIVE'
+    if (isApproved) {
       loadCustomerInterests()
       loadSellerStats()
     }
-  }, [kycStatus?.status, loadCustomerInterests, loadSellerStats])
+  }, [kycStatus?.status, salesRepStatus?.status, loadCustomerInterests, loadSellerStats])
 
   // Mock data for rating - replace with actual API call
   const ratingData = {
@@ -333,8 +443,15 @@ export function SellerDashboard() {
     )
   }
 
-  // Show dashboard only if status is approved
-  if (kycStatus?.status === 'APPROVED') {
+  // Show dashboard if KYC is approved OR user is an active sales rep
+  const isApproved = kycStatus?.status === 'APPROVED' || salesRepStatus?.status === 'ACTIVE'
+  console.log('Dashboard access check:', {
+    kycStatus: kycStatus?.status,
+    salesRepStatus: salesRepStatus?.status,
+    isApproved
+  })
+  
+  if (isApproved) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar
@@ -350,7 +467,9 @@ export function SellerDashboard() {
             >
               <Ionicons name="arrow-back" size={24} color="#111827" />
             </TouchableOpacity>
-            <Text style={styles.title}>Seller Dashboard</Text>
+            <Text style={styles.title}>
+              {salesRepStatus?.status === 'ACTIVE' ? 'Sales Rep Dashboard' : 'Seller Dashboard'}
+            </Text>
             <TouchableOpacity
               style={styles.settingsButton}
               onPress={() => navigation.navigate('Settings')}
@@ -367,7 +486,14 @@ export function SellerDashboard() {
             activeOpacity={0.7}
           >
             <View style={styles.revenueHeader}>
-              <Text style={styles.revenueTitle}>Total Revenue</Text>
+              <View style={styles.revenueTitleContainer}>
+                <Text style={styles.revenueTitle}>Total Revenue</Text>
+                {salesRepStatus?.status === 'ACTIVE' && (
+                  <View style={styles.salesRepBadge}>
+                    <Text style={styles.salesRepBadgeText}>Sales Rep</Text>
+                  </View>
+                )}
+              </View>
               <View style={styles.viewAllButton}>
                 <Text style={styles.viewAllText}>
                   {stats.hasOtherCurrencies ? 'View All Currencies' : 'View All'}
@@ -381,6 +507,12 @@ export function SellerDashboard() {
             <Text style={styles.revenueSubtitle}>
               {stats.revenueCurrency} {stats.hasOtherCurrencies ? '(Latest TNX)' : ''}
             </Text>
+            {salesRepStatus?.status === 'ACTIVE' && (
+              <Text style={styles.salesRepInfo}>
+                Branch: {salesRepStatus.branchName}
+                {salesRepStatus.branchLocation && ` - ${salesRepStatus.branchLocation}`}
+              </Text>
+            )}
             <View style={styles.ratingContainer}>
               <Ionicons name="star" size={16} color="#F59E0B" />
               <Text style={styles.rating}>{ratingData.averageRating}</Text>
@@ -657,10 +789,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  revenueTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   revenueTitle: {
     fontSize: 16,
     color: '#FFFFFF',
     opacity: 0.9,
+  },
+  salesRepBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  salesRepBadgeText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  salesRepInfo: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    opacity: 0.8,
+    marginTop: 4,
   },
   revenueValue: {
     fontSize: 32,

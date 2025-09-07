@@ -23,6 +23,7 @@ import { generateAndSharePDF } from '../services/pdfExportService';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { orderService, type Order } from '../services/orderService';
 import { kycService } from '../services/kycService';
+import { salesRepService, type SalesRep } from '../services/salesRepService';
 import { API_URL } from '../config/env';
 
 // API_URL is provided by env; removed duplicate declaration
@@ -160,6 +161,8 @@ export function CustomerOrders() {
   const [activeTab, setActiveTab] = useState<'my-orders' | 'customer-orders'>('my-orders');
   const [hasKyc, setHasKyc] = useState(false);
   const [kycLoading, setKycLoading] = useState(true);
+  const [salesRepStatus, setSalesRepStatus] = useState<SalesRep | null>(null);
+  const [salesRepLoading, setSalesRepLoading] = useState(true);
 
   // Refs for optimization
   const scrollViewRef = useRef<ScrollView>(null);
@@ -181,8 +184,12 @@ export function CustomerOrders() {
   }, []);
 
   useEffect(() => {
+    // Load KYC status first (critical for determining access)
     checkKycStatus();
+    // Load sales rep status in background (non-blocking)
+    checkSalesRepStatus();
   }, []);
+
   // Fetch fresh user via JWT and prefer it for seller/buyer logic
   useEffect(() => {
     const fetchFreshUser = async () => {
@@ -197,13 +204,20 @@ export function CustomerOrders() {
     fetchFreshUser();
   }, [refreshUser]);
 
-  // Also refresh on focus (attached after loadOrders is defined)
-
+  // Load orders as soon as KYC status is determined (don't wait for sales rep check)
   useEffect(() => {
     if (!kycLoading) {
       loadOrders();
     }
   }, [activeTab, kycLoading]);
+
+  // Update UI when sales rep status is determined (but don't block orders loading)
+  useEffect(() => {
+    if (!salesRepLoading && salesRepStatus) {
+      // Sales rep status determined, refresh orders to show correct data
+      loadOrders();
+    }
+  }, [salesRepStatus, salesRepLoading]);
 
   const checkKycStatus = useCallback(async () => {
     try {
@@ -221,6 +235,31 @@ export function CustomerOrders() {
       setKycLoading(false);
     }
   }, []);
+
+  const checkSalesRepStatus = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      setSalesRepLoading(true);
+      console.log('Checking sales rep status for user:', user.id);
+      
+      // Use cached sales rep check for better performance
+      const { isSalesRep, salesRepData } = await salesRepService.getSalesRepStatusCached(user.id);
+      
+      if (isSalesRep && salesRepData && salesRepData.status === 'ACTIVE') {
+        console.log('User is an active sales rep:', salesRepData);
+        setSalesRepStatus(salesRepData);
+      } else {
+        console.log('User is not an active sales rep');
+        setSalesRepStatus(null);
+      }
+    } catch (error: any) {
+      console.error('Error checking sales rep status:', error);
+      setSalesRepStatus(null);
+    } finally {
+      setSalesRepLoading(false);
+    }
+  }, [user?.id]);
 
   const loadOrders = useCallback(async (isLoadMore: boolean = false) => {
     try {
@@ -280,13 +319,17 @@ export function CustomerOrders() {
         const response = await api.get('/api/users/me');
         setFreshUser(response.data);
         await refreshUser();
+        // Only refresh sales rep status if not already loaded (avoid redundant checks)
+        if (salesRepLoading) {
+          await checkSalesRepStatus();
+        }
         await loadOrders();
       } catch (e) {
         console.log('Focus refresh user/orders failed:', e);
       }
     });
     return unsubscribe;
-  }, [navigation, loadOrders, refreshUser]);
+  }, [navigation, loadOrders, refreshUser, checkSalesRepStatus, salesRepLoading]);
 
   const handleLoadMore = useCallback(() => {
     if (!loadingMore && hasMore && !loadMoreTimeout.current) {
@@ -520,14 +563,28 @@ export function CustomerOrders() {
       />
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Orders</Text>
-          <View style={styles.headerActions}>
+                      <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <Ionicons name="arrow-back" size={24} color="#111827" />
+            </TouchableOpacity>
+            <View style={styles.titleContainer}>
+              <Text style={styles.title}>
+                {salesRepLoading ? 'Orders' : 
+                 salesRepStatus?.status === 'ACTIVE' ? 'Sales Rep Orders' : 'Orders'}
+              </Text>
+              {salesRepLoading ? (
+                <View style={styles.loadingBadge}>
+                  <ActivityIndicator size="small" color="#2563EB" />
+                </View>
+              ) : salesRepStatus?.status === 'ACTIVE' ? (
+                <View style={styles.salesRepBadge}>
+                  <Text style={styles.salesRepBadgeText}>Sales Rep</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.headerActions}>
             <TouchableOpacity
               onPress={() => setShowDatePicker(true)}
               style={styles.exportButton}
@@ -560,8 +617,17 @@ export function CustomerOrders() {
           </View>
         </View>
 
-        {/* Tab Switching - Only show if user has KYC */}
-        {hasKyc && (
+        {/* Tab Switching - Show if user has KYC or is an active sales rep */}
+        {(() => {
+          const showTabs = hasKyc || (salesRepStatus?.status === 'ACTIVE');
+          console.log('CustomerOrders tab visibility check:', {
+            hasKyc,
+            salesRepStatus: salesRepStatus?.status,
+            salesRepLoading,
+            showTabs
+          });
+          return showTabs;
+        })() && (
           <View style={styles.tabContainer}>
             <TouchableOpacity
               style={[styles.tab, activeTab === 'my-orders' && styles.activeTab]}
@@ -586,7 +652,7 @@ export function CustomerOrders() {
                 color={activeTab === 'customer-orders' ? '#2563EB' : '#6B7280'} 
               />
               <Text style={[styles.tabText, activeTab === 'customer-orders' && styles.activeTabText]}>
-                Customer Orders
+                {salesRepStatus?.status === 'ACTIVE' ? 'My Sales' : 'Customer Orders'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -625,12 +691,19 @@ export function CustomerOrders() {
             <View style={styles.emptyContainer}>
               <Ionicons name="bag-outline" size={48} color="#9CA3AF" />
               <Text style={styles.emptyTitle}>
-                {activeTab === 'my-orders' ? 'No Orders Yet' : 'No Customer Orders'}
+                {activeTab === 'my-orders' 
+                  ? 'No Orders Yet' 
+                  : salesRepStatus?.status === 'ACTIVE' 
+                    ? 'No Sales Yet' 
+                    : 'No Customer Orders'
+                }
               </Text>
               <Text style={styles.emptyText}>
                 {activeTab === 'my-orders' 
                   ? "You haven't placed any orders yet. Start shopping to see your orders here."
-                  : "You don't have any customer orders yet. When customers place orders for your products, they'll appear here."
+                  : salesRepStatus?.status === 'ACTIVE'
+                    ? "You don't have any sales yet. When customers place orders for products you've sold, they'll appear here."
+                    : "You don't have any customer orders yet. When customers place orders for your products, they'll appear here."
                 }
               </Text>
               {activeTab === 'my-orders' && (
@@ -659,7 +732,7 @@ export function CustomerOrders() {
                         <Text style={styles.orderDate}>{formatDate(order.createdAt)}</Text>
                         {activeTab === 'customer-orders' && order.customer && (
                           <Text style={styles.customerName}>
-                            Customer: {order.customer.name}
+                            {salesRepStatus?.status === 'ACTIVE' ? 'Customer' : 'Customer'}: {order.customer.name}
                           </Text>
                         )}
                       </View>
@@ -816,10 +889,32 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 12,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     fontSize: 18,
     fontWeight: '600',
     color: '#111827',
+  },
+  salesRepBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  salesRepBadgeText: {
+    fontSize: 12,
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+  loadingBadge: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   headerActions: {
     flexDirection: 'row',

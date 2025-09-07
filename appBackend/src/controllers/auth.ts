@@ -5,6 +5,7 @@ import { createOTP, verifyOTP } from '../utils/otp';
 import { generateToken } from '../utils/jwt';
 import twilio from 'twilio';
 import { driverService } from '../services/driverService';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -34,6 +35,7 @@ const upsertDevice = async (userId: string, deviceInfo: any) => {
       lastLoginAt: new Date(),
     },
     create: {
+      id: crypto.randomUUID(),
       deviceId: deviceInfo.deviceId,
       deviceName: deviceInfo.deviceName,
       deviceType: deviceInfo.deviceType,
@@ -43,6 +45,7 @@ const upsertDevice = async (userId: string, deviceInfo: any) => {
       phoneNumber: deviceInfo.phoneNumber,
       userId,
       isVerified: false,
+      updatedAt: new Date(),
     },
   });
 };
@@ -114,12 +117,15 @@ export const initiateLogin = async (req: Request, res: Response) => {
       // Create new user with unverified device
       await prisma.user.create({
         data: {
+          id: randomUUID(),
           phoneNumber,
           firstName: '', // Will be updated during registration
           lastName: '',  // Will be updated during registration
           pin: hashedPin,
+          updatedAt: new Date(),
           devices: {
             create: {
+              id: randomUUID(),
               deviceId: deviceInfo.deviceId,
               deviceName: deviceInfo.deviceName,
               deviceType: deviceInfo.deviceType,
@@ -128,6 +134,7 @@ export const initiateLogin = async (req: Request, res: Response) => {
               osVersion: deviceInfo.osVersion,
               phoneNumber,
               isVerified: false,
+              updatedAt: new Date(),
             },
           },
         },
@@ -142,46 +149,25 @@ export const initiateLogin = async (req: Request, res: Response) => {
     let pinForFirstTime: string | null = null;
 
     if (isFirstTime) {
-      // For first-time users, we need to create the user and device first
-      const tempPin = await createOTP(phoneNumber, 'PIN_RESET', { skipSending: true, context: 'initiateLogin:first_time_pin' });
-      const hashedPin = await bcrypt.hash(tempPin, 10);
-
-      // Create new user with unverified device
-      const newUser = await prisma.user.create({
-        data: {
-          phoneNumber,
-          firstName: '', // Will be updated during registration
-          lastName: '',  // Will be updated during registration
-          pin: hashedPin,
-          devices: {
-            create: {
-              deviceId: deviceInfo.deviceId,
-              deviceName: deviceInfo.deviceName,
-              deviceType: deviceInfo.deviceType,
-              brand: deviceInfo.brand,
-              modelName: deviceInfo.modelName,
-              osVersion: deviceInfo.osVersion,
-              phoneNumber,
-              isVerified: false,
-            },
-          },
-        },
+      // For first-time users, we already created the user above
+      // Get the newly created user to get the device info
+      const newUser = await prisma.user.findUnique({
+        where: { phoneNumber },
         include: { devices: true }
       });
-
-      const device = newUser.devices[0];
-      pinForFirstTime = tempPin;
-
-      // Generate verification OTP and send combined (OTP + PIN) once
-      await createOTP(phoneNumber, 'VERIFICATION', {
-        sendCombined: true,
-        includeVerificationCode: pinForFirstTime,
-        userId: newUser.id,
-        deviceId: device.id,
-        deviceInfo,
-        context: 'initiateLogin:first_time_combined',
-      });
-      console.log('Sent combined OTP + PIN for first-time user');
+      
+      if (newUser) {
+        const device = newUser.devices[0];
+        
+        // Generate verification OTP for new user
+        await createOTP(phoneNumber, 'VERIFICATION', {
+          userId: newUser.id,
+          deviceId: device.id,
+          deviceInfo,
+          context: 'initiateLogin:new_user',
+        });
+        console.log('Sent verification OTP for new user');
+      }
     } else {
       // Existing user - get or create device to get the database ID
       const device = await upsertDevice(user!.id, { ...deviceInfo, phoneNumber });
@@ -267,6 +253,7 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
         lastLoginAt: new Date(),
       },
       create: {
+        id: randomUUID(),
         deviceId: deviceInfo.deviceId,
         deviceName: deviceInfo.deviceName,
         deviceType: deviceInfo.deviceType,
@@ -276,6 +263,7 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
         phoneNumber: phoneNumber,
         userId: user.id,
         isVerified: true,
+        updatedAt: new Date(),
       },
     });
 
@@ -340,7 +328,7 @@ export const registerUser = async (req: Request, res: Response) => {
     }
 
     // Find the verified device
-    const verifiedDevice = existingUser.devices.find(d => d.isVerified);
+    const verifiedDevice = existingUser.devices.find((d: any) => d.isVerified);
     if (!verifiedDevice) {
       return res.status(403).json({ message: 'No verified device found' });
     }
@@ -514,7 +502,7 @@ export const logout = async (req: AuthRequest, res: Response) => {
     // Set driver status to offline before logout
     try {
       console.log('🔄 Setting driver status to offline before logout...');
-      await driverService.updateDriverStatus(session.userId, false);
+      await driverService.updateDriverStatus(session.user.id, false);
       console.log('✅ Driver status set to offline successfully');
     } catch (error) {
       console.error('⚠️ Error setting driver status to offline:', error);
@@ -533,7 +521,7 @@ export const logout = async (req: AuthRequest, res: Response) => {
     });
 
     console.log('User logged out successfully:', {
-      userId: session.userId,
+      userId: session.user.id,
       deviceId: session.deviceId
     });
 

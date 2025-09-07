@@ -59,4 +59,26 @@ export const orderService = {
     const response = await api.get(`/api/orders/product/${productId}/count`);
     return response.data;
   },
+
+  async getSalesRepOrders(salesRepId: string): Promise<{
+    orders: Order[];
+    ordersByCurrency: Array<{
+      currency: string;
+      orders: Order[];
+      totalAmount: number;
+      orderCount: number;
+    }>;
+    totalCount: number;
+    totalAmount: number;
+    salesRep: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      branchName: string;
+      branchLocation?: string;
+    };
+  }> {
+    const response = await api.get(`/api/orders/sales-rep-orders/${salesRepId}`);
+    return response.data;
+  },
 }; 

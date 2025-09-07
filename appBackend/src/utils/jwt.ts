@@ -38,10 +38,12 @@ export const generateToken = async (userId: string, deviceId: string): Promise<s
     // Store session in database
     await prisma.session.create({
       data: {
+        id: crypto.randomUUID(),
         token,
         expiresAt,
         userId,
         deviceId,
+        updatedAt: new Date(),
       },
     });
 

@@ -13,6 +13,7 @@ export interface CreateRideRequestData {
   currencySymbol?: string;
   paymentMethod?: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'WALLET';
   customerNotes?: string;
+  driverId?: string; // For direct driver requests
 }
 
 export interface RideRequest {
@@ -135,6 +136,29 @@ export class RideRequestService {
       return response.data.data;
     } catch (error) {
       console.error('Error creating ride request:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a direct driver request
+   */
+  static async createDirectDriverRequest(data: CreateRideRequestData): Promise<RideRequest> {
+    try {
+      console.log('🚀 Frontend: Calling createDirectDriverRequest with data:', {
+        driverId: data.driverId,
+        pickupLocation: data.pickupLocation,
+        destinationLocation: data.destinationLocation,
+        estimatedPrice: data.estimatedPrice
+      });
+      
+      const response = await api.post('/api/ride-requests/direct-driver', data);
+      
+      console.log('✅ Frontend: Direct driver request response:', response.data);
+      
+      return response.data.data;
+    } catch (error) {
+      console.error('❌ Frontend: Error creating direct driver request:', error);
       throw error;
     }
   }

@@ -81,6 +81,25 @@ export interface AvailableRevenue {
   currencySymbol: string;
 }
 
+export interface SalesRepRevenue {
+  salesRepId: string;
+  userId: string;
+  name: string;
+  revenues: AvailableRevenue[];
+  totalAmount: number;
+}
+
+export interface AvailableRevenueResponse {
+  parentRevenue: {
+    revenues: AvailableRevenue[];
+    count: number;
+  };
+  salesRepRevenue: {
+    salesReps: SalesRepRevenue[];
+    count: number;
+  };
+}
+
 export interface RideDetail {
   id: string;
   rideId: string;
@@ -111,10 +130,10 @@ export interface SettlementRequestData {
 
 class SettlementService {
   // Get available revenue for settlement (ecommerce)
-  async getAvailableRevenue(): Promise<AvailableRevenue[]> {
+  async getAvailableRevenue(): Promise<AvailableRevenueResponse> {
     try {
       const response = await api.get('/api/settlements/available-revenue');
-      return response.data.revenues;
+      return response.data;
     } catch (error: any) {
       console.error('Error fetching available revenue:', error);
       if (error.response?.data?.message) {
@@ -219,6 +238,21 @@ class SettlementService {
         throw new Error(error.response.data.message);
       } else {
         throw new Error('Failed to create settlement request');
+      }
+    }
+  }
+
+  // Create settlement request for specific sales rep
+  async createSalesRepSettlementRequest(salesRepId: string, data: SettlementRequestData): Promise<SettlementRequest> {
+    try {
+      const response = await api.post(`/api/settlements/request/sales-rep/${salesRepId}`, data);
+      return response.data.settlement;
+    } catch (error: any) {
+      console.error('Error creating sales rep settlement request:', error);
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      } else {
+        throw new Error('Failed to create sales rep settlement request');
       }
     }
   }

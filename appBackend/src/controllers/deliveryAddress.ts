@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -77,6 +78,7 @@ export const createDeliveryAddress = async (req: AuthRequest, res: Response) => 
 
     const newAddress = await prisma.deliveryAddress.create({
       data: {
+        id: crypto.randomUUID(),
         userId,
         address: address.trim(),
         city: city.trim(),
@@ -84,7 +86,8 @@ export const createDeliveryAddress = async (req: AuthRequest, res: Response) => 
         postalCode: postalCode?.trim() || null,
         country: country.trim(),
         label: label?.trim() || null,
-        isDefault: isDefault || false
+        isDefault: isDefault || false,
+        updatedAt: new Date(),
       }
     });
 

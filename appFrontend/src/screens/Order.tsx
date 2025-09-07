@@ -78,9 +78,48 @@ export function Order() {
   const { user, token } = useAuth();
 
   useEffect(() => {
-    loadProductDetails();
-    loadDeliveryAddresses();
+    // Load product details immediately (critical for order)
+    const loadProduct = async () => {
+      try {
+        setLoading(true);
+        const productDetail = await productService.getProductById(productId);
+        setProduct(productDetail);
+        setLoading(false); // Hide loading as soon as product is loaded
+      } catch (error) {
+        console.error('Error loading product:', error);
+        Alert.alert('Error', 'Failed to load product details. Please try again.');
+        setLoading(false);
+      }
+    };
+
+    loadProduct();
   }, [productId]);
+
+  // Load addresses separately and lazily (non-critical for initial render)
+  useEffect(() => {
+    const loadAddresses = async () => {
+      try {
+        setLoadingAddresses(true);
+        const response = await deliveryAddressService.getDeliveryAddresses();
+        setDeliveryAddresses(response.addresses);
+        
+        // Set default address if available
+        const defaultAddress = response.addresses.find(addr => addr.isDefault);
+        if (defaultAddress) {
+          setSelectedAddress(defaultAddress);
+        }
+      } catch (error) {
+        console.error('Error loading addresses:', error);
+        // Don't show error for addresses as they're not critical
+      } finally {
+        setLoadingAddresses(false);
+      }
+    };
+
+    // Load addresses after a small delay to prioritize product loading
+    const timer = setTimeout(loadAddresses, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const loadDeliveryAddresses = async () => {
     try {

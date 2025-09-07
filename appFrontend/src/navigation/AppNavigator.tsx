@@ -2,6 +2,10 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Home } from '../screens/Home';
 import { Settings } from '../screens/Settings';
+import { BranchesScreen } from '../screens/BranchesScreen';
+import { SalesRepsScreen } from '../screens/SalesRepsScreen';
+import { SettlementsScreen } from '../screens/SettlementsScreen';
+import { ReportsScreen } from '../screens/ReportsScreen';
 import { Notifications } from '../screens/Notifications';
 import { AccountSettings } from '../screens/AccountSettings';
 import Delivery from '@screens/account-settings/Delivery';
@@ -65,6 +69,10 @@ import { ProductCategoryOptions } from '../screens/ProductCategoryOptions';
 export type AppStackParamList = {
   Home: { openSearch?: boolean } | undefined;
   Settings: undefined;
+  BranchesScreen: undefined;
+  SalesRepsScreen: undefined;
+  SettlementsScreen: undefined;
+  ReportsScreen: undefined;
   Notifications: undefined;
   AccountSettings: undefined;
   AccountType: undefined;
@@ -264,6 +272,10 @@ export function AppNavigator() {
         />
         <Stack.Screen name="SellerInterestDetail" component={SellerInterestDetail} />
         <Stack.Screen name="Settings" component={Settings} />
+        <Stack.Screen name="BranchesScreen" component={BranchesScreen} />
+        <Stack.Screen name="SalesRepsScreen" component={SalesRepsScreen} />
+        <Stack.Screen name="SettlementsScreen" component={SettlementsScreen} />
+        <Stack.Screen name="ReportsScreen" component={ReportsScreen} />
         <Stack.Screen name="Notifications" component={Notifications} />
         <Stack.Screen name="AccountSettings" component={AccountSettings} />
         <Stack.Screen name="AccountType" component={AccountType} />

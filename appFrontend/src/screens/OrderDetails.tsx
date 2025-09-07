@@ -1203,6 +1203,57 @@ export function OrderDetails() {
     }
   };
 
+  const handleUpdateDiscount = async () => {
+    // Security check - only seller can update discount
+    if (order?.sellerId !== user?.id) {
+      Alert.alert('Access Denied', 'Only the product owner can update discount.');
+      return;
+    }
+
+    // Check if payment is completed or order is confirmed
+    if (order?.paymentStatus?.toLowerCase() === 'paid' || order?.status === 'confirmed') {
+      Alert.alert('Cannot Update Discount', 'Discount cannot be updated after payment is completed.');
+      return;
+    }
+
+    // Validate discount amount
+    const discountAmount = order?.discountAmount || 0;
+    if (isNaN(discountAmount) || discountAmount < 0) {
+      Alert.alert('Validation Error', 'Please enter a valid discount amount (must be a positive number).');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    try {
+      setUpdatingPrice(true);
+      
+      const payload = {
+        discountAmount: discountAmount,
+        currency: order?.currencyCode
+      };
+      
+      const response = await api.patch(`/api/orders/${orderId}/discount`, payload);
+      
+      if (order) {
+        setOrder({
+          ...order,
+          totalAmount: response.data.order.totalAmount,
+          discountAmount: response.data.order.discountAmount,
+          currencyCode: response.data.order.currencyCode
+        });
+      }
+      
+      Alert.alert('Success', 'Discount updated successfully');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Error updating discount:', error);
+      Alert.alert('Error', 'Failed to update discount');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setUpdatingPrice(false);
+    }
+  };
+
   const updateOrderStatus = async (newStatus: string) => {
     try {
       setUpdatingStatus(true);
@@ -1743,12 +1794,61 @@ export function OrderDetails() {
             <Text style={styles.summaryLabel}>Last Updated:</Text>
             <Text style={styles.summaryValue}>{formatDate(order.updatedAt)}</Text>
           </View>
+          {/* 1. Total Price (before discount) */}
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Total Price:</Text>
+            <Text style={styles.summaryValue}>
+              {(() => {
+                const totalPrice = order.items.reduce((total, item) => total + (parseFloat(item.totalPrice?.toString() || '0') || 0), 0);
+                console.log('Total Price Calculation:', { totalPrice, items: order.items });
+                return formatPrice(totalPrice, order.currencyCode);
+              })()}
+            </Text>
+          </View>
+          
+          {/* 2. Discount */}
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Discount:</Text>
+            <View style={styles.discountRowContainer}>
+              <Text style={[styles.summaryValue, styles.discountValue]}>
+                -{formatPrice(order.discountAmount || 0, order.currencyCode)}
+              </Text>
+              {/* Always show discount amount, but only show edit button for the seller */}
+              <View style={styles.discountEditContainer}>
+                <Text style={styles.discountAmountText}>
+                  {formatPrice(order.discountAmount || 0, order.currencyCode)}
+                </Text>
+                {order.sellerId === user?.id && order.status !== 'confirmed' && (
+                  <TouchableOpacity
+                    style={styles.editDiscountButton}
+                    onPress={() => {
+                      setNewProductPrice((order.discountAmount || 0).toString());
+                      setNewPriceCurrency(order.currencyCode);
+                      setShowUpdatePriceModal(true);
+                    }}
+                  >
+                    <Ionicons name="pencil" size={16} color="#2563EB" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+          
+          {/* 3. Subtotal (Total Price - Discount) */}
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Subtotal:</Text>
             <Text style={styles.summaryValue}>
-              {formatPrice(order.totalAmount - order.shippingAmount - (order.discountAmount || 0), order.currencyCode)}
+              {(() => {
+                const totalPrice = order.items.reduce((total, item) => total + (parseFloat(item.totalPrice?.toString() || '0') || 0), 0);
+                const discount = parseFloat(order.discountAmount?.toString() || '0') || 0;
+                const subtotal = totalPrice - discount;
+                console.log('Subtotal Calculation:', { totalPrice, discount, subtotal });
+                return formatPrice(subtotal, order.currencyCode);
+              })()}
             </Text>
           </View>
+          
+          {/* 4. Delivery */}
           {order.shippingAmount > 0 ? (
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Delivery:</Text>
@@ -1762,19 +1862,20 @@ export function OrderDetails() {
               <Text style={styles.summaryValue}>To be determined</Text>
             </View>
           )}
-          {order.discountAmount && order.discountAmount > 0 && (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Discount:</Text>
-              <Text style={[styles.summaryValue, styles.discountValue]}>
-                -{formatPrice(order.discountAmount, order.currencyCode)}
-              </Text>
-            </View>
-          )}
+          {/* 5. Grand Total (Subtotal + Delivery) */}
           <View style={[styles.summaryRow, styles.totalRow]}>
-            <Text style={styles.totalLabel}>Total Amount:</Text>
+            <Text style={styles.totalLabel}>Grand Total:</Text>
             <Text style={styles.totalValue}>
               {order.shippingAmount > 0 
-                ? formatPrice(order.totalAmount, order.currencyCode)
+                ? (() => {
+                    const totalPrice = order.items.reduce((total, item) => total + (parseFloat(item.totalPrice?.toString() || '0') || 0), 0);
+                    const discount = parseFloat(order.discountAmount?.toString() || '0') || 0;
+                    const shipping = parseFloat(order.shippingAmount?.toString() || '0') || 0;
+                    const subtotal = totalPrice - discount;
+                    const grandTotal = subtotal + shipping;
+                    console.log('Grand Total Calculation:', { totalPrice, discount, shipping, subtotal, grandTotal });
+                    return formatPrice(grandTotal, order.currencyCode);
+                  })()
                 : 'Pending delivery cost'
               }
             </Text>
@@ -2611,10 +2712,10 @@ export function OrderDetails() {
                 <View style={styles.infoIconContainer}>
                   <Ionicons name="information-circle" size={20} color="#2563EB" />
                 </View>
-                <Text style={styles.infoTitle}>Add Discount</Text>
+                <Text style={styles.infoTitle}>Edit Discount</Text>
               </View>
               <Text style={styles.infoDescription}>
-                Enter the discount amount to apply to this order. The discount will be subtracted from the total order amount.
+                Update the discount amount for this order. The discount will be applied to the total price before delivery charges.
               </Text>
             </View>
 
@@ -2678,24 +2779,58 @@ export function OrderDetails() {
                 {/* Discount Preview */}
                 {newProductPrice && (
                   <View style={styles.newTotalPreview}>
-                    <Text style={styles.newTotalLabel}>Discount Preview:</Text>
+                    <Text style={styles.newTotalLabel}>Order Summary Preview:</Text>
                     <View style={styles.discountPreviewContainer}>
+                      {/* 1. Total Price */}
                       <View style={styles.discountPreviewRow}>
-                        <Text style={styles.discountPreviewLabel}>Current Total:</Text>
+                        <Text style={styles.discountPreviewLabel}>Total Price:</Text>
                         <Text style={styles.discountPreviewValue}>
-                          {formatPrice(order?.totalAmount || 0, order?.currencyCode || 'USD')}
+                          {(() => {
+                            const totalPrice = order?.items?.reduce((total, item) => total + (parseFloat(item.totalPrice?.toString() || '0') || 0), 0) || 0;
+                            return formatPrice(totalPrice, order?.currencyCode || 'USD');
+                          })()}
                         </Text>
                       </View>
+                      {/* 2. Discount */}
                       <View style={styles.discountPreviewRow}>
                         <Text style={styles.discountPreviewLabel}>Discount:</Text>
                         <Text style={[styles.discountPreviewValue, styles.discountValue]}>
                           -{formatPrice(parseFloat(newProductPrice) || 0, order?.currencyCode || 'USD')}
                         </Text>
                       </View>
-                      <View style={[styles.discountPreviewRow, styles.discountPreviewTotal]}>
-                        <Text style={styles.discountPreviewLabel}>New Total:</Text>
+                      {/* 3. Subtotal */}
+                      <View style={styles.discountPreviewRow}>
+                        <Text style={styles.discountPreviewLabel}>Subtotal:</Text>
                         <Text style={styles.discountPreviewValue}>
-                          {formatPrice((order?.totalAmount || 0) - (parseFloat(newProductPrice) || 0), order?.currencyCode || 'USD')}
+                          {(() => {
+                            const totalPrice = order?.items?.reduce((total, item) => total + (parseFloat(item.totalPrice?.toString() || '0') || 0), 0) || 0;
+                            const discount = parseFloat(newProductPrice) || 0;
+                            const subtotal = totalPrice - discount;
+                            return formatPrice(subtotal, order?.currencyCode || 'USD');
+                          })()}
+                        </Text>
+                      </View>
+                      {/* 4. Delivery */}
+                      {(order?.shippingAmount || 0) > 0 && (
+                        <View style={styles.discountPreviewRow}>
+                          <Text style={styles.discountPreviewLabel}>Delivery:</Text>
+                          <Text style={styles.discountPreviewValue}>
+                            {formatPrice(order?.shippingAmount || 0, order?.currencyCode || 'USD')}
+                          </Text>
+                        </View>
+                      )}
+                      {/* 5. Grand Total */}
+                      <View style={[styles.discountPreviewRow, styles.discountPreviewTotal]}>
+                        <Text style={styles.discountPreviewLabel}>Grand Total:</Text>
+                        <Text style={styles.discountPreviewValue}>
+                          {(() => {
+                            const totalPrice = order?.items?.reduce((total, item) => total + (parseFloat(item.totalPrice?.toString() || '0') || 0), 0) || 0;
+                            const discount = parseFloat(newProductPrice) || 0;
+                            const shipping = parseFloat(order?.shippingAmount?.toString() || '0') || 0;
+                            const subtotal = totalPrice - discount;
+                            const grandTotal = subtotal + shipping;
+                            return formatPrice(grandTotal, order?.currencyCode || 'USD');
+                          })()}
                         </Text>
                       </View>
                     </View>
@@ -2726,7 +2861,7 @@ export function OrderDetails() {
                 {updatingPrice ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.saveButtonText}>Add Discount</Text>
+                  <Text style={styles.saveButtonText}>Update Discount</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -4202,6 +4337,52 @@ const styles = StyleSheet.create({
   discountValue: {
     color: '#EF4444',
     fontWeight: '600',
+  },
+  editableDiscountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editableDiscountInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 80,
+    textAlign: 'center',
+  },
+  saveDiscountButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 6,
+    padding: 6,
+    minWidth: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discountRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editDiscountButton: {
+    padding: 4,
+    borderRadius: 4,
+    backgroundColor: '#F3F4F6',
+  },
+  discountEditContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  discountAmountText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
   },
   discountPreviewContainer: {
     marginTop: 12,

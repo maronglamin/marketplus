@@ -24,6 +24,8 @@ import orderRoutes from './routes/orders';
 import paymentMethodRoutes from './routes/paymentMethods';
 import settlementRoutes from './routes/settlements';
 import rideRequestRoutes from './routes/rideRequest';
+import salesRepRoutes from './routes/salesRep';
+import branchRoutes from './routes/branch';
 
 const app = express();
 
@@ -127,6 +129,8 @@ app.use('/api/ride-requests', rideRequestRoutes);
 app.use('/api/driver', driverRouter);
 app.use('/api/rentals', rentalRouter);
 app.use('/api/rental-messages', rentalMessageRoutes);
+app.use('/api/sales-reps', salesRepRoutes);
+app.use('/api/branches', branchRoutes);
 
 // Health check endpoint under /api
 app.get('/api/health', (req, res) => {

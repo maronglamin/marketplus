@@ -129,3 +129,7 @@ For business-related questions:
 ### Business Team
 - Email: business@snap.com
 - Internal: #business-team 
+
+
+
+baseFare + (distance × perKmRate) + (duration × perMinuteRate)

@@ -8,6 +8,7 @@ export interface DriverStats {
   rating: number;
   onlineHours: number;
   todayEarnings: number;
+  todayCurrency: string;
   weeklyEarnings: number;
   monthlyEarnings: number;
 }
@@ -138,6 +139,30 @@ export class DriverService {
     }
   }
 
+  /**
+   * Get direct ride requests sent specifically to this driver
+   */
+  static async getDirectDriverRequests(): Promise<any[]> {
+    try {
+      console.log('🎯 Getting direct driver requests...');
+      
+      const response = await rateLimitedFetch('/api/ride-requests/direct-driver-requests', () => 
+        api.get('/api/ride-requests/direct-driver-requests')
+      );
+
+      console.log('📊 Direct driver requests response:', response.data);
+
+      if (response.data.success) {
+        return response.data.data || [];
+      } else {
+        throw new Error(response.data.message || 'Failed to get direct driver requests');
+      }
+    } catch (error) {
+      console.error('❌ Error getting direct driver requests:', error);
+      throw error;
+    }
+  }
+
   // Accept ride request
   async acceptRideRequest(requestId: string) {
     try {
@@ -212,6 +237,7 @@ export class DriverService {
         rating: 0,
         onlineHours: 0,
         todayEarnings: 0,
+        todayCurrency: 'D', // Added todayCurrency to fallback
         weeklyEarnings: 0,
         monthlyEarnings: 0,
       };

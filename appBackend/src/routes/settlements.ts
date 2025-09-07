@@ -35,6 +35,9 @@ router.post('/wallets', authenticate, createWallet);
 // Create settlement request
 router.post('/request', authenticate, createSettlementRequest);
 
+// Create settlement request for specific sales rep
+router.post('/request/sales-rep/:salesRepId', authenticate, createSettlementRequest);
+
 // Get settlement history
 router.get('/history', authenticate, getSettlementHistory);
 

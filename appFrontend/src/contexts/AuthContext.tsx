@@ -5,6 +5,7 @@ import { driverService } from '../services/driverService';
 import { notificationService } from '../services/notificationService';
 import { realTimeRideService } from '../services/realTimeRideService';
 import imageCache from '../utils/imageCache';
+import { salesRepCache } from '../utils/salesRepCache';
 
 interface AuthContextType {
   user: any | null;
@@ -337,6 +338,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('✅ Image cache cleared');
       } catch (error) {
         console.error('⚠️ Error clearing image cache:', error);
+      }
+
+      // Clear sales rep cache
+      try {
+        console.log('🧼 Clearing sales rep cache...');
+        await salesRepCache.clearCache();
+        console.log('✅ Sales rep cache cleared');
+      } catch (error) {
+        console.error('⚠️ Error clearing sales rep cache:', error);
       }
 
       console.log('✅ Logout complete: all state and storage cleared');

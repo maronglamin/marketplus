@@ -53,8 +53,30 @@ export interface DriverInfo {
 }
 
 class RideService {
-  // Search for places using Google Places API
-  async searchPlaces(query: string, userLocation?: { latitude: number; longitude: number }): Promise<SuggestionItem[]> {
+  // Get ISO country code from coordinates via Geocoding API
+  async getCountryCodeFromCoords(latitude: number, longitude: number): Promise<string | undefined> {
+    try {
+      if (!GOOGLE_PLACES_API_KEY) return undefined;
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_PLACES_API_KEY}`;
+      const response = await fetch(url);
+      if (!response.ok) return undefined;
+      const data = await response.json();
+      if (data.status !== 'OK' || !data.results?.length) return undefined;
+      for (const result of data.results) {
+        const comp = result.address_components?.find((c: any) => c.types?.includes('country'));
+        if (comp?.short_name) return comp.short_name;
+      }
+      return undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  // Search for places using Google Places API (proximity + optional country constraint)
+  async searchPlaces(
+    query: string,
+    userLocation?: { latitude: number; longitude: number },
+    countryCode?: string
+  ): Promise<SuggestionItem[]> {
     try {
       if (!query.trim() || query.length < 3) {
         return [];
@@ -79,7 +101,12 @@ class RideService {
       let apiUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${GOOGLE_PLACES_API_KEY}&types=establishment|geocode`;
       
       if (userLocation) {
-        apiUrl += `&location=${userLocation.latitude},${userLocation.longitude}&radius=50000`; // 50km radius
+        // 50km proximity bias
+        apiUrl += `&location=${userLocation.latitude},${userLocation.longitude}&radius=50000`;
+      }
+      // Restrict results to user's country when available
+      if (countryCode) {
+        apiUrl += `&components=country:${countryCode}`;
       }
 
       console.log('🌐 Making request to:', apiUrl);

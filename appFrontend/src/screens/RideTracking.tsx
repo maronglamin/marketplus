@@ -103,16 +103,10 @@ export function RideTracking() {
         </View>
       </View>
 
-      {/* Status Bar */}
-      <View style={styles.statusBar}>
-        <Text style={styles.statusText}>{getStatusText()}</Text>
-        {estimatedArrival && (
-          <Text style={styles.etaText}>ETA: {estimatedArrival} min</Text>
-        )}
-      </View>
+      {/* Status Bar - Removed duplicate title, keeping only the one in RealTimeRideTracker */}
 
-      {/* Real-time Ride Tracker */}
-      <View style={styles.mapContainer}>
+      {/* Real-time Ride Tracker - Full Screen */}
+      <View style={styles.fullScreenMapContainer}>
         <RealTimeRideTracker
           rideId={params.rideId}
           pickupLocation={params.pickupLocation}
@@ -156,34 +150,10 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 2,
   },
-  statusBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F9FAFB',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  statusText: {
+
+  fullScreenMapContainer: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1F2937',
-  },
-  etaText: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  mapContainer: {
-    flex: 1,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    position: 'relative',
   },
 });
 

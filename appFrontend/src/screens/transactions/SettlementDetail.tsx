@@ -249,7 +249,7 @@ export function SettlementDetail() {
             >
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
-            <Text style={styles.title}>Settlement Details</Text>
+            <Text style={styles.title}>Settlement</Text>
             <View style={styles.placeholder} />
           </View>
           <View style={styles.errorContainer}>
@@ -279,7 +279,7 @@ export function SettlementDetail() {
           >
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.title}>Settlement Details</Text>
+          <Text style={styles.title}>Settlement</Text>
           <View style={styles.placeholder} />
         </View>
 

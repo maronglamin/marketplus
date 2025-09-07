@@ -15,6 +15,10 @@ model Admin {
   username         String         @unique
   isActive         Boolean        @default(true)
   lastLogin        DateTime?
+  mfaEnabled       Boolean        @default(false)
+  mfaSecret        String?
+  mfaVerified      Boolean        @default(false)
+  mfaBackupCodes   String[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   operatorEntityId String
@@ -96,6 +100,10 @@ model User {
   riderApplications            RiderApplication[]
   customerRides                Ride[]                 @relation("CustomerRides")
   twilioNotifications          TwilioNotification[]
+  salesReps                    SalesRep[]             @relation("ParentSeller")
+  parentSellerSettlements      SalesRepSettlement[]   @relation("ParentSellerSettlements")
+  salesRepProfile              SalesRep?              @relation("SalesRepUser")
+  branches                     Branch[]               @relation("ParentSellerBranches")
 
   @@index([phoneNumber])
   @@index([createdAt])
@@ -247,6 +255,10 @@ model Product {
   orderItems            OrderItem[]
   productOrderInterests ProductOrderInterest[]
   productViews          ProductView[]
+  salesRep              SalesRep?              @relation("SalesRepProducts", fields: [salesRepId], references: [id])
+  salesRepId            String?
+  branch                Branch?                @relation("BranchProducts", fields: [branchId], references: [id])
+  branchId              String?
 
   @@index([sellerId])
   @@index([categoryId])
@@ -256,6 +268,8 @@ model Product {
   @@index([updatedAt])
   @@index([isFeatured])
   @@index([rating])
+  @@index([salesRepId])
+  @@index([branchId])
 }
 
 model ProductImage {
@@ -1058,10 +1072,16 @@ model orders {
   items                      OrderItem[]
   User_orders_sellerIdToUser User                  @relation("orders_sellerIdToUser", fields: [sellerId], references: [id])
   User_orders_userIdToUser   User                  @relation("orders_userIdToUser", fields: [userId], references: [id], onDelete: Cascade)
+  salesRep                   SalesRep?             @relation("SalesRepOrders", fields: [salesRepId], references: [id])
+  salesRepId                 String?
+  branch                     Branch?                @relation("BranchOrders", fields: [branchId], references: [id])
+  branchId                   String?
 
   @@index([createdAt])
   @@index([orderNumber])
   @@index([paymentStatus])
+  @@index([salesRepId])
+  @@index([branchId])
   @@index([sellerId])
   @@index([status])
   @@index([userId])
@@ -1157,6 +1177,8 @@ enum EntityType {
   SNAP_RIDE_ANALYTICS
   SNAP_RIDE_RIDE_SERVICE
   SNAP_RIDE_RIDE_SERVICE_TIERS
+  SNAP_RENTAL
+  SNAP_RENTAL_REQUEST
   ANALYTICS
   ANALYTICS_REVENUE
 }
@@ -1378,4 +1400,84 @@ enum TwilioMessageType {
   PIN
   COMBINED
   OTHER
+}
+
+// Sales Rep Management Models
+model Branch {
+  id              String        @id @default(uuid())
+  parentSellerId  String
+  name            String
+  address         String?
+  city            String?
+  state           String?
+  country         String?
+  postalCode      String?
+  phoneNumber     String?
+  email           String?
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  parentSeller    User          @relation("ParentSellerBranches", fields: [parentSellerId], references: [id])
+  salesReps       SalesRep[]
+  products        Product[]     @relation("BranchProducts")
+  orders          orders[]      @relation("BranchOrders")
+  
+  @@index([parentSellerId])
+  @@index([isActive])
+}
+
+model SalesRep {
+  id              String        @id @default(uuid())
+  userId          String        @unique  // Reference to User table
+  parentSellerId  String
+  branchId        String
+  status          SalesRepStatus @default(ACTIVE)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  user            User          @relation("SalesRepUser", fields: [userId], references: [id])
+  parentSeller    User          @relation("ParentSeller", fields: [parentSellerId], references: [id])
+  branch          Branch        @relation(fields: [branchId], references: [id])
+  products        Product[]     @relation("SalesRepProducts")
+  orders          orders[]      @relation("SalesRepOrders")
+  settlements     SalesRepSettlement[]
+  
+  @@index([userId])
+  @@index([parentSellerId])
+  @@index([branchId])
+  @@index([status])
+}
+
+model SalesRepSettlement {
+  id              String            @id @default(uuid())
+  salesRepId      String
+  parentSellerId  String
+  amount          Decimal           @db.Decimal(10, 2)
+  currencyCode    String            @db.VarChar(3)
+  status          SettlementStatus  @default(PENDING)
+  description     String?
+  requestedAt     DateTime          @default(now())
+  processedAt     DateTime?
+  processedBy     String?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  // Relations
+  salesRep        SalesRep          @relation(fields: [salesRepId], references: [id])
+  parentSeller    User              @relation("ParentSellerSettlements", fields: [parentSellerId], references: [id])
+  
+  @@index([salesRepId])
+  @@index([parentSellerId])
+  @@index([status])
+  @@index([requestedAt])
+}
+
+enum SalesRepStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }

@@ -19,7 +19,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
-import { settlementService, type AvailableRevenue, type BankAccount, type Wallet } from '../../services/settlementService';
+import { settlementService, type AvailableRevenue, type AvailableRevenueResponse, type SalesRepRevenue, type BankAccount, type Wallet } from '../../services/settlementService';
+import { salesRepService, type SalesRep } from '../../services/salesRepService';
+import { orderService, type Order } from '../../services/orderService';
 import { useAuth } from '../../contexts/AuthContext';
 
 type SettlementRequestNavigationProp = NativeStackNavigationProp<AppStackParamList, 'SettlementRequest'>;
@@ -31,13 +33,17 @@ export function SettlementRequest() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [availableRevenue, setAvailableRevenue] = useState<AvailableRevenue[]>([]);
+  const [availableRevenue, setAvailableRevenue] = useState<AvailableRevenueResponse | null>(null);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [isSalesRep, setIsSalesRep] = useState(false);
+  const [salesRepData, setSalesRepData] = useState<SalesRep | null>(null);
+  const [showSalesRepsRevenue, setShowSalesRepsRevenue] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState<string>('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'BANK_TRANSFER' | 'WALLET_TRANSFER' | null>(null);
   const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
   const [selectedWallet, setSelectedWallet] = useState<string>('');
+  const [selectedSalesRepId, setSelectedSalesRepId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [addMethodModalVisible, setAddMethodModalVisible] = useState(false);
   const [selectedMethodType, setSelectedMethodType] = useState<'BANK' | 'WALLET' | null>(null);
@@ -74,8 +80,32 @@ export function SettlementRequest() {
   });
 
   useEffect(() => {
-    loadData();
+    checkSalesRepStatus();
   }, []);
+
+  const checkSalesRepStatus = async () => {
+    try {
+      // Check if current user is a sales rep using cached method
+      const { isSalesRep, salesRepData } = await salesRepService.getSalesRepStatusCached(user?.id || '');
+      
+      if (isSalesRep && salesRepData) {
+        setIsSalesRep(true);
+        setSalesRepData(salesRepData);
+        setError('Access Denied: Sales representatives cannot request settlements. Only the parent seller can make settlement requests.');
+        setLoading(false); // Stop loading when access is denied
+      } else {
+        // User is not a sales rep, proceed with normal flow
+        setIsSalesRep(false);
+        setSalesRepData(null);
+        loadData();
+      }
+    } catch (error) {
+      // User is not a sales rep, proceed with normal flow
+      setIsSalesRep(false);
+      setSalesRepData(null);
+      loadData();
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -92,12 +122,12 @@ export function SettlementRequest() {
       setBankAccounts(bankAccountsData.filter(account => account.status === 'ACTIVE'));
       setWallets(walletsData.filter(wallet => wallet.status === 'ACTIVE'));
       
-      // Set default currency if available
-      if (revenueData.length > 0) {
-        setSelectedCurrency(revenueData[0].currency);
+      // Set default currency if available in parent revenue
+      if (revenueData.parentRevenue.revenues.length > 0) {
+        setSelectedCurrency(revenueData.parentRevenue.revenues[0].currency);
         // Pre-fill currency in forms
-        setBankForm(prev => ({ ...prev, currency: revenueData[0].currency }));
-        setWalletForm(prev => ({ ...prev, currency: revenueData[0].currency }));
+        setBankForm(prev => ({ ...prev, currency: revenueData.parentRevenue.revenues[0].currency }));
+        setWalletForm(prev => ({ ...prev, currency: revenueData.parentRevenue.revenues[0].currency }));
       }
     } catch (error) {
       console.error('Error loading settlement data:', error);
@@ -107,8 +137,77 @@ export function SettlementRequest() {
     }
   };
 
+
   const getSelectedRevenue = () => {
-    return availableRevenue.find(rev => rev.currency === selectedCurrency);
+    if (!availableRevenue || !selectedCurrency) return null;
+    
+    if (selectedSalesRepId) {
+      // Sales rep revenue
+      const salesRep = availableRevenue.salesRepRevenue.salesReps.find(rep => rep.salesRepId === selectedSalesRepId);
+      if (salesRep) {
+        const revenue = salesRep.revenues.find(rev => rev.currency === selectedCurrency);
+        return revenue ? { ...revenue, salesRepName: salesRep.name } : null;
+      }
+    } else {
+      // Parent revenue
+      const revenue = availableRevenue.parentRevenue.revenues.find(rev => rev.currency === selectedCurrency);
+      return revenue ? { ...revenue, salesRepName: 'Your revenue' } : null;
+    }
+    
+    return null;
+  };
+
+  const getCombinedRevenueByCurrency = () => {
+    if (!availableRevenue) return [];
+    
+    const combinedRevenue: { [currency: string]: { amount: number; salesReps: number } } = {};
+    
+    // Add parent seller revenue
+    availableRevenue.parentRevenue.revenues.forEach(revenue => {
+      combinedRevenue[revenue.currency] = {
+        amount: revenue.amount,
+        salesReps: 0
+      };
+    });
+    
+    // Add sales rep revenue
+    availableRevenue.salesRepRevenue.salesReps.forEach(repRevenue => {
+      repRevenue.revenues.forEach(revenue => {
+        if (combinedRevenue[revenue.currency]) {
+          combinedRevenue[revenue.currency].amount += revenue.amount;
+          combinedRevenue[revenue.currency].salesReps += 1;
+        } else {
+          combinedRevenue[revenue.currency] = {
+            amount: revenue.amount,
+            salesReps: 1
+          };
+        }
+      });
+    });
+    
+    return Object.entries(combinedRevenue).map(([currency, data]) => ({
+      currency,
+      amount: data.amount,
+      salesReps: data.salesReps,
+      currencySymbol: getCurrencySymbol(currency)
+    }));
+  };
+
+  const getCurrencySymbol = (currency: string) => {
+    const symbols: { [key: string]: string } = {
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+      NGN: '₦',
+      GMD: 'D',
+    };
+    return symbols[currency] || currency;
+  };
+
+  const formatCurrency = (amount: number | string, currency: string) => {
+    const symbol = getCurrencySymbol(currency);
+    const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+    return `${symbol} ${numericAmount.toLocaleString()}`;
   };
 
   const handlePaymentMethodSelect = (method: 'BANK_TRANSFER' | 'WALLET_TRANSFER') => {
@@ -150,11 +249,18 @@ export function SettlementRequest() {
         walletId: selectedPaymentMethod === 'WALLET_TRANSFER' ? selectedWallet : undefined,
       };
 
-      await settlementService.createSettlementRequest(settlementData);
+      if (selectedSalesRepId) {
+        // Create sales rep settlement request
+        await settlementService.createSalesRepSettlementRequest(selectedSalesRepId, settlementData);
+      } else {
+        // Create parent settlement request
+        await settlementService.createSettlementRequest(settlementData);
+      }
       
+      const settlementType = selectedSalesRepId ? 'sales rep' : 'your';
       Alert.alert(
         'Success',
-        'Settlement request submitted successfully. You will be notified once it is processed.',
+        `${settlementType.charAt(0).toUpperCase() + settlementType.slice(1)} settlement request submitted successfully. You will be notified once it is processed.`,
         [
           {
             text: 'OK',
@@ -349,11 +455,29 @@ export function SettlementRequest() {
             <View style={styles.placeholder} />
           </View>
           <View style={styles.errorContainer}>
-            <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
+            <Ionicons 
+              name={isSalesRep ? "person-remove-outline" : "alert-circle-outline"} 
+              size={48} 
+              color={isSalesRep ? "#F59E0B" : "#DC2626"} 
+            />
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={loadData}>
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
+            {isSalesRep ? (
+              <View style={styles.salesRepInfo}>
+                <Text style={styles.salesRepInfoText}>
+                  As a sales representative, you cannot request settlements. 
+                  Only the parent seller can make settlement requests.
+                </Text>
+                {salesRepData && (
+                  <Text style={styles.salesRepDetails}>
+                    You are registered under: {salesRepData.parentSellerId}
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.retryButton} onPress={loadData}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </SafeAreaView>
@@ -390,34 +514,104 @@ export function SettlementRequest() {
         </View>
 
         <ScrollView style={styles.content}>
-          {/* Available Revenue Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Available Revenue</Text>
-            {availableRevenue.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="wallet-outline" size={48} color="#9CA3AF" />
-                <Text style={styles.emptyStateText}>No available revenue for settlement</Text>
-              </View>
-            ) : (
+          {/* Parent Revenue Section */}
+          {availableRevenue && availableRevenue.parentRevenue.revenues.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Your Revenue</Text>
               <View style={styles.currencySelector}>
-                {availableRevenue.map((revenue) => (
+                {availableRevenue.parentRevenue.revenues.map((revenue) => (
                   <TouchableOpacity
                     key={revenue.currency}
                     style={[
                       styles.currencyCard,
-                      selectedCurrency === revenue.currency && styles.selectedCurrencyCard
+                      selectedCurrency === revenue.currency && !selectedSalesRepId && styles.selectedCurrencyCard
                     ]}
-                    onPress={() => setSelectedCurrency(revenue.currency)}
+                    onPress={() => {
+                      setSelectedCurrency(revenue.currency);
+                      setSelectedSalesRepId(null); // Parent revenue
+                    }}
                   >
                     <Text style={styles.currencyCode}>{revenue.currency}</Text>
                     <Text style={styles.currencyAmount}>
                       {revenue.currencySymbol}{revenue.amount.toLocaleString()}
                     </Text>
+                    <Text style={styles.currencySubtext}>Your revenue</Text>
                   </TouchableOpacity>
                 ))}
               </View>
-            )}
-          </View>
+            </View>
+          )}
+
+          {/* Sales Rep Revenue Section */}
+          {availableRevenue && availableRevenue.salesRepRevenue.salesReps.length > 0 && (
+            <View style={styles.section}>
+              <TouchableOpacity
+                style={styles.salesRepRevenueHeader}
+                onPress={() => setShowSalesRepsRevenue(!showSalesRepsRevenue)}
+              >
+                <View style={styles.salesRepRevenueHeaderLeft}>
+                  <Ionicons name="people-outline" size={24} color="#2563EB" />
+                  <View style={styles.salesRepRevenueHeaderText}>
+                    <Text style={styles.sectionTitle}>Sales Rep Revenue</Text>
+                    <Text style={styles.salesRepRevenueSubtitle}>
+                      {availableRevenue.salesRepRevenue.salesReps.length} sales rep{availableRevenue.salesRepRevenue.salesReps.length !== 1 ? 's' : ''} with revenue
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons 
+                  name={showSalesRepsRevenue ? "chevron-up" : "chevron-down"} 
+                  size={24} 
+                  color="#6B7280" 
+                />
+              </TouchableOpacity>
+              
+              {showSalesRepsRevenue && (
+                <View style={styles.salesRepRevenueContent}>
+                  {availableRevenue.salesRepRevenue.salesReps.map((salesRep) => (
+                    <View key={salesRep.salesRepId} style={styles.salesRepCard}>
+                      <View style={styles.salesRepHeader}>
+                        <Text style={styles.salesRepName}>{salesRep.name}</Text>
+                      </View>
+                      <View style={styles.salesRepCurrencies}>
+                        {salesRep.revenues.map((revenue, index) => (
+                          <TouchableOpacity
+                            key={index}
+                            style={[
+                              styles.currencyCard,
+                              selectedCurrency === revenue.currency && selectedSalesRepId === salesRep.salesRepId && styles.selectedCurrencyCard
+                            ]}
+                            onPress={() => {
+                              setSelectedCurrency(revenue.currency);
+                              setSelectedSalesRepId(salesRep.salesRepId); // Sales rep revenue
+                            }}
+                          >
+                            <Text style={styles.currencyCode}>{revenue.currency}</Text>
+                            <Text style={styles.currencyAmount}>
+                              {revenue.currencySymbol}{revenue.amount.toLocaleString()}
+                            </Text>
+                            <Text style={styles.currencySubtext}>{salesRep.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* No Revenue State */}
+          {availableRevenue && 
+           availableRevenue.parentRevenue.revenues.length === 0 && 
+           availableRevenue.salesRepRevenue.salesReps.length === 0 && (
+            <View style={styles.section}>
+              <View style={styles.emptyState}>
+                <Ionicons name="wallet-outline" size={48} color="#9CA3AF" />
+                <Text style={styles.emptyStateText}>No available revenue for settlement</Text>
+              </View>
+            </View>
+          )}
+
 
           {/* Payment Method Section */}
           {selectedRevenue && selectedRevenue.amount > 0 && (
@@ -592,7 +786,9 @@ export function SettlementRequest() {
                 {submitting ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.submitButtonText}>Request Settlement</Text>
+                  <Text style={styles.submitButtonText}>
+                    {selectedSalesRepId ? 'Request Sales Rep Settlement' : 'Request Your Settlement'}
+                  </Text>
                 )}
               </TouchableOpacity>
               <Text style={styles.submitNote}>
@@ -1039,6 +1235,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  salesRepInfo: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  salesRepInfoText: {
+    fontSize: 14,
+    color: '#92400E',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  salesRepDetails: {
+    fontSize: 12,
+    color: '#B45309',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  content: {
+    flex: 1,
+  },
   section: {
     padding: 16,
     borderBottomWidth: 1,
@@ -1094,6 +1325,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#059669',
+  },
+  currencySubtext: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+    fontStyle: 'italic',
   },
   paymentMethodCard: {
     padding: 16,
@@ -1461,5 +1698,137 @@ const styles = StyleSheet.create({
   },
   addMoreButtonTextWallet: {
     color: '#8B5CF6',
+  },
+  // Sales Rep Revenue Styles
+  salesRepRevenueHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  salesRepRevenueHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  salesRepRevenueHeaderText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  salesRepRevenueSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  salesRepRevenueContent: {
+    marginTop: 16,
+  },
+  combinedRevenueSection: {
+    marginBottom: 24,
+  },
+  combinedRevenueTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  combinedRevenueCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E0F2FE',
+    marginBottom: 8,
+  },
+  combinedRevenueInfo: {
+    flex: 1,
+  },
+  combinedRevenueCurrency: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  combinedRevenueSalesReps: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  combinedRevenueAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#059669',
+  },
+  individualSalesRepsSection: {
+    marginTop: 16,
+  },
+  individualSalesRepsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  salesRepRevenueCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  salesRepRevenueCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  salesRepInfo: {
+    flex: 1,
+  },
+  salesRepName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  salesRepBranch: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  salesRepTotalAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#059669',
+  },
+  salesRepCurrencyBreakdown: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 12,
+  },
+  currencyBreakdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  currencyBreakdownInfo: {
+    flex: 1,
+  },
+  currencyBreakdownCode: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 2,
+  },
+  currencyBreakdownOrders: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  currencyBreakdownAmount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
   },
 }); 

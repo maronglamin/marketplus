@@ -254,16 +254,18 @@ export function SettlementHistory() {
 
         <View style={styles.settlementDetails}>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Reference:</Text>
-            <Text style={styles.detailValue}>{item.reference}</Text>
+            <Text style={styles.detailLabel}>Ref:</Text>
+            <Text style={styles.detailValue} numberOfLines={1} ellipsizeMode="middle">
+              {item.reference}
+            </Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Created:</Text>
+            <Text style={styles.detailLabel}>Date:</Text>
             <Text style={styles.detailValue}>{formatDate(item.createdAt)}</Text>
           </View>
           {item.processedAt && (
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Processed:</Text>
+              <Text style={styles.detailLabel}>Done:</Text>
               <Text style={styles.detailValue}>{formatDate(item.processedAt)}</Text>
             </View>
           )}
@@ -276,10 +278,10 @@ export function SettlementHistory() {
     <View style={styles.emptyState}>
       <Ionicons name="receipt-outline" size={64} color="#9CA3AF" />
       <Text style={styles.emptyStateTitle}>
-        No {selectedChannel === 'ECOMMERCE' ? 'Ecommerce' : 'Ride'} Settlement History
+        No {selectedChannel === 'ECOMMERCE' ? 'Settlement' : 'Ride'} History
       </Text>
       <Text style={styles.emptyStateText}>
-        You haven't made any {selectedChannel === 'ECOMMERCE' ? 'ecommerce' : 'ride'} settlement requests yet. Your {selectedChannel === 'ECOMMERCE' ? 'ecommerce' : 'ride'} settlement history will appear here once you submit requests.
+        No {selectedChannel === 'ECOMMERCE' ? 'settlement' : 'ride'} requests yet. Your history will appear here once you submit requests.
       </Text>
       <TouchableOpacity
         style={styles.newSettlementButton}
@@ -287,7 +289,7 @@ export function SettlementHistory() {
       >
         <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
         <Text style={styles.newSettlementButtonText}>
-          New {selectedChannel === 'ECOMMERCE' ? 'Ecommerce' : 'Ride'} Settlement Request
+          New {selectedChannel === 'ECOMMERCE' ? 'Settlement' : 'Ride'} Request
         </Text>
       </TouchableOpacity>
     </View>
@@ -309,7 +311,7 @@ export function SettlementHistory() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>
-            Loading {selectedChannel === 'ECOMMERCE' ? 'ecommerce' : 'ride'} settlement history...
+            Loading {selectedChannel === 'ECOMMERCE' ? 'settlement' : 'ride'} history...
           </Text>
         </View>
       </SafeAreaView>
@@ -328,7 +330,7 @@ export function SettlementHistory() {
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
             <Text style={styles.title}>
-              {selectedChannel === 'ECOMMERCE' ? 'Ecommerce Settlement History' : 'Ride Settlement History'}
+              {selectedChannel === 'ECOMMERCE' ? 'Settlement History' : 'Ride History'}
             </Text>
             <View style={styles.placeholder} />
           </View>
@@ -360,7 +362,7 @@ export function SettlementHistory() {
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
           <Text style={styles.title}>
-            {selectedChannel === 'ECOMMERCE' ? 'Ecommerce Settlement History' : 'Ride Settlement History'}
+            {selectedChannel === 'ECOMMERCE' ? 'Settlement History' : 'Ride History'}
           </Text>
           <TouchableOpacity
             onPress={() => navigation.navigate(selectedChannel === 'ECOMMERCE' ? 'SettlementRequest' : 'RideSettlementRequest')}
@@ -714,14 +716,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   detailLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B7280',
     fontWeight: '500',
+    minWidth: 50,
   },
   detailValue: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#111827',
     fontWeight: '400',
+    flex: 1,
+    textAlign: 'right',
   },
   loadingMore: {
     flexDirection: 'row',

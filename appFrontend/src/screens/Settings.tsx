@@ -1,154 +1,75 @@
-import React, { useState } from 'react'
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Platform,
-  StatusBar,
-} from 'react-native'
-import { useNavigation } from '@react-navigation/native'
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { Ionicons } from '@expo/vector-icons'
+import React, { useState, useEffect } from 'react'
+import { StyleSheet, View, Text, TouchableOpacity, Platform, StatusBar, ScrollView, Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { Ionicons } from '@expo/vector-icons'
+import { useNavigation } from '@react-navigation/native'
+import { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { AppStackParamList } from '../navigation/AppNavigator'
+import { useAuth } from '../contexts/AuthContext'
+import { salesRepService, type SalesRep } from '../services/salesRepService'
+import { branchService, type Branch } from '../services/branchService'
+import { api } from '../api/api'
 
-type RootStackParamList = {
-  Home: undefined
-  Settings: undefined
-}
-
-type SettingsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Settings'>
-
-interface SettingItem {
-  id: string
-  label: string
-  description: string
-  type: 'toggle' | 'select' | 'button'
-  value?: boolean | string
-  onChange?: (value?: any) => void
-  options?: { value: string; label: string }[]
-  onClick?: () => void
-}
-
-interface SettingsSection {
-  id: string
-  title: string
-  icon: keyof typeof Ionicons.glyphMap
-  items: SettingItem[]
-}
+type SettingsScreenNavigationProp = NativeStackNavigationProp<AppStackParamList, 'Settings'>
 
 export function Settings() {
   const navigation = useNavigation<SettingsScreenNavigationProp>()
-  const [notifications, setNotifications] = useState({
-    newMessages: true,
-    orderUpdates: true,
-    promotions: false,
-  })
+  const { user } = useAuth()
+  const [salesReps, setSalesReps] = useState<SalesRep[]>([])
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isSeller, setIsSeller] = useState(false)
 
-  const [theme, setTheme] = useState('light')
+  useEffect(() => {
+    checkSellerStatus()
+    loadData()
+  }, [])
 
-  const toggleNotification = (key: keyof typeof notifications) => {
-    setNotifications((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }))
+  const checkSellerStatus = async () => {
+    try {
+      const response = await api.get('/api/seller-kyc')
+      if (response.data && response.data.status) {
+        setIsSeller(response.data.status === 'APPROVED')
+      } else {
+        setIsSeller(false)
+      }
+    } catch (error) {
+      console.error('Error checking seller status:', error)
+      setIsSeller(false)
+    }
   }
 
-  const settingsSections: SettingsSection[] = [
-    {
-      id: 'notifications',
-      title: 'Notifications',
-      icon: 'notifications',
-      items: [
-        {
-          id: 'newMessages',
-          label: 'New Messages',
-          description: 'Get notified when you receive new messages',
-          type: 'toggle',
-          value: notifications.newMessages,
-          onChange: () => toggleNotification('newMessages'),
-        },
-        {
-          id: 'orderUpdates',
-          label: 'Order Updates',
-          description: 'Receive updates about your orders',
-          type: 'toggle',
-          value: notifications.orderUpdates,
-          onChange: () => toggleNotification('orderUpdates'),
-        },
-        {
-          id: 'promotions',
-          label: 'Promotions',
-          description: 'Get notified about special offers and promotions',
-          type: 'toggle',
-          value: notifications.promotions,
-          onChange: () => toggleNotification('promotions'),
-        },
-      ],
-    },
-    {
-      id: 'appearance',
-      title: 'Appearance',
-      icon: theme === 'light' ? 'sunny' : 'moon',
-      items: [
-        {
-          id: 'theme',
-          label: 'Theme',
-          description: 'Choose between light and dark mode',
-          type: 'select',
-          value: theme,
-          options: [
-            { value: 'light', label: 'Light' },
-            { value: 'dark', label: 'Dark' },
-          ],
-          onChange: (value: string) => setTheme(value),
-        },
-      ],
-    },
-    {
-      id: 'privacy',
-      title: 'Privacy & Security',
-      icon: 'shield-checkmark',
-      items: [
-        {
-          id: 'password',
-          label: 'Change Password',
-          description: 'Update your account password',
-          type: 'button',
-          onClick: () => console.log('Change password'),
-        },
-        {
-          id: 'twoFactor',
-          label: 'Two-Factor Authentication',
-          description: 'Add an extra layer of security to your account',
-          type: 'button',
-          onClick: () => console.log('Two-factor auth'),
-        },
-      ],
-    },
-    {
-      id: 'language',
-      title: 'Language & Region',
-      icon: 'globe',
-      items: [
-        {
-          id: 'language',
-          label: 'Language',
-          description: 'Choose your preferred language',
-          type: 'select',
-          value: 'en',
-          options: [
-            { value: 'en', label: 'English' },
-            { value: 'es', label: 'Spanish' },
-            { value: 'fr', label: 'French' },
-          ],
-          onChange: (value: string) => console.log('Language changed:', value),
-        },
-      ],
-    },
-  ]
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      const [reps, branchList] = await Promise.all([
+        salesRepService.getSalesReps(),
+        branchService.getBranches()
+      ])
+      setSalesReps(reps)
+      setBranches(branchList)
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleNavigateToBranches = () => {
+    navigation.navigate('BranchesScreen')
+  }
+
+  const handleNavigateToSalesReps = () => {
+    navigation.navigate('SalesRepsScreen')
+  }
+
+  const handleNavigateToSettlements = () => {
+    navigation.navigate('SettlementsScreen')
+  }
+
+  const handleNavigateToReports = () => {
+    navigation.navigate('ReportsScreen')
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -160,58 +81,170 @@ export function Settings() {
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          style={styles.backButton}
+          style={styles.headerBack}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.title}>Settings</Text>
+        <Text style={styles.title}>Sales Management</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content}>
-        {settingsSections.map((section) => (
-          <View key={section.id} style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name={section.icon} size={20} color="#111827" />
-              <Text style={styles.sectionTitle}>{section.title}</Text>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {!isSeller ? (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyStateIcon}>
+              <Ionicons name="business-outline" size={64} color="#9CA3AF" />
             </View>
-            <View style={styles.sectionContent}>
-              {section.items.map((item) => (
-                <View key={item.id} style={styles.settingItem}>
-                  <View style={styles.settingInfo}>
-                    <Text style={styles.settingLabel}>{item.label}</Text>
-                    <Text style={styles.settingDescription}>
-                      {item.description}
+            <Text style={styles.emptyTitle}>Seller Account Required</Text>
+            <Text style={styles.emptyText}>
+              You need to be a verified seller to access sales management features.
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert('Coming Soon', 'Seller registration will be available soon')
+              }}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>Become a Seller</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            {/* Overview Cards */}
+            <View style={styles.overviewSection}>
+              <Text style={styles.sectionTitle}>Overview</Text>
+              <View style={styles.overviewGrid}>
+                <View style={styles.overviewCard}>
+                  <View style={styles.overviewIcon}>
+                    <Ionicons name="business" size={24} color="#3B82F6" />
+                  </View>
+                  <Text style={styles.overviewValue}>{branches.length}</Text>
+                  <Text style={styles.overviewLabel}>Branches</Text>
+                </View>
+                <View style={styles.overviewCard}>
+                  <View style={styles.overviewIcon}>
+                    <Ionicons name="people" size={24} color="#10B981" />
+                  </View>
+                  <Text style={styles.overviewValue}>{salesReps.length}</Text>
+                  <Text style={styles.overviewLabel}>Sales Reps</Text>
+                </View>
+                <View style={styles.overviewCard}>
+                  <View style={styles.overviewIcon}>
+                    <Ionicons name="card" size={24} color="#F59E0B" />
+                  </View>
+                  <Text style={styles.overviewValue}>0</Text>
+                  <Text style={styles.overviewLabel}>Settlements</Text>
+                </View>
+                <View style={styles.overviewCard}>
+                  <View style={styles.overviewIcon}>
+                    <Ionicons name="bar-chart" size={24} color="#8B5CF6" />
+                  </View>
+                  <Text style={styles.overviewValue}>$0</Text>
+                  <Text style={styles.overviewLabel}>Revenue</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Management Sections */}
+            <View style={styles.managementSection}>
+              <Text style={styles.sectionTitle}>Management</Text>
+              
+              {/* Branches Card */}
+              <TouchableOpacity
+                style={styles.managementCard}
+                onPress={handleNavigateToBranches}
+              >
+                <View style={styles.managementCardContent}>
+                  <View style={styles.managementIcon}>
+                    <Ionicons name="business" size={28} color="#3B82F6" />
+                  </View>
+                  <View style={styles.managementInfo}>
+                    <Text style={styles.managementTitle}>Branches</Text>
+                    <Text style={styles.managementSubtitle}>
+                      Manage your business locations
+                    </Text>
+                    <Text style={styles.managementCount}>
+                      {branches.length} branch{branches.length !== 1 ? 'es' : ''}
                     </Text>
                   </View>
-                  {item.type === 'toggle' && (
-                    <Switch
-                      value={item.value as boolean}
-                      onValueChange={() => (item.onChange as () => void)?.()}
-                      trackColor={{ false: '#E5E7EB', true: '#2563EB' }}
-                      thumbColor="#FFFFFF"
-                    />
-                  )}
-                  {item.type === 'select' && (
-                    <View style={styles.selectContainer}>
-                      <Text style={styles.selectValue}>
-                        {(item.options?.find((opt) => opt.value === item.value)?.label) || item.value}
-                      </Text>
-                      <Ionicons name="chevron-down" size={20} color="#6B7280" />
-                    </View>
-                  )}
-                  {item.type === 'button' && (
-                    <TouchableOpacity
-                      onPress={item.onClick}
-                      style={styles.button}
-                    >
-                      <Text style={styles.buttonText}>Change</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
-              ))}
+                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+              </TouchableOpacity>
+
+              {/* Sales Reps Card */}
+              <TouchableOpacity
+                style={styles.managementCard}
+                onPress={handleNavigateToSalesReps}
+              >
+                <View style={styles.managementCardContent}>
+                  <View style={styles.managementIcon}>
+                    <Ionicons name="people" size={28} color="#10B981" />
+                  </View>
+                  <View style={styles.managementInfo}>
+                    <Text style={styles.managementTitle}>Sales Representatives</Text>
+                    <Text style={styles.managementSubtitle}>
+                      Manage your sales team
+                    </Text>
+                    <Text style={styles.managementCount}>
+                      {salesReps.length} sales rep{salesReps.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+              </TouchableOpacity>
             </View>
-          </View>
-        ))}
+
+            {/* Financial Sections */}
+            <View style={styles.financialSection}>
+              <Text style={styles.sectionTitle}>Financial</Text>
+              
+              {/* Settlements Card */}
+              <TouchableOpacity
+                style={styles.financialCard}
+                onPress={handleNavigateToSettlements}
+              >
+                <View style={styles.financialCardContent}>
+                  <View style={styles.financialIcon}>
+                    <Ionicons name="card" size={28} color="#F59E0B" />
+                  </View>
+                  <View style={styles.financialInfo}>
+                    <Text style={styles.financialTitle}>Settlements</Text>
+                    <Text style={styles.financialSubtitle}>
+                      Request and track payments
+                    </Text>
+                    <Text style={styles.financialStatus}>
+                      No pending settlements
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+              </TouchableOpacity>
+
+              {/* Reports Card */}
+              <TouchableOpacity
+                style={styles.financialCard}
+                onPress={handleNavigateToReports}
+              >
+                <View style={styles.financialCardContent}>
+                  <View style={styles.financialIcon}>
+                    <Ionicons name="bar-chart" size={28} color="#8B5CF6" />
+                  </View>
+                  <View style={styles.financialInfo}>
+                    <Text style={styles.financialTitle}>Analytics & Reports</Text>
+                    <Text style={styles.financialSubtitle}>
+                      View detailed performance metrics
+                    </Text>
+                    <Text style={styles.financialStatus}>
+                      View comprehensive reports
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
+              </TouchableOpacity>
+      </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
@@ -225,93 +258,211 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 16,
-    paddingBottom: 16,
-    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 64 : 64,
-    backgroundColor: '#FFFFFF',
+    paddingBottom: 12,
+    minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 56 : 56,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  backButton: {
+  headerBack: {
     padding: 8,
-    marginRight: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#111827',
   },
   content: {
     flex: 1,
     padding: 16,
   },
-  section: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
+  // Empty state styles
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    paddingVertical: 60,
   },
-  sectionTitle: {
-    fontSize: 16,
+  emptyStateIcon: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#F9FAFB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  emptyTitle: {
+    fontSize: 20,
     fontWeight: '600',
     color: '#111827',
-    marginLeft: 12,
+    marginBottom: 8,
   },
-  sectionContent: {
-    padding: 16,
+  emptyText: {
+    color: '#6B7280',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+    paddingHorizontal: 20,
   },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  primaryButton: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 24,
     paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  settingInfo: {
-    flex: 1,
-    marginRight: 16,
-  },
-  settingLabel: {
+  primaryButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '500',
+  },
+  // Section styles
+  overviewSection: {
+    marginBottom: 32,
+  },
+  managementSection: {
+    marginBottom: 32,
+  },
+  financialSection: {
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  // Overview grid
+  overviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  overviewCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  overviewIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F0F9FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  overviewValue: {
+    fontSize: 24,
+    fontWeight: '700',
     color: '#111827',
     marginBottom: 4,
   },
-  settingDescription: {
+  overviewLabel: {
     fontSize: 14,
     color: '#6B7280',
+    textAlign: 'center',
   },
-  selectContainer: {
+  // Management cards
+  managementCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    padding: 20,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginBottom: 12,
   },
-  selectValue: {
-    fontSize: 14,
+  managementCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  managementIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F0F9FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  managementInfo: {
+    flex: 1,
+  },
+  managementTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     color: '#111827',
-    marginRight: 8,
+    marginBottom: 4,
   },
-  button: {
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#FFFFFF',
+  managementSubtitle: {
     fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  managementCount: {
+    fontSize: 12,
+    color: '#9CA3AF',
     fontWeight: '500',
   },
-}) 
+  // Financial cards
+  financialCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F9FAFB',
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 12,
+  },
+  financialCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  financialIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FEF3C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  financialInfo: {
+    flex: 1,
+  },
+  financialTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  financialSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  financialStatus: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+})
