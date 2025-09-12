@@ -111,13 +111,23 @@ export default function RentalChatScreen() {
       console.log('RentalChat: Messages loaded:', messagesData?.length || 0);
       
       setRental(rentalData);
-      // Filter messages to only those sent by current user as CUSTOMER
-      const filtered = (messagesData || []).filter((m: any) => m?.senderId === effectiveUserId && (m?.senderType === 'CUSTOMER' || m?.senderType === 'customer'));
-      setMessages(filtered);
+      // Show all messages for this rental (both customer and driver messages)
+      setMessages(messagesData || []);
     } catch (e: any) {
       console.error('RentalChat: Failed to load rental details', e);
-      setError(e.message || 'Failed to load rental details');
-      Alert.alert('Error', e.message || 'Failed to load rental details. Please try again.');
+      const errorMessage = e.message || 'Failed to load rental details';
+      setError(errorMessage);
+      
+      // Show more specific error messages
+      if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        Alert.alert('Authentication Error', 'Your session has expired. Please log in again.');
+      } else if (errorMessage.includes('403') || errorMessage.includes('Access denied')) {
+        Alert.alert('Access Denied', 'You do not have permission to view this rental chat.');
+      } else if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        Alert.alert('Rental Not Found', 'This rental request could not be found.');
+      } else {
+        Alert.alert('Error', errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -136,8 +146,8 @@ export default function RentalChatScreen() {
       console.log('RentalChat: Message sent successfully:', sentMessage?.id);
       
       setMessage('');
-      // Only append if the message matches current user and senderType CUSTOMER
-      if (sentMessage?.senderId === currentUserId && (sentMessage?.senderType === 'CUSTOMER' || sentMessage?.senderType === 'customer')) {
+      // Add the sent message to the messages array
+      if (sentMessage?.senderId === currentUserId) {
         setMessages(prev => [...prev, sentMessage]);
       }
     } catch (error: any) {
@@ -299,7 +309,7 @@ export default function RentalChatScreen() {
             ) : (
               <View style={styles.messagesContainer}>
                 {messages.map((msg) => {
-                  const isOwnMessage = msg.senderId === user?.id;
+                  const isOwnMessage = msg.senderId === currentUserId;
                   return (
                     <View key={msg.id} style={[
                       styles.messageContainer,

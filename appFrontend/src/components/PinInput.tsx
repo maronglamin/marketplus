@@ -6,6 +6,7 @@ import {
   StyleProp,
   ViewStyle,
   TextInputProps,
+  Platform,
 } from 'react-native';
 import { colors, spacing } from '../theme';
 
@@ -37,8 +38,12 @@ const PinInput = ({
   }, [onComplete]);
 
   useEffect(() => {
-    // Focus input when component mounts
-    inputRef.current?.focus();
+    // Focus input when component mounts. On Android, delay ensures keyboard opens.
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, Platform.OS === 'android' ? 300 : 0);
+
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -62,7 +67,15 @@ const PinInput = ({
   };
 
   return (
-    <View style={[styles.container, style]}>
+    <View
+      style={[styles.container, style]}
+      onLayout={() => {
+        // Ensure focus after layout on Android
+        if (Platform.OS === 'android') {
+          setTimeout(() => inputRef.current?.focus(), 0);
+        }
+      }}
+    >
       <TextInput
         ref={inputRef}
         value={value}
@@ -71,6 +84,8 @@ const PinInput = ({
         keyboardType="number-pad"
         secureTextEntry
         style={styles.input}
+        autoFocus
+        showSoftInputOnFocus
         {...props}
       />
       <View style={styles.dotsContainer}>

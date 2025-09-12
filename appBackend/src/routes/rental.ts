@@ -28,6 +28,15 @@ router.post('/', authenticate, async (req: any, res) => {
     }
 
     // Ensure the authenticated user is the customer creating the rental
+    console.log('Rental route: req.user.id:', req.user?.id);
+    console.log('Rental route: customerId:', customerId);
+    console.log('Rental route: user types:', typeof req.user?.id, typeof customerId);
+    console.log('Rental route: user stringified:', JSON.stringify(req.user?.id));
+    console.log('Rental route: customerId stringified:', JSON.stringify(customerId));
+    console.log('Rental route: strict equality:', req.user?.id === customerId);
+    console.log('Rental route: loose equality:', req.user?.id == customerId);
+    console.log('Rental route: comparison result:', req.user?.id !== customerId);
+    
     if (!req.user?.id || req.user.id !== customerId) {
       return res.status(403).json({ success: false, message: 'Access denied - can only create rentals for yourself' });
     }

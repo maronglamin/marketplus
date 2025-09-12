@@ -17,6 +17,9 @@ import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navig
 import { rentalApi } from '../services/rentalApi';
 import { RentalDriver } from '../services/rentalService';
 import { ENV_CONFIG } from '../config/env';
+import { useAuth } from '../contexts/AuthContext';
+import { api } from '../api/api';
+import { getAuthToken } from '../api/auth';
 
 type VehicleDetailsRouteProp = RouteProp<{
   VehicleDetails: {
@@ -26,10 +29,26 @@ type VehicleDetailsRouteProp = RouteProp<{
   };
 }, 'VehicleDetails'>;
 
+// Helper function to get user ID from JWT token
+const getUserIdFromToken = async (): Promise<string | null> => {
+  try {
+    const token = await getAuthToken();
+    if (!token) return null;
+    
+    // Decode JWT token to get userId
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.userId || null;
+  } catch (error) {
+    console.log('Error decoding JWT token:', error);
+    return null;
+  }
+};
+
 export default function VehicleDetailsScreen() {
   const navigation = useNavigation();
   const route = useRoute<VehicleDetailsRouteProp>();
   const { driver, selectedService, scheduleData } = route.params;
+  const { user, refreshUser } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
   const [vehicleImages, setVehicleImages] = useState<{
@@ -77,8 +96,58 @@ export default function VehicleDetailsScreen() {
     try {
       setIsLoading(true);
       
+      // Validate required fields before making the API call
+      if (!user?.id) {
+        Alert.alert('Error', 'User authentication is required. Please log in again.');
+        return;
+      }
+      
+      // Refresh user data to ensure we have the latest information
+      try {
+        await refreshUser();
+        console.log('User data refreshed successfully');
+      } catch (error) {
+        console.log('Failed to refresh user data, proceeding with current data:', error);
+      }
+      
+      if (!selectedService?.id) {
+        Alert.alert('Error', 'Ride service information is missing. Please try again.');
+        return;
+      }
+      
+      if (!scheduleData.pickupAddress && !scheduleData.pickupLocation) {
+        Alert.alert('Error', 'Pickup address is required. Please try again.');
+        return;
+      }
+      
+      if (!scheduleData.startDate || !scheduleData.endDate) {
+        Alert.alert('Error', 'Start and end dates are required. Please try again.');
+        return;
+      }
+      
+      // Get user ID from JWT token to ensure consistency
+      const tokenUserId = await getUserIdFromToken();
+      if (!tokenUserId) {
+        Alert.alert('Error', 'Unable to get user ID from token. Please log in again.');
+        return;
+      }
+      
+      // Use the user ID from the JWT token instead of user context
+      const customerId = tokenUserId;
+      
+      // Validate that we have a valid UUID format
+      if (!customerId || customerId === 'undefined' || customerId === 'null') {
+        Alert.alert('Error', 'Invalid user ID. Please log in again.');
+        return;
+      }
+      
+      // Log the comparison for debugging
+      console.log('JWT Token User ID:', tokenUserId);
+      console.log('User Context ID:', user?.id);
+      console.log('Using JWT Token ID for rental booking');
+      
       const payload = {
-        customerId: scheduleData.user?.id,
+        customerId: customerId,
         rideServiceId: selectedService.id,
         driverId: driver.id,
         riderApplicationId: driver.riderApplication.id,
@@ -90,6 +159,14 @@ export default function VehicleDetailsScreen() {
         notes: undefined,
       };
 
+      console.log('=== RENTAL BOOKING DEBUG ===');
+      console.log('Rental booking payload:', payload);
+      console.log('Authenticated user:', user);
+      console.log('ScheduleData user:', scheduleData.user);
+      console.log('CustomerId type:', typeof customerId, 'Value:', customerId);
+      console.log('Expected JWT userId: ce077982-11e0-4f94-8d7a-b9cf9c8d600a');
+      console.log('CustomerId matches JWT:', customerId === 'ce077982-11e0-4f94-8d7a-b9cf9c8d600a');
+      console.log('============================');
       await rentalApi.createRental(payload);
       
       Alert.alert(
@@ -98,7 +175,17 @@ export default function VehicleDetailsScreen() {
         [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('AssetRental' as never)
+            onPress: () => {
+              // Navigate to Home screen after successful booking
+              console.log('Attempting to navigate to Home screen...');
+              // Reset navigation stack to Home screen with a small delay
+              setTimeout(() => {
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Home' }],
+                });
+              }, 100);
+            }
           }
         ]
       );
@@ -566,6 +653,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    paddingBottom: 32, // Add extra bottom padding for better spacing
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
   },

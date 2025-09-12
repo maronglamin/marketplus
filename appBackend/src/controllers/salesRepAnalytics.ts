@@ -329,45 +329,46 @@ export const getParentSellerAnalytics = async (req: AuthenticatedRequest, res: R
       }
     })
 
-    const salesRepIds = salesReps.map(rep => rep.id)
-
-    // Get aggregated data
+    // Get aggregated data using the same relationship logic as recent activity
+    // Products and orders are linked by sellerId = rep.userId (not salesRepId)
+    const repUserIds = salesReps.map(rep => rep.userId)
+    
     const [
       totalStats,
       salesRepsStats
     ] = await Promise.all([
-      // Total aggregated stats
+      // Total aggregated stats using sellerId = rep.userId
       Promise.all([
         prisma.product.count({
           where: { 
-            salesRepId: { in: salesRepIds },
+            sellerId: { in: repUserIds },
             createdAt: { gte: dateFrom, lte: dateTo }
           }
         }),
         prisma.product.count({
           where: { 
-            salesRepId: { in: salesRepIds },
+            sellerId: { in: repUserIds },
             status: 'ACTIVE',
             createdAt: { gte: dateFrom, lte: dateTo }
           }
         }),
         prisma.orders.count({
           where: { 
-            salesRepId: { in: salesRepIds },
+            sellerId: { in: repUserIds },
             createdAt: { gte: dateFrom, lte: dateTo }
           }
         }),
         prisma.orders.count({
           where: { 
-            salesRepId: { in: salesRepIds },
-            status: 'COMPLETED',
+            sellerId: { in: repUserIds },
+            status: { in: ['COMPLETED', 'DELIVERED', 'CONFIRMED'] },
             createdAt: { gte: dateFrom, lte: dateTo }
           }
         }),
         prisma.orders.aggregate({
           where: { 
-            salesRepId: { in: salesRepIds },
-            status: 'COMPLETED',
+            sellerId: { in: repUserIds },
+            status: { in: ['COMPLETED', 'DELIVERED', 'CONFIRMED'] },
             createdAt: { gte: dateFrom, lte: dateTo }
           },
           _sum: {
@@ -375,39 +376,39 @@ export const getParentSellerAnalytics = async (req: AuthenticatedRequest, res: R
           }
         })
       ]),
-      // Individual sales rep stats
+      // Individual sales rep stats using sellerId = rep.userId
       Promise.all(salesReps.map(async (rep) => {
         const [totalProducts, activeProducts, totalOrders, completedOrders, totalRevenue] = await Promise.all([
           prisma.product.count({
             where: { 
-              salesRepId: rep.id,
+              sellerId: rep.userId,
               createdAt: { gte: dateFrom, lte: dateTo }
             }
           }),
           prisma.product.count({
             where: { 
-              salesRepId: rep.id,
+              sellerId: rep.userId,
               status: 'ACTIVE',
               createdAt: { gte: dateFrom, lte: dateTo }
             }
           }),
           prisma.orders.count({
             where: { 
-              salesRepId: rep.id,
+              sellerId: rep.userId,
               createdAt: { gte: dateFrom, lte: dateTo }
             }
           }),
           prisma.orders.count({
             where: { 
-              salesRepId: rep.id,
-              status: 'COMPLETED',
+              sellerId: rep.userId,
+              status: { in: ['COMPLETED', 'DELIVERED', 'CONFIRMED'] },
               createdAt: { gte: dateFrom, lte: dateTo }
             }
           }),
           prisma.orders.aggregate({
             where: { 
-              salesRepId: rep.id,
-              status: 'COMPLETED',
+              sellerId: rep.userId,
+              status: { in: ['COMPLETED', 'DELIVERED', 'CONFIRMED'] },
               createdAt: { gte: dateFrom, lte: dateTo }
             },
             _sum: {
@@ -436,17 +437,46 @@ export const getParentSellerAnalytics = async (req: AuthenticatedRequest, res: R
 
     const [totalProducts, activeProducts, totalOrders, completedOrders, totalRevenue] = totalStats
 
+    // Compute revenue breakdown by currency and select primary currency (most used by count)
+    const revenueByCurrency = await prisma.orders.groupBy({
+      by: ['currencyCode'],
+      where: {
+        sellerId: { in: repUserIds },
+        status: { in: ['COMPLETED', 'DELIVERED', 'CONFIRMED'] },
+        createdAt: { gte: dateFrom, lte: dateTo }
+      },
+      _sum: { totalAmount: true },
+      _count: { _all: true }
+    })
+
+    let primaryCurrencyCode: string | null = null
+    let primaryCurrencyTotal = 0 as any
+    if (revenueByCurrency.length > 0) {
+      revenueByCurrency.sort((a, b) => (b._count._all || 0) - (a._count._all || 0))
+      const primary = revenueByCurrency[0]
+      primaryCurrencyCode = primary.currencyCode || 'USD'
+      primaryCurrencyTotal = primary._sum.totalAmount || 0
+    }
+    const otherCurrencyCodes = revenueByCurrency
+      .filter(rc => rc.currencyCode !== primaryCurrencyCode)
+      .map(rc => rc.currencyCode)
+
     const analytics = {
       totalStats: {
         totalProducts,
         activeProducts,
-        totalSales: completedOrders,
-        totalRevenue: totalRevenue._sum.totalAmount || 0,
-        revenueCurrency: 'USD',
+        totalSales: totalOrders,
+        totalRevenue: primaryCurrencyTotal || 0,
+        revenueCurrency: primaryCurrencyCode || 'USD',
         pendingOrders: totalOrders - completedOrders,
         completedOrders,
         averageRating: 0,
         ratingCount: 0
+      },
+      currencyBreakdown: {
+        primaryCurrencyCode: primaryCurrencyCode || 'USD',
+        primaryCurrencyTotal: primaryCurrencyTotal || 0,
+        otherCurrencyCodes,
       },
       salesReps: salesRepsStats,
       aggregatedData: {
@@ -459,8 +489,8 @@ export const getParentSellerAnalytics = async (req: AuthenticatedRequest, res: R
           totalProducts,
           activeProducts,
           totalSales: completedOrders,
-          totalRevenue: totalRevenue._sum.totalAmount || 0,
-          revenueCurrency: 'USD',
+          totalRevenue: primaryCurrencyTotal || 0,
+          revenueCurrency: primaryCurrencyCode || 'USD',
           pendingOrders: totalOrders - completedOrders,
           completedOrders,
           averageRating: 0,
@@ -481,6 +511,184 @@ export const getParentSellerAnalytics = async (req: AuthenticatedRequest, res: R
     res.json(analytics)
   } catch (error) {
     logger.error('Error fetching parent seller analytics:', error)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+}
+
+// Get recent activity across all sales reps under the authenticated parent seller
+// Combines products (by sellerId = rep.userId) and orders (by sellerId = rep.userId)
+// Supports cursor pagination using createdAt ISO string
+export const getParentSellerRecentActivity = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const parentSellerId = req.user?.id
+    if (!parentSellerId) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+
+    const limit = Math.min(parseInt((req.query.limit as string) || '20', 10), 50)
+    const cursor = (req.query.cursor as string) || undefined
+    const typeFilter = (req.query.type as string) || undefined // 'product' | 'order'
+
+    // Get all reps for this seller
+    const reps = await prisma.salesRep.findMany({
+      where: { parentSellerId },
+      include: {
+        user: { select: { id: true, firstName: true, lastName: true } },
+      }
+    })
+
+    if (reps.length === 0) {
+      return res.json({ items: [], nextCursor: null })
+    }
+
+    const repUserIds = reps.map(r => r.userId)
+    const repByUserId = new Map(reps.map(r => [r.userId, r]))
+
+    const createdBefore = cursor ? new Date(cursor) : undefined
+
+    // Fetch a bit more than limit from each source to merge properly
+    const fetchLimit = limit * 2
+
+    const fetchProducts = async () => {
+      if (typeFilter && typeFilter !== 'product') return [] as any[]
+      return prisma.product.findMany({
+        where: {
+          sellerId: { in: repUserIds },
+          ...(createdBefore ? { createdAt: { lt: createdBefore } } : {}),
+        },
+        select: {
+          id: true,
+          sellerId: true,
+          title: true,
+          price: true,
+          currencyCode: true,
+          quantity: true,
+          status: true,
+          createdAt: true,
+          images: {
+            where: { isPrimary: true },
+            select: { imageUrl: true },
+            take: 1
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: fetchLimit,
+      })
+    }
+
+    const fetchOrders = async () => {
+      if (typeFilter && typeFilter !== 'order') return [] as any[]
+      return prisma.orders.findMany({
+        where: {
+          sellerId: { in: repUserIds },
+          ...(createdBefore ? { createdAt: { lt: createdBefore } } : {}),
+        },
+        select: {
+          id: true,
+          sellerId: true,
+          orderNumber: true,
+          totalAmount: true,
+          currencyCode: true,
+          status: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: fetchLimit,
+      })
+    }
+
+    const [products, orders] = await Promise.all([fetchProducts(), fetchOrders()])
+
+    // Fetch first product title and image per order to enrich order activities
+    let orderIdToProductTitle: Map<string, string> = new Map()
+    let orderIdToProductImage: Map<string, string> = new Map()
+    if (orders.length > 0) {
+      const orderIds = orders.map((o: any) => o.id)
+      const orderItems = await prisma.orderItem.findMany({
+        where: { orderId: { in: orderIds } },
+        select: {
+          orderId: true,
+          productSnapshot: true,
+          product: { 
+            select: { 
+              title: true,
+              images: {
+                where: { isPrimary: true },
+                select: { imageUrl: true },
+                take: 1
+              }
+            } 
+          }
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+
+      for (const item of orderItems) {
+        if (!orderIdToProductTitle.has(item.orderId)) {
+          const snapshotTitle = (item.productSnapshot as any)?.title
+          const title = snapshotTitle || item.product?.title || 'Product'
+          orderIdToProductTitle.set(item.orderId, title)
+          
+          // Get product image from either snapshot or current product
+          const snapshotImage = (item.productSnapshot as any)?.imageUrl
+          const productImage = item.product?.images?.[0]?.imageUrl
+          const imageUrl = snapshotImage || productImage || null
+          if (imageUrl) {
+            orderIdToProductImage.set(item.orderId, imageUrl)
+          }
+        }
+      }
+    }
+
+    // Normalize and merge
+    const productActivities = products.map((p: any) => {
+      const rep = repByUserId.get(p.sellerId)
+      return {
+        id: `product:${p.id}`,
+        type: 'product' as const,
+        createdAt: p.createdAt,
+        rep: rep ? { id: rep.id, userId: rep.userId, name: `${rep.user.firstName} ${rep.user.lastName}` } : null,
+        data: {
+          productId: p.id,
+          title: p.title,
+          amount: p.price,
+          currencyCode: p.currencyCode,
+          quantity: p.quantity,
+          status: p.status,
+          productImage: p.images?.[0]?.imageUrl || null,
+        }
+      }
+    })
+
+    const orderActivities = orders.map((o: any) => {
+      const rep = repByUserId.get(o.sellerId)
+      return {
+        id: `order:${o.id}`,
+        type: 'order' as const,
+        createdAt: o.createdAt,
+        rep: rep ? { id: rep.id, userId: rep.userId, name: `${rep.user.firstName} ${rep.user.lastName}` } : null,
+        data: {
+          orderId: o.id,
+          orderNumber: o.orderNumber,
+          productTitle: orderIdToProductTitle.get(o.id) || undefined,
+          productImage: orderIdToProductImage.get(o.id) || null,
+          amount: o.totalAmount,
+          currencyCode: o.currencyCode,
+          status: o.status,
+        }
+      }
+    })
+
+    const merged = [...productActivities, ...orderActivities]
+      .sort((a, b) => (b.createdAt as any) - (a.createdAt as any))
+
+    const sliced = merged.slice(0, limit)
+    const last = sliced[sliced.length - 1]
+    const nextCursor = last ? new Date(last.createdAt).toISOString() : null
+
+    res.json({ items: sliced, nextCursor })
+  } catch (error) {
+    logger.error('Error fetching parent seller recent activity:', error)
     res.status(500).json({ error: 'Internal server error' })
   }
 }

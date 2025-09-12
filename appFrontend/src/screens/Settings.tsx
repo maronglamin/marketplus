@@ -100,14 +100,6 @@ export function Settings() {
             <Text style={styles.emptyText}>
               You need to be a verified seller to access sales management features.
             </Text>
-            <TouchableOpacity
-              onPress={() => {
-                Alert.alert('Coming Soon', 'Seller registration will be available soon')
-              }}
-              style={styles.primaryButton}
-            >
-              <Text style={styles.primaryButtonText}>Become a Seller</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <>
@@ -128,20 +120,6 @@ export function Settings() {
                   </View>
                   <Text style={styles.overviewValue}>{salesReps.length}</Text>
                   <Text style={styles.overviewLabel}>Sales Reps</Text>
-                </View>
-                <View style={styles.overviewCard}>
-                  <View style={styles.overviewIcon}>
-                    <Ionicons name="card" size={24} color="#F59E0B" />
-                  </View>
-                  <Text style={styles.overviewValue}>0</Text>
-                  <Text style={styles.overviewLabel}>Settlements</Text>
-                </View>
-                <View style={styles.overviewCard}>
-                  <View style={styles.overviewIcon}>
-                    <Ionicons name="bar-chart" size={24} color="#8B5CF6" />
-                  </View>
-                  <Text style={styles.overviewValue}>$0</Text>
-                  <Text style={styles.overviewLabel}>Revenue</Text>
                 </View>
               </View>
             </View>
@@ -214,7 +192,7 @@ export function Settings() {
                       Request and track payments
                     </Text>
                     <Text style={styles.financialStatus}>
-                      No pending settlements
+                      View awaiting settlements
                     </Text>
                   </View>
                 </View>

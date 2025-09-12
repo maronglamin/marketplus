@@ -303,17 +303,6 @@ export function DriverProfile() {
               </View>
             </View>
 
-            {/* Action Buttons */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.editButton}>
-                <Ionicons name="create-outline" size={20} color="#3B82F6" />
-                <Text style={styles.editButtonText}>Edit Profile</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.refreshButton} onPress={loadDriverProfile}>
-                <Ionicons name="refresh-outline" size={20} color="#6B7280" />
-                <Text style={styles.refreshButtonText}>Refresh</Text>
-              </TouchableOpacity>
-            </View>
           </>
         )}
       </ScrollView>
@@ -468,45 +457,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#111827',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  editButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EFF6FF',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  editButtonText: {
-    color: '#3B82F6',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  refreshButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginLeft: 8,
-  },
-  refreshButtonText: {
-    color: '#6B7280',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
   },
 })

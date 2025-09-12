@@ -11,7 +11,8 @@ import {
 } from '../controllers/salesRep'
 import {
   getSalesRepAnalytics,
-  getParentSellerAnalytics
+  getParentSellerAnalytics,
+  getParentSellerRecentActivity
 } from '../controllers/salesRepAnalytics'
 import {
   requestSettlement,
@@ -51,6 +52,10 @@ router.get('/:salesRepId/analytics', getSalesRepAnalytics)
 
 // GET /api/sales-reps/analytics/parent - Get parent seller analytics (all sales reps)
 router.get('/analytics/parent', getParentSellerAnalytics)
+
+// GET /api/sales-reps/activity/recent - Get recent activity across all reps for parent seller
+// Query: limit, cursor, type
+router.get('/activity/recent', getParentSellerRecentActivity)
 
 // Settlement routes
 // POST /api/sales-reps/settlement/request - Request settlement

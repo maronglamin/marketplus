@@ -22,6 +22,7 @@ import RideServicesModal from './RideServicesModal';
 import DriversModal from './DriversModal';
 import { rentalApi } from '../services/rentalApi';
 import { useAuth } from '../contexts/AuthContext';
+import { getAuthToken } from '../api/auth';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../navigation/AppNavigator';
@@ -48,7 +49,23 @@ interface ScheduleRideData {
   pickupAddress: string;
   selectedService?: RentalRideService;
   selectedDriver?: RentalDriver;
+  user?: any; // Include authenticated user
 }
+
+// Helper function to get user ID from JWT token
+const getUserIdFromToken = async (): Promise<string | null> => {
+  try {
+    const token = await getAuthToken();
+    if (!token) return null;
+    
+    // Decode JWT token to get userId
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.userId || null;
+  } catch (error) {
+    console.log('Error decoding JWT token:', error);
+    return null;
+  }
+};
 
 export default function ScheduleRideModal({ isVisible, onClose, onSave }: ScheduleRideModalProps) {
 
@@ -384,11 +401,33 @@ export default function ScheduleRideModal({ isVisible, onClose, onSave }: Schedu
         pickupAddress,
         selectedService: selectedService!,
         selectedDriver: selectedDriver!,
+        user: user, // Include authenticated user in scheduleData
       };
 
       // Create rental on backend
+      // Get user ID from JWT token to ensure consistency
+      const tokenUserId = await getUserIdFromToken();
+      if (!tokenUserId) {
+        Alert.alert('Error', 'Unable to get user ID from token. Please log in again.');
+        return;
+      }
+      
+      // Use the user ID from the JWT token instead of user context
+      const customerId = tokenUserId;
+      
+      // Validate that we have a valid UUID format
+      if (!customerId || customerId === 'undefined' || customerId === 'null') {
+        Alert.alert('Error', 'Invalid user ID. Please log in again.');
+        return;
+      }
+      
+      // Log the comparison for debugging
+      console.log('JWT Token User ID:', tokenUserId);
+      console.log('User Context ID:', user?.id);
+      console.log('Using JWT Token ID for rental booking');
+      
       const payload = {
-        customerId: user?.id,
+        customerId: customerId,
         rideServiceId: selectedService!.id,
         driverId: selectedDriver!.id,
         riderApplicationId: selectedDriver?.riderApplication?.id,
@@ -404,6 +443,13 @@ export default function ScheduleRideModal({ isVisible, onClose, onSave }: Schedu
         throw new Error('Missing customerId');
       }
 
+      console.log('=== RENTAL BOOKING DEBUG ===');
+      console.log('Rental booking payload:', payload);
+      console.log('Authenticated user:', user);
+      console.log('CustomerId type:', typeof customerId, 'Value:', customerId);
+      console.log('Expected JWT userId: ce077982-11e0-4f94-8d7a-b9cf9c8d600a');
+      console.log('CustomerId matches JWT:', customerId === 'ce077982-11e0-4f94-8d7a-b9cf9c8d600a');
+      console.log('============================');
       await rentalApi.createRental(payload);
 
       await onSave(scheduleData);
@@ -413,7 +459,15 @@ export default function ScheduleRideModal({ isVisible, onClose, onSave }: Schedu
           onPress: () => {
             resetForm();
             onClose();
-            navigation.navigate('RentalRequest');
+            // Navigate to Home screen after successful booking
+            console.log('Attempting to navigate to Home screen...');
+            // Reset navigation stack to Home screen with a small delay
+            setTimeout(() => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Home' }],
+              });
+            }, 100);
           },
         },
       ]);

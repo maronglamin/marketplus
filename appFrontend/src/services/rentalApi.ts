@@ -19,6 +19,10 @@ class RentalApi {
 
   async createRental(payload: CreateRentalPayload) {
     const token = await getAuthToken();
+    console.log('RentalApi: Creating rental with payload:', payload);
+    console.log('RentalApi: Token available:', !!token);
+    console.log('RentalApi: Token length:', token?.length);
+    
     const res = await fetch(`${this.baseUrl}/api/rentals`, {
       method: 'POST',
       headers: { 
@@ -27,11 +31,17 @@ class RentalApi {
       },
       body: JSON.stringify(payload),
     });
+    
+    console.log('RentalApi: Response status:', res.status);
+    console.log('RentalApi: Response headers:', res.headers);
+    
     if (!res.ok) {
       const text = await res.text();
+      console.log('RentalApi: Error response:', text);
       throw new Error(text || 'Failed to create rental');
     }
     const data = await res.json();
+    console.log('RentalApi: Success response:', data);
     return data.data;
   }
 
@@ -91,13 +101,25 @@ class RentalApi {
 
   async getRentalMessages(rentalId: string) {
     const token = await getAuthToken();
+    console.log('RentalApi: Fetching messages for rental ID:', rentalId);
+    console.log('RentalApi: Token available:', !!token);
+    
     const res = await fetch(`${this.baseUrl}/api/rental-messages/${rentalId}/messages`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
     });
-    if (!res.ok) throw new Error('Failed to fetch rental messages');
+    
+    console.log('RentalApi: Messages response status:', res.status);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('RentalApi: Messages error response:', errorText);
+      throw new Error(`Failed to fetch rental messages: ${res.status} - ${errorText}`);
+    }
+    
     const data = await res.json();
+    console.log('RentalApi: Messages response data:', data);
     return data.data;
   }
 

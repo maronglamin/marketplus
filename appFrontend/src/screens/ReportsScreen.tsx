@@ -12,6 +12,7 @@ type ReportsScreenNavigationProp = NativeStackNavigationProp<AppStackParamList, 
 export function ReportsScreen() {
   const navigation = useNavigation<ReportsScreenNavigationProp>()
   const [analytics, setAnalytics] = useState<any>(null)
+  const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly')
 
@@ -19,26 +20,15 @@ export function ReportsScreen() {
     loadAnalytics()
   }, [selectedPeriod])
 
+  useEffect(() => {
+    loadRecentActivity()
+  }, [])
+
   const loadAnalytics = async () => {
     try {
       setLoading(true)
-      // TODO: Implement analytics loading
-      // const analyticsData = await salesRepService.getParentSellerAnalytics(selectedPeriod)
-      // setAnalytics(analyticsData)
-      
-      // Mock data for now
-      setAnalytics({
-        totalSales: 12500,
-        totalOrders: 45,
-        totalProducts: 12,
-        salesReps: 3,
-        topSellingProduct: 'Premium Widget',
-        recentActivity: [
-          { type: 'sale', amount: 250, date: '2024-01-15', rep: 'John Doe' },
-          { type: 'order', amount: 150, date: '2024-01-14', rep: 'Jane Smith' },
-          { type: 'sale', amount: 300, date: '2024-01-13', rep: 'John Doe' },
-        ]
-      })
+      const analyticsData = await salesRepService.getParentSellerAnalytics(selectedPeriod)
+      setAnalytics(analyticsData)
     } catch (error) {
       console.error('Error loading analytics:', error)
       Alert.alert('Error', 'Failed to load analytics data')
@@ -47,19 +37,66 @@ export function ReportsScreen() {
     }
   }
 
-  const handleExportReport = () => {
-    Alert.alert('Coming Soon', 'Report export functionality will be available soon')
-  }
 
   const handleViewDetailedReport = (reportType: string) => {
+    if (reportType === 'Activity') {
+      navigation.navigate('RepsActivity')
+      return
+    }
+    if (reportType === 'Sales') {
+      navigation.navigate('SettlementsScreen')
+      return
+    }
+    if (reportType === 'Orders') {
+      navigation.navigate('RepOrderReport')
+      return
+    }
+    if (reportType === 'Products') {
+      navigation.navigate('RepProductReport')
+      return
+    }
+    if (reportType === 'Settlement') {
+      navigation.navigate('SettlementRequest')
+      return
+    }
     Alert.alert('Coming Soon', `${reportType} detailed report will be available soon`)
   }
 
-  const formatCurrency = (amount: number) => {
+  const loadRecentActivity = async () => {
+    try {
+      const res = await salesRepService.getRecentActivity({ limit: 5 })
+      setRecentActivity(res.items)
+    } catch (e) {
+      console.error('Failed to load recent activity', e)
+    }
+  }
+
+  const formatCurrency = (amount: number, currencyCode?: string) => {
+    const currency = currencyCode || 'USD'
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency
     }).format(amount)
+  }
+
+  const formatNumberAbbreviation = (num: number | string, currencyCode?: string): string => {
+    const number = typeof num === 'string' ? parseFloat(num) : num
+    if (isNaN(number)) return '0'
+    
+    const currency = currencyCode || 'USD'
+    let abbreviated = ''
+    
+    if (number >= 1000000000) {
+      abbreviated = (number / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B'
+    } else if (number >= 1000000) {
+      abbreviated = (number / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+    } else if (number >= 1000) {
+      abbreviated = (number / 1000).toFixed(1).replace(/\.0$/, '') + 'K'
+    } else {
+      abbreviated = number.toString()
+    }
+    
+    return `${currency} ${abbreviated}`
   }
 
   const formatDate = (dateString: string) => {
@@ -82,12 +119,7 @@ export function ReportsScreen() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Analytics & Reports</Text>
-        <TouchableOpacity
-          onPress={handleExportReport}
-          style={styles.headerExportButton}
-        >
-          <Ionicons name="download-outline" size={24} color="#3B82F6" />
-        </TouchableOpacity>
+        <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -130,15 +162,21 @@ export function ReportsScreen() {
                   <View style={styles.metricIcon}>
                     <Ionicons name="trending-up" size={24} color="#10B981" />
                   </View>
-                  <Text style={styles.metricValue}>{formatCurrency(analytics?.totalSales || 0)}</Text>
-                  <Text style={styles.metricLabel}>Total Sales</Text>
+                  <Text style={styles.metricValue}>
+                    {formatNumberAbbreviation(analytics?.totalStats?.totalRevenue || 0, analytics?.totalStats?.revenueCurrency)}
+                  </Text>
+                  <Text style={styles.metricLabel}>
+                    Total Sales {analytics?.currencyBreakdown?.otherCurrencyCodes?.length
+                      ? `(Other: ${analytics?.currencyBreakdown?.otherCurrencyCodes.join(', ')})`
+                      : ''}
+                  </Text>
                 </View>
 
                 <View style={styles.metricCard}>
                   <View style={styles.metricIcon}>
                     <Ionicons name="receipt" size={24} color="#3B82F6" />
                   </View>
-                  <Text style={styles.metricValue}>{analytics?.totalOrders || 0}</Text>
+                  <Text style={styles.metricValue}>{analytics?.totalStats?.pendingOrders || 0}</Text>
                   <Text style={styles.metricLabel}>Total Orders</Text>
                 </View>
 
@@ -146,7 +184,7 @@ export function ReportsScreen() {
                   <View style={styles.metricIcon}>
                     <Ionicons name="cube" size={24} color="#F59E0B" />
                   </View>
-                  <Text style={styles.metricValue}>{analytics?.totalProducts || 0}</Text>
+                  <Text style={styles.metricValue}>{analytics?.totalStats?.totalProducts || 0}</Text>
                   <Text style={styles.metricLabel}>Products</Text>
                 </View>
 
@@ -154,65 +192,9 @@ export function ReportsScreen() {
                   <View style={styles.metricIcon}>
                     <Ionicons name="people" size={24} color="#8B5CF6" />
                   </View>
-                  <Text style={styles.metricValue}>{analytics?.salesReps || 0}</Text>
+                  <Text style={styles.metricValue}>{analytics?.salesReps?.length || 0}</Text>
                   <Text style={styles.metricLabel}>Sales Reps</Text>
                 </View>
-              </View>
-            </View>
-
-            {/* Top Performing */}
-            <View style={styles.topPerformingSection}>
-              <Text style={styles.sectionTitle}>Top Performing</Text>
-              <View style={styles.topPerformingCard}>
-                <View style={styles.topPerformingItem}>
-                  <Ionicons name="trophy" size={20} color="#F59E0B" />
-                  <View style={styles.topPerformingContent}>
-                    <Text style={styles.topPerformingLabel}>Top Selling Product</Text>
-                    <Text style={styles.topPerformingValue}>
-                      {analytics?.topSellingProduct || 'No data available'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Recent Activity */}
-            <View style={styles.activitySection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Recent Activity</Text>
-                <TouchableOpacity
-                  onPress={() => handleViewDetailedReport('Activity')}
-                  style={styles.viewAllButton}
-                >
-                  <Text style={styles.viewAllText}>View All</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.activityList}>
-                {analytics?.recentActivity?.map((activity: any, index: number) => (
-                  <View key={index} style={styles.activityItem}>
-                    <View style={[
-                      styles.activityIcon,
-                      activity.type === 'sale' ? styles.saleIcon : styles.orderIcon
-                    ]}>
-                      <Ionicons 
-                        name={activity.type === 'sale' ? 'trending-up' : 'receipt'} 
-                        size={16} 
-                        color="#FFFFFF" 
-                      />
-                    </View>
-                    <View style={styles.activityContent}>
-                      <Text style={styles.activityTitle}>
-                        {activity.type === 'sale' ? 'Sale' : 'Order'} by {activity.rep}
-                      </Text>
-                      <Text style={styles.activityDate}>{formatDate(activity.date)}</Text>
-                    </View>
-                    <Text style={styles.activityAmount}>
-                      {formatCurrency(activity.amount)}
-                    </Text>
-                  </View>
-                )) || []}
               </View>
             </View>
 
@@ -249,12 +231,56 @@ export function ReportsScreen() {
 
                 <TouchableOpacity
                   style={styles.quickReportCard}
-                  onPress={() => handleViewDetailedReport('Sales Reps')}
+                  onPress={() => handleViewDetailedReport('Settlement')}
                 >
-                  <Ionicons name="people" size={24} color="#8B5CF6" />
-                  <Text style={styles.quickReportTitle}>Sales Reps Report</Text>
-                  <Text style={styles.quickReportText}>Individual performance</Text>
+                  <Ionicons name="wallet-outline" size={24} color="#8B5CF6" />
+                  <Text style={styles.quickReportTitle}>Settlement</Text>
+                  <Text style={styles.quickReportText}>Request settlement payments</Text>
                 </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Recent Activity */}
+            <View style={styles.activitySection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Recent Activity</Text>
+                <TouchableOpacity
+                  onPress={() => handleViewDetailedReport('Activity')}
+                  style={styles.viewAllButton}
+                >
+                  <Text style={styles.viewAllText}>View All</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#3B82F6" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.activityList}>
+                {recentActivity.map((activity: any) => (
+                  <View key={activity.id} style={styles.activityItem}>
+                    <View style={[
+                      styles.activityIcon,
+                      activity.type === 'product' ? styles.saleIcon : styles.orderIcon
+                    ]}>
+                      <Ionicons 
+                        name={activity.type === 'product' ? 'cube' : 'receipt'} 
+                        size={16} 
+                        color="#FFFFFF" 
+                      />
+                    </View>
+                    <View style={styles.activityContent}>
+                      <Text style={styles.activityTitle}>
+                        {activity.type === 'product'
+                          ? `${activity.data?.title || 'Product'} by ${activity.rep?.name || 'Rep'}`
+                          : `Order #${activity.data?.orderNumber || ''} - ${activity.data?.productTitle || 'Product'} by ${activity.rep?.name || 'Rep'}`}
+                      </Text>
+                      <Text style={styles.activityDate}>{formatDate(activity.createdAt)}</Text>
+                    </View>
+                    <View style={styles.amountContainer}>
+                      <Text style={styles.activityAmount}>
+                        {formatCurrency(activity.data?.amount || 0, activity.data?.currencyCode)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
               </View>
             </View>
           </>
@@ -290,10 +316,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
-  headerExportButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F0F9FF',
+  placeholder: {
+    width: 40,
   },
   content: {
     flex: 1,
@@ -344,9 +368,6 @@ const styles = StyleSheet.create({
   },
   // Section styles
   metricsSection: {
-    marginBottom: 24,
-  },
-  topPerformingSection: {
     marginBottom: 24,
   },
   activitySection: {
@@ -413,39 +434,13 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
   },
-  // Top performing
-  topPerformingCard: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  topPerformingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  topPerformingContent: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  topPerformingLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  topPerformingValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-  },
   // Activity list
   activityList: {
     gap: 12,
   },
   activityItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     backgroundColor: '#F9FAFB',
     padding: 12,
     borderRadius: 8,
@@ -468,12 +463,14 @@ const styles = StyleSheet.create({
   },
   activityContent: {
     flex: 1,
+    flexShrink: 1,
   },
   activityTitle: {
     fontSize: 14,
     fontWeight: '500',
     color: '#111827',
     marginBottom: 2,
+    flexWrap: 'wrap',
   },
   activityDate: {
     fontSize: 12,
@@ -483,6 +480,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#111827',
+    textAlign: 'right',
+  },
+  amountContainer: {
+    minWidth: 96,
+    marginLeft: 12,
+    flexShrink: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    alignSelf: 'stretch',
   },
   // Quick reports
   quickReportsGrid: {

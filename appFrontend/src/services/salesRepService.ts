@@ -208,7 +208,12 @@ class SalesRepService {
     startDate?: string,
     endDate?: string
   ): Promise<{
-    totalStats: SalesRepStats
+    totalStats: SalesRepStats & { revenueCurrency: string }
+    currencyBreakdown: {
+      primaryCurrencyCode: string
+      primaryCurrencyTotal: number
+      otherCurrencyCodes: string[]
+    }
     salesReps: Array<{
       salesRepId: string
       salesRepName: string
@@ -227,6 +232,30 @@ class SalesRepService {
       return response.data
     } catch (error) {
       console.error('Error fetching parent seller analytics:', error)
+      throw error
+    }
+  }
+
+  async getRecentActivity(params: { limit?: number; cursor?: string; type?: 'product' | 'order' }): Promise<{
+    items: Array<{
+      id: string
+      type: 'product' | 'order'
+      createdAt: string
+      rep: { id: string; userId: string; name: string } | null
+      data: any
+    }>
+    nextCursor: string | null
+  }> {
+    try {
+      const qs = new URLSearchParams({
+        ...(params.limit ? { limit: String(params.limit) } : {}),
+        ...(params.cursor ? { cursor: params.cursor } : {}),
+        ...(params.type ? { type: params.type } : {}),
+      })
+      const response = await api.get(`${this.baseUrl}/activity/recent?${qs}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching recent activity:', error)
       throw error
     }
   }

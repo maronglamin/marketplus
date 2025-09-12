@@ -22,6 +22,7 @@ import { generateAndSharePDF } from '../services/pdfExportService';
 import { DateRangePicker } from '../components/DateRangePicker';
 import { interestService, type Interest } from '../services/interestService';
 import { kycService } from '../services/kycService';
+import { salesRepService, type SalesRep } from '../services/salesRepService';
 import { API_URL, getImageUrl } from '../config/env';
 
 // API_URL is imported from env; remove duplicate declaration
@@ -31,7 +32,8 @@ type InterestManagementNavigationProp = NativeStackNavigationProp<AppStackParamL
 export function InterestManagement() {
   const navigation = useNavigation<InterestManagementNavigationProp>();
   const route = useRoute();
-  const { user, token } = useAuth();
+  const { user, token, refreshUser } = useAuth();
+  const [freshUser, setFreshUser] = useState<any>(null);
   
   const [interests, setInterests] = useState<Interest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,16 +53,44 @@ export function InterestManagement() {
   const [activeTab, setActiveTab] = useState<'my-interests' | 'customer-interests'>('my-interests');
   const [hasKyc, setHasKyc] = useState(false);
   const [kycLoading, setKycLoading] = useState(true);
+  const [salesRepStatus, setSalesRepStatus] = useState<SalesRep | null>(null);
+  const [salesRepLoading, setSalesRepLoading] = useState(true);
 
   useEffect(() => {
+    // Load KYC status first (critical for determining access)
     checkKycStatus();
+    // Load sales rep status in background (non-blocking)
+    checkSalesRepStatus();
   }, []);
 
+  // Fetch fresh user via JWT and prefer it for seller/buyer logic
+  useEffect(() => {
+    const fetchFreshUser = async () => {
+      try {
+        const response = await api.get('/api/users/me');
+        setFreshUser(response.data);
+        await refreshUser();
+      } catch (e) {
+        console.log('Failed to fetch fresh user:', e);
+      }
+    };
+    fetchFreshUser();
+  }, [refreshUser]);
+
+  // Load interests as soon as KYC status is determined (don't wait for sales rep check)
   useEffect(() => {
     if (!kycLoading) {
       loadInterests();
     }
   }, [activeTab, kycLoading]);
+
+  // Update UI when sales rep status is determined (but don't block interests loading)
+  useEffect(() => {
+    if (!salesRepLoading && salesRepStatus) {
+      // Sales rep status determined, refresh interests to show correct data
+      loadInterests();
+    }
+  }, [salesRepStatus, salesRepLoading]);
 
   const checkKycStatus = async () => {
     try {
@@ -76,6 +106,31 @@ export function InterestManagement() {
       }
     } finally {
       setKycLoading(false);
+    }
+  };
+
+  const checkSalesRepStatus = async () => {
+    if (!user?.id) return;
+
+    try {
+      setSalesRepLoading(true);
+      console.log('Checking sales rep status for user:', user.id);
+      
+      // Use cached sales rep check for better performance
+      const { isSalesRep, salesRepData } = await salesRepService.getSalesRepStatusCached(user.id);
+      
+      if (isSalesRep && salesRepData && salesRepData.status === 'ACTIVE') {
+        console.log('User is an active sales rep:', salesRepData);
+        setSalesRepStatus(salesRepData);
+      } else {
+        console.log('User is not an active sales rep');
+        setSalesRepStatus(null);
+      }
+    } catch (error: any) {
+      console.error('Error checking sales rep status:', error);
+      setSalesRepStatus(null);
+    } finally {
+      setSalesRepLoading(false);
     }
   };
 
@@ -120,6 +175,25 @@ export function InterestManagement() {
       setIsInitialLoad(false);
     }
   };
+
+  // Attach focus listener after loadInterests is defined
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', async () => {
+      try {
+        const response = await api.get('/api/users/me');
+        setFreshUser(response.data);
+        await refreshUser();
+        // Only refresh sales rep status if not already loaded (avoid redundant checks)
+        if (salesRepLoading) {
+          await checkSalesRepStatus();
+        }
+        await loadInterests();
+      } catch (e) {
+        console.log('Focus refresh user/interests failed:', e);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, loadInterests, refreshUser, checkSalesRepStatus, salesRepLoading]);
 
   const handleLoadMore = () => {
     if (!loadingMore && hasMore) {
@@ -317,7 +391,21 @@ export function InterestManagement() {
           >
             <Ionicons name="arrow-back" size={24} color="#111827" />
           </TouchableOpacity>
-          <Text style={styles.title}>Interests</Text>
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>
+              {salesRepLoading ? 'Interests' : 
+               salesRepStatus?.status === 'ACTIVE' ? 'Sales Rep Interests' : 'Interests'}
+            </Text>
+            {salesRepLoading ? (
+              <View style={styles.loadingBadge}>
+                <ActivityIndicator size="small" color="#2563EB" />
+              </View>
+            ) : salesRepStatus?.status === 'ACTIVE' ? (
+              <View style={styles.salesRepBadge}>
+                <Text style={styles.salesRepBadgeText}>Sales Rep</Text>
+              </View>
+            ) : null}
+          </View>
           <View style={styles.headerActions}>
             <TouchableOpacity
               onPress={() => setShowDatePicker(true)}
@@ -346,8 +434,17 @@ export function InterestManagement() {
           </View>
         </View>
 
-        {/* Tab Switching - Only show if user has KYC */}
-        {hasKyc && (
+        {/* Tab Switching - Show if user has KYC or is an active sales rep */}
+        {(() => {
+          const showTabs = hasKyc || (salesRepStatus?.status === 'ACTIVE');
+          console.log('InterestManagement tab visibility check:', {
+            hasKyc,
+            salesRepStatus: salesRepStatus?.status,
+            salesRepLoading,
+            showTabs
+          });
+          return showTabs;
+        })() && (
           <View style={styles.tabContainer}>
             <TouchableOpacity
               style={[styles.tab, activeTab === 'my-interests' && styles.activeTab]}
@@ -372,7 +469,7 @@ export function InterestManagement() {
                 color={activeTab === 'customer-interests' ? '#2563EB' : '#6B7280'} 
               />
               <Text style={[styles.tabText, activeTab === 'customer-interests' && styles.activeTabText]}>
-                Customer Interests
+                {salesRepStatus?.status === 'ACTIVE' ? 'My Sales Interests' : 'Customer Interests'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -398,12 +495,19 @@ export function InterestManagement() {
             <View style={styles.emptyContainer}>
               <Ionicons name="heart-outline" size={48} color="#9CA3AF" />
               <Text style={styles.emptyTitle}>
-                {activeTab === 'my-interests' ? 'No Interests Yet' : 'No Customer Interests'}
+                {activeTab === 'my-interests' 
+                  ? 'No Interests Yet' 
+                  : salesRepStatus?.status === 'ACTIVE' 
+                    ? 'No Sales Interests Yet' 
+                    : 'No Customer Interests'
+                }
               </Text>
               <Text style={styles.emptyText}>
                 {activeTab === 'my-interests' 
                   ? "You haven't shown interest in any products yet. Start browsing to find products you like."
-                  : "You don't have any customer interests yet. When customers show interest in your products, they'll appear here."
+                  : salesRepStatus?.status === 'ACTIVE'
+                    ? "You don't have any sales interests yet. When customers show interest in products you've sold, they'll appear here."
+                    : "You don't have any customer interests yet. When customers show interest in your products, they'll appear here."
                 }
               </Text>
               {activeTab === 'my-interests' && (
@@ -586,10 +690,32 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 12,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     fontSize: 18,
     fontWeight: '600',
     color: '#111827',
+  },
+  salesRepBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  salesRepBadgeText: {
+    fontSize: 12,
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+  loadingBadge: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   headerActions: {
     flexDirection: 'row',

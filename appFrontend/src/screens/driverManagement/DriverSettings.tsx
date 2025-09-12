@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { StyleSheet, View, Text, TouchableOpacity, Platform, StatusBar, ScrollView, Alert } from 'react-native'
+import { StyleSheet, View, Text, TouchableOpacity, Platform, StatusBar, ScrollView, Alert, RefreshControl } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
@@ -19,6 +19,7 @@ export function DriverSettings() {
   const [userProfile, setUserProfile] = useState<UserProfileData | null>(null)
   const [driverStats, setDriverStats] = useState<DriverStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [isDriver, setIsDriver] = useState(false)
 
   useEffect(() => {
@@ -75,6 +76,27 @@ export function DriverSettings() {
     }
   }
 
+  const onRefresh = async () => {
+    try {
+      setRefreshing(true)
+      console.log('🔄 Refreshing driver settings data...')
+      
+      // Refresh driver status and profile data
+      await checkDriverStatus()
+      
+      // If user is a driver, also refresh driver stats
+      if (isDriver) {
+        await loadDriverData()
+      }
+      
+      console.log('✅ Driver settings data refreshed successfully')
+    } catch (error) {
+      console.error('❌ Error refreshing driver settings data:', error)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   const handleNavigateToDriverProfile = () => {
     navigation.navigate('DriverProfile')
   }
@@ -87,43 +109,7 @@ export function DriverSettings() {
     navigation.navigate('DriverRequests')
   }
 
-  const handleNavigateToVehicleManagement = () => {
-    navigation.navigate('VehicleManagement')
-  }
 
-  const handleNavigateToDocuments = () => {
-    navigation.navigate('DriverDocuments')
-  }
-
-  const handleNavigateToNotifications = () => {
-    navigation.navigate('DriverNotifications')
-  }
-
-  const handleNavigateToSupport = () => {
-    navigation.navigate('DriverSupport')
-  }
-
-  const handleNavigateToPrivacy = () => {
-    navigation.navigate('DriverPrivacy')
-  }
-
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive',
-          onPress: () => {
-            // Handle logout logic here
-            console.log('Driver logout')
-          }
-        }
-      ]
-    )
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -144,7 +130,20 @@ export function DriverSettings() {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#3B82F6']} // Android
+            tintColor="#3B82F6" // iOS
+            title="Pull to refresh" // iOS
+            titleColor="#6B7280" // iOS
+          />
+        }
+      >
         {loading ? (
           <View style={styles.loadingContainer}>
             <View style={styles.loadingIcon}>
@@ -331,130 +330,9 @@ export function DriverSettings() {
                 <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
               </TouchableOpacity>
 
-              {/* Vehicle Management Card */}
-              <TouchableOpacity
-                style={styles.managementCard}
-                onPress={handleNavigateToVehicleManagement}
-              >
-                <View style={styles.managementCardContent}>
-                  <View style={styles.managementIcon}>
-                    <Ionicons name="car" size={28} color="#8B5CF6" />
-                  </View>
-                  <View style={styles.managementInfo}>
-                    <Text style={styles.managementTitle}>Vehicle Management</Text>
-                    <Text style={styles.managementSubtitle}>
-                      Manage your vehicle information
-                    </Text>
-                    <Text style={styles.managementCount}>
-                      {userProfile?.driver?.id ? 'Vehicle Info Available' : 'No vehicle'}
-                    </Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
-              </TouchableOpacity>
             </View>
 
-            {/* Documents & Verification */}
-            <View style={styles.documentsSection}>
-              <Text style={styles.sectionTitle}>Documents & Verification</Text>
-              
-              {/* Documents Card */}
-              <TouchableOpacity
-                style={styles.documentsCard}
-                onPress={handleNavigateToDocuments}
-              >
-                <View style={styles.documentsCardContent}>
-                  <View style={styles.documentsIcon}>
-                    <Ionicons name="document-text" size={28} color="#3B82F6" />
-                  </View>
-                  <View style={styles.documentsInfo}>
-                    <Text style={styles.documentsTitle}>Driver Documents</Text>
-                    <Text style={styles.documentsSubtitle}>
-                      Upload and manage your documents
-                    </Text>
-                    <Text style={styles.documentsStatus}>
-                      {userProfile?.driver?.id ? 'Documents Available' : 'No documents'}
-                    </Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
-              </TouchableOpacity>
-            </View>
 
-            {/* Settings & Preferences */}
-            <View style={styles.settingsSection}>
-              <Text style={styles.sectionTitle}>Settings & Preferences</Text>
-              
-              {/* Notifications Card */}
-              <TouchableOpacity
-                style={styles.settingsCard}
-                onPress={handleNavigateToNotifications}
-              >
-                <View style={styles.settingsCardContent}>
-                  <View style={styles.settingsIcon}>
-                    <Ionicons name="notifications" size={28} color="#3B82F6" />
-                  </View>
-                  <View style={styles.settingsInfo}>
-                    <Text style={styles.settingsTitle}>Notifications</Text>
-                    <Text style={styles.settingsSubtitle}>
-                      Manage your notification preferences
-                    </Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
-              </TouchableOpacity>
-
-              {/* Support Card */}
-              <TouchableOpacity
-                style={styles.settingsCard}
-                onPress={handleNavigateToSupport}
-              >
-                <View style={styles.settingsCardContent}>
-                  <View style={styles.settingsIcon}>
-                    <Ionicons name="help-circle" size={28} color="#10B981" />
-                  </View>
-                  <View style={styles.settingsInfo}>
-                    <Text style={styles.settingsTitle}>Support & Help</Text>
-                    <Text style={styles.settingsSubtitle}>
-                      Get help and contact support
-                    </Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
-              </TouchableOpacity>
-
-              {/* Privacy Card */}
-              <TouchableOpacity
-                style={styles.settingsCard}
-                onPress={handleNavigateToPrivacy}
-              >
-                <View style={styles.settingsCardContent}>
-                  <View style={styles.settingsIcon}>
-                    <Ionicons name="shield-checkmark" size={28} color="#F59E0B" />
-                  </View>
-                  <View style={styles.settingsInfo}>
-                    <Text style={styles.settingsTitle}>Privacy & Security</Text>
-                    <Text style={styles.settingsSubtitle}>
-                      Manage your privacy settings
-                    </Text>
-                  </View>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#9CA3AF" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Logout Section */}
-            <View style={styles.logoutSection}>
-              <TouchableOpacity
-                style={styles.logoutButton}
-                onPress={handleLogout}
-              >
-                <View style={styles.logoutButtonContent}>
-                  <Ionicons name="log-out" size={24} color="#EF4444" />
-                  <Text style={styles.logoutButtonText}>Logout</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
           </>
         )}
       </ScrollView>
@@ -572,15 +450,6 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   managementSection: {
-    marginBottom: 32,
-  },
-  documentsSection: {
-    marginBottom: 32,
-  },
-  settingsSection: {
-    marginBottom: 32,
-  },
-  logoutSection: {
     marginBottom: 32,
   },
   sectionTitle: {
@@ -720,109 +589,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9CA3AF',
     fontWeight: '500',
-  },
-  // Documents cards
-  documentsCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F9FAFB',
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 12,
-  },
-  documentsCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  documentsIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F0F9FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  documentsInfo: {
-    flex: 1,
-  },
-  documentsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  documentsSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  documentsStatus: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    fontWeight: '500',
-  },
-  // Settings cards
-  settingsCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F9FAFB',
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginBottom: 12,
-  },
-  settingsCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  settingsIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F0F9FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  settingsInfo: {
-    flex: 1,
-  },
-  settingsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  settingsSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  // Logout button
-  logoutButton: {
-    backgroundColor: '#FEF2F2',
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  logoutButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoutButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#EF4444',
-    marginLeft: 8,
   },
 })

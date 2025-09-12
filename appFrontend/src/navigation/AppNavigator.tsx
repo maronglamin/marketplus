@@ -49,11 +49,6 @@ import { DriverRequests } from '../screens/DriverRequests';
 import { DriverEarnings } from '../screens/DriverEarnings';
 import { DriverSettings } from '../screens/driverManagement/DriverSettings';
 import { DriverProfile } from '../screens/driverManagement/DriverProfile';
-import { VehicleManagement } from '../screens/driverManagement/VehicleManagement';
-import { DriverDocuments } from '../screens/driverManagement/DriverDocuments';
-import { DriverNotifications } from '../screens/driverManagement/DriverNotifications';
-import { DriverSupport } from '../screens/driverManagement/DriverSupport';
-import { DriverPrivacy } from '../screens/driverManagement/DriverPrivacy';
 import { JourneyMapView } from '../screens/JourneyMapView';
 import { CustomerRides } from '../screens/CustomerRides';
 import { CustomerRideHistory } from '../screens/CustomerRideHistory';
@@ -72,6 +67,9 @@ import PopularProductsScreen from '../screens/PopularProducts';
 import NewArrivalsScreen from '../screens/NewArrivals';
 import UserSearch from '../screens/UserSearch';
 import { ProductCategoryOptions } from '../screens/ProductCategoryOptions';
+import { RepsActivity } from '../screens/RepsActivity';
+import { RepOrderReport } from '../screens/reps-reports/RepOrderReport';
+import { RepProductReport } from '../screens/reps-reports/RepProductReport';
 
 export type AppStackParamList = {
   Home: { openSearch?: boolean } | undefined;
@@ -80,6 +78,9 @@ export type AppStackParamList = {
   SalesRepsScreen: undefined;
   SettlementsScreen: undefined;
   ReportsScreen: undefined;
+  RepsActivity: undefined;
+  RepOrderReport: undefined;
+  RepProductReport: undefined;
   Notifications: undefined;
   AccountSettings: undefined;
   AccountType: undefined;
@@ -194,11 +195,6 @@ export type AppStackParamList = {
   DriverEarnings: undefined;
   DriverSettings: undefined;
   DriverProfile: undefined;
-  VehicleManagement: undefined;
-  DriverDocuments: undefined;
-  DriverNotifications: undefined;
-  DriverSupport: undefined;
-  DriverPrivacy: undefined;
   JourneyMapView: {
     rideId: string;
     pickupLocation: {
@@ -290,6 +286,9 @@ export function AppNavigator() {
         <Stack.Screen name="SalesRepsScreen" component={SalesRepsScreen} />
         <Stack.Screen name="SettlementsScreen" component={SettlementsScreen} />
         <Stack.Screen name="ReportsScreen" component={ReportsScreen} />
+        <Stack.Screen name="RepsActivity" component={RepsActivity} />
+        <Stack.Screen name="RepOrderReport" component={RepOrderReport} />
+        <Stack.Screen name="RepProductReport" component={RepProductReport} />
         <Stack.Screen name="Notifications" component={Notifications} />
         <Stack.Screen name="AccountSettings" component={AccountSettings} />
         <Stack.Screen name="AccountType" component={AccountType} />
@@ -331,11 +330,6 @@ export function AppNavigator() {
         <Stack.Screen name="DriverEarnings" component={DriverEarnings} options={{ gestureEnabled: true }} />
         <Stack.Screen name="DriverSettings" component={DriverSettings} options={{ gestureEnabled: true }} />
         <Stack.Screen name="DriverProfile" component={DriverProfile} options={{ gestureEnabled: true }} />
-        <Stack.Screen name="VehicleManagement" component={VehicleManagement} options={{ gestureEnabled: true }} />
-        <Stack.Screen name="DriverDocuments" component={DriverDocuments} options={{ gestureEnabled: true }} />
-        <Stack.Screen name="DriverNotifications" component={DriverNotifications} options={{ gestureEnabled: true }} />
-        <Stack.Screen name="DriverSupport" component={DriverSupport} options={{ gestureEnabled: true }} />
-        <Stack.Screen name="DriverPrivacy" component={DriverPrivacy} options={{ gestureEnabled: true }} />
         <Stack.Screen name="JourneyMapView" component={JourneyMapView} options={{ gestureEnabled: true }} />
         <Stack.Screen name="CustomerRideService" component={CustomerRideService} />
         <Stack.Screen name="CustomerRides" component={CustomerRides} />
