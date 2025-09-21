@@ -1081,7 +1081,7 @@ export function SettlementRequest() {
                       <View style={styles.inputGroup}>
                         <Text style={styles.inputLabel}>Wallet Type *</Text>
                         <View style={styles.pickerContainer}>
-                          {(['MOBILE_MONEY', 'DIGITAL_WALLET', 'CRYPTO'] as const).map((type) => (
+                          {(['MOBILE_MONEY', 'DIGITAL_WALLET'] as const).map((type) => (
                             <TouchableOpacity
                               key={type}
                               style={[

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { createOTP, verifyOTP } from '../utils/otp';
-import { generateToken } from '../utils/jwt';
+import { generateToken, generateWebToken } from '../utils/jwt';
 import twilio from 'twilio';
 import { driverService } from '../services/driverService';
 import { randomUUID } from 'crypto';
@@ -35,7 +35,7 @@ const upsertDevice = async (userId: string, deviceInfo: any) => {
       lastLoginAt: new Date(),
     },
     create: {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       deviceId: deviceInfo.deviceId,
       deviceName: deviceInfo.deviceName,
       deviceType: deviceInfo.deviceType,
@@ -765,6 +765,148 @@ export const completePinReset = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     console.error('Error in completePinReset:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Check if user exists (for web app)
+export const checkUserExists = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ message: 'Phone number is required' });
+    }
+
+    console.log('Checking if user exists for:', phoneNumber);
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { phoneNumber },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phoneNumber: true,
+        createdAt: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ 
+        exists: false, 
+        isRegistered: false,
+        message: 'User not found. Please register using the mobile app first.'
+      });
+    }
+
+    // Check if user has completed registration
+    const isRegistered = Boolean(
+      user.firstName && 
+      user.lastName && 
+      user.firstName.trim() !== '' && 
+      user.lastName.trim() !== ''
+    );
+
+    console.log('User check result:', { 
+      exists: true, 
+      isRegistered,
+      hasName: isRegistered 
+    });
+
+    return res.status(200).json({
+      exists: true,
+      isRegistered,
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phoneNumber: user.phoneNumber
+      }
+    });
+  } catch (error) {
+    console.error('Error in checkUserExists:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Login with PIN for web app (no device info required)
+export const loginWithPinWeb = async (req: Request, res: Response) => {
+  try {
+    const { phoneNumber, pin } = req.body;
+
+    console.log('Web PIN login attempt:', { phoneNumber });
+
+    // Validate PIN format
+    if (!pin || !/^\d{4}$/.test(pin)) {
+      console.log('Invalid PIN format:', pin);
+      return res.status(400).json({ message: 'PIN must be 4 digits' });
+    }
+
+    if (!phoneNumber) {
+      console.log('Missing phoneNumber in request');
+      return res.status(400).json({ message: 'Phone number is required' });
+    }
+
+    // Find the user by phone number
+    const user = await prisma.user.findUnique({
+      where: { phoneNumber },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phoneNumber: true,
+        pin: true,
+        createdAt: true
+      }
+    });
+
+    if (!user) {
+      console.log('User not found for phone number:', phoneNumber);
+      return res.status(404).json({ 
+        message: 'User not found. Please register using the mobile app first.' 
+      });
+    }
+
+    // Check if user has completed registration
+    const isRegistered = Boolean(
+      user.firstName && 
+      user.lastName && 
+      user.firstName.trim() !== '' && 
+      user.lastName.trim() !== ''
+    );
+
+    if (!isRegistered) {
+      console.log('User not fully registered:', phoneNumber);
+      return res.status(400).json({ 
+        message: 'Please complete your registration using the mobile app first.' 
+      });
+    }
+
+    // Verify PIN
+    const isPinValid = await bcrypt.compare(pin, user.pin);
+    if (!isPinValid) {
+      console.log('Invalid PIN for user:', phoneNumber);
+      return res.status(401).json({ message: 'Invalid PIN' });
+    }
+
+    // Generate JWT token for web (no device tracking)
+    const token = generateWebToken(user.id, user.phoneNumber);
+
+    console.log('Web login successful for user:', user.id);
+
+    return res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phoneNumber: user.phoneNumber
+      }
+    });
+  } catch (error) {
+    console.error('Error in loginWithPinWeb:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 }; 

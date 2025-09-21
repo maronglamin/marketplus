@@ -341,6 +341,8 @@ export function Order() {
           postalCode: selectedAddress.postalCode || '',
           country: selectedAddress.country,
         }),
+        // Add a unique client request id to avoid duplicate conflicts and enable repeat orders
+        clientRequestId: `${product.id}-${Date.now()}`,
       };
 
       console.log('Placing order with data:', orderData);
@@ -351,12 +353,23 @@ export function Order() {
       
       Alert.alert(
         'Order Placed Successfully!',
-        'Your order has been placed. The seller will review your address and set delivery pricing.',
+        'Would you like to place another order for this product?',
         [
           {
-            text: 'OK',
-            onPress: () => navigation.navigate('Home' as any)
-          }
+            text: 'Done',
+            onPress: () => navigation.navigate('Home' as any),
+            style: 'default',
+          },
+          {
+            text: 'Order Again',
+            onPress: () => {
+              // Keep the user on the same screen and reset quantity only
+              setQuantity(1);
+              // Optionally refresh product details to reflect stock
+              loadProductDetails();
+            },
+            style: 'default',
+          },
         ]
       );
     } catch (error: any) {
@@ -371,7 +384,7 @@ export function Order() {
       } else if (error.response?.status === 404) {
         Alert.alert('Product Not Found', 'The product is no longer available.');
       } else if (error.response?.status === 409 && error.response?.data?.message === 'Order already exist') {
-        Alert.alert('Order already exist');
+        Alert.alert('Duplicate Order', 'A similar order was recently submitted. Please try again in a moment.');
       } else if (error.response?.status === 409) {
         Alert.alert('Stock Unavailable', 'The requested quantity is no longer available. Please try with a smaller quantity.');
       } else {

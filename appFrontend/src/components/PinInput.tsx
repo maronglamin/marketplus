@@ -55,6 +55,7 @@ const PinInput = ({
     // Auto-complete when PIN is fully entered (only once)
     if (value.length === maxLength && onCompleteRef.current && !hasCompletedRef.current) {
       hasCompletedRef.current = true;
+      console.log('PinInput: Calling onComplete with value:', value);
       onCompleteRef.current(value);
     }
   }, [value, maxLength]);

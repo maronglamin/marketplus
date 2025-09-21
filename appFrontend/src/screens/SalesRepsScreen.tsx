@@ -35,7 +35,8 @@ export function SalesRepsScreen() {
     firstName: '',
     lastName: '',
     phoneNumber: '',
-    branchId: ''
+    branchId: '',
+    pin: ''
   })
   const [phoneInput, setPhoneInput] = useState('')
 
@@ -82,7 +83,8 @@ export function SalesRepsScreen() {
       firstName: '',
       lastName: '',
       phoneNumber: '',
-      branchId: ''
+      branchId: '',
+      pin: ''
     })
     setPhoneInput('')
     setSelectedCountry(null)
@@ -119,8 +121,14 @@ export function SalesRepsScreen() {
 
   const handleSubmitSalesRep = async () => {
     // Validate required fields
-    if (!formData.firstName || !formData.lastName || !phoneInput || !formData.branchId || !selectedCountry) {
+    if (!formData.firstName || !formData.lastName || !phoneInput || !formData.branchId || !selectedCountry || !formData.pin) {
       Alert.alert('Validation Error', 'Please fill in all required fields')
+      return
+    }
+
+    // Validate PIN format (4 digits only)
+    if (!/^\d{4}$/.test(formData.pin)) {
+      Alert.alert('Validation Error', 'PIN must be exactly 4 digits')
       return
     }
 
@@ -428,6 +436,24 @@ export function SalesRepsScreen() {
                 </View>
               </View>
 
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Default PIN *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.pin}
+                  onChangeText={(value) => {
+                    // Only allow digits and limit to 4 characters
+                    const numericValue = value.replace(/\D/g, '').slice(0, 4)
+                    handleInputChange('pin', numericValue)
+                  }}
+                  placeholder="Enter 4-digit PIN"
+                  keyboardType="numeric"
+                  secureTextEntry={true}
+                  maxLength={4}
+                />
+                <Text style={styles.helperText}>Must be exactly 4 digits</Text>
+              </View>
+
               {/* Info Text */}
               <View style={styles.infoBox}>
                 <Ionicons name="information-circle-outline" size={20} color="#3B82F6" />
@@ -686,6 +712,11 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
     lineHeight: 20,
+  },
+  helperText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
   },
   modalFooter: {
     flexDirection: 'row',

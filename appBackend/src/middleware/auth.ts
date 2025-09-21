@@ -24,16 +24,29 @@ export const authenticate = async (
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
       userId: string;
-      deviceId: string;
+      deviceId?: string;
+      phoneNumber?: string;
+      type?: string;
     };
 
-    req.user = {
-      id: decoded.userId,
-      deviceId: decoded.deviceId,
-    };
+    // Handle both device tokens and web tokens
+    if (decoded.type === 'web_access_token') {
+      // Web token - no device tracking
+      req.user = {
+        id: decoded.userId,
+        deviceId: 'web', // Use 'web' as deviceId for web tokens
+      };
+    } else {
+      // Device token - with device tracking
+      req.user = {
+        id: decoded.userId,
+        deviceId: decoded.deviceId || 'unknown',
+      };
+    }
 
     return next();
   } catch (error) {
+    console.error('Authentication error:', error);
     return res.status(401).json({ message: 'Invalid token' });
   }
 };

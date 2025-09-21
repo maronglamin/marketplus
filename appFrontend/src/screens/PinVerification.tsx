@@ -16,19 +16,10 @@ import { verifyOTP, initiateLogin } from '../api/auth'
 import * as Device from 'expo-device'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import PinInput from '../components/PinInput'
+import { AuthStackParamList } from '../navigation/AuthNavigator'
 
-type RootStackParamList = {
-  Onboarding: undefined
-  Login: undefined
-  PinVerification: { phoneNumber: string }
-  UserRegistration: { phoneNumber: string }
-  LoginPin: undefined
-  Home: undefined
-  DeviceVerification: undefined
-}
-
-type PinVerificationNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PinVerification'>
-type PinVerificationRouteProp = RouteProp<RootStackParamList, 'PinVerification'>
+type PinVerificationNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'PinVerification'>
+type PinVerificationRouteProp = RouteProp<AuthStackParamList, 'PinVerification'>
 
 export function PinVerification() {
   const [code, setCode] = useState('')
@@ -53,14 +44,19 @@ export function PinVerification() {
   }, [resendDisabled, countdown])
 
   const handleCodeComplete = async (verificationCode: string) => {
+    console.log('handleCodeComplete called with code:', verificationCode);
+    
     if (verificationCode.length !== 6) {
       Alert.alert('Error', 'Please enter a valid 6-digit code');
       return;
     }
 
+    // Update the code state to match what was entered
+    setCode(verificationCode);
+
     try {
       setLoading(true);
-      console.log('Starting verification process...');
+      console.log('Starting verification process with code:', verificationCode);
       
       const { response, isRegistered, isDeviceVerified } = await verifyOTP(phoneNumber, verificationCode);
 
@@ -81,7 +77,7 @@ export function PinVerification() {
       console.log('Token stored successfully');
 
       // Determine navigation based on verification status
-      let targetScreen: keyof RootStackParamList;
+      let targetScreen: keyof AuthStackParamList;
       let params = {};
 
       if (isRegistered) {
@@ -89,21 +85,22 @@ export function PinVerification() {
           console.log('User is registered and device is verified, going to LoginPin');
           targetScreen = 'LoginPin';
         } else {
-          console.log('User is registered but device is not verified, going to DeviceVerification');
-          targetScreen = 'DeviceVerification';
+          console.log('User is registered but device is not verified, going to App');
+          targetScreen = 'App';
         }
       } else {
         console.log('User is not registered, going to UserRegistration');
         targetScreen = 'UserRegistration';
-        params = { phoneNumber };
       }
 
-      // Perform navigation
+      // Perform navigation with a small delay to ensure UI updates
       console.log('Navigating to:', targetScreen, 'with params:', params);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: targetScreen, params }],
-      });
+      setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: targetScreen, params }],
+        });
+      }, 100);
     } catch (error: any) {
       console.error('Verification failed:', error);
       Alert.alert(
@@ -158,6 +155,7 @@ export function PinVerification() {
             maxLength={6}
             onComplete={handleCodeComplete}
             style={styles.codeInput}
+            editable={!loading}
           />
         </View>
 

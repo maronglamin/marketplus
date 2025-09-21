@@ -14,6 +14,7 @@ const envSchema = z.object({
 
 const env = envSchema.parse(process.env);
 
+// Generate token for mobile app with device tracking
 export const generateToken = async (userId: string, deviceId: string): Promise<string> => {
   try {
     const token = jwt.sign(
@@ -51,6 +52,33 @@ export const generateToken = async (userId: string, deviceId: string): Promise<s
   } catch (error) {
     console.error('Error generating token:', error);
     throw new Error('Failed to generate authentication token');
+  }
+};
+
+// Generate simple token for web app (no device tracking)
+export const generateWebToken = (userId: string, phoneNumber: string): string => {
+  try {
+    const token = jwt.sign(
+      { 
+        userId, 
+        phoneNumber,
+        deviceType: 'web',
+        type: 'web_access_token'
+      },
+      env.JWT_SECRET,
+      {
+        expiresIn: env.JWT_EXPIRES_IN,
+        algorithm: 'HS256',
+        audience: 'snap-app',
+        issuer: 'snap-api',
+        jwtid: crypto.randomBytes(16).toString('hex')
+      } as jwt.SignOptions
+    );
+
+    return token;
+  } catch (error) {
+    console.error('Error generating web token:', error);
+    throw new Error('Failed to generate web authentication token');
   }
 };
 

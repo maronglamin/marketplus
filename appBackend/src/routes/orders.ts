@@ -245,6 +245,22 @@ router.get('/my-orders', authenticate, async (req: AuthenticatedRequest, res) =>
                 }
               }
             }
+          },
+          User_orders_userIdToUser: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phoneNumber: true
+            }
+          },
+          User_orders_sellerIdToUser: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phoneNumber: true
+            }
           }
         },
         orderBy: {
@@ -352,6 +368,14 @@ router.get('/customer-orders', authenticate, async (req: AuthenticatedRequest, r
             }
           },
           User_orders_userIdToUser: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phoneNumber: true
+            }
+          },
+          User_orders_sellerIdToUser: {
             select: {
               id: true,
               firstName: true,
@@ -559,7 +583,7 @@ router.get('/:orderId', authenticate, async (req: AuthenticatedRequest, res) => 
   }
 });
 
-// Update order status (seller only)
+// Update order status (seller or customer)
 router.patch('/:orderId/status', authenticate, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user?.id;
@@ -577,13 +601,35 @@ router.patch('/:orderId/status', authenticate, async (req: AuthenticatedRequest,
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
-    if (order.sellerId !== userId) {
-      return res.status(403).json({ message: 'Only the seller can update order status' });
+    
+    // Check who is making the request
+    const isSeller = order.sellerId === userId;
+    const isCustomer = order.userId === userId;
+    
+    if (!isSeller && !isCustomer) {
+      return res.status(403).json({ message: 'Only the seller or customer can update order status' });
+    }
+    
+    // Define which status changes are allowed by whom
+    const customerAllowedStatuses = ['AUTHORIZED', 'CANCELLED'];
+    const sellerAllowedStatuses = ['CONFIRMED', 'SHIPPED', 'DELIVERED', 'COMPLETED'];
+    
+    // Check if the user is authorized to make this status change
+    if (isCustomer && !customerAllowedStatuses.includes(status.toUpperCase())) {
+      return res.status(403).json({ 
+        message: `Customer can only change status to: ${customerAllowedStatuses.join(', ')}` 
+      });
+    }
+    
+    if (isSeller && !sellerAllowedStatuses.includes(status.toUpperCase())) {
+      return res.status(403).json({ 
+        message: `Seller can only change status to: ${sellerAllowedStatuses.join(', ')}` 
+      });
     }
 
     const updated = await prisma.orders.update({
       where: { id: orderId },
-      data: { status }
+      data: { status: status.toUpperCase() }
     });
     res.json({ message: 'Order status updated', status: updated.status });
   } catch (error) {
@@ -1798,8 +1844,8 @@ router.patch('/:orderId/discount', authenticate, async (req: AuthenticatedReques
             }
           }
         },
-        customer: true,
-        seller: true
+        User_orders_userIdToUser: true,
+        User_orders_sellerIdToUser: true
       }
     });
 

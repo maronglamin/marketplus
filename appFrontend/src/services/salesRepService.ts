@@ -31,6 +31,7 @@ export interface CreateSalesRepRequest {
   lastName: string
   phoneNumber: string
   branchId: string
+  pin: string
 }
 
 export interface SalesRepStats {

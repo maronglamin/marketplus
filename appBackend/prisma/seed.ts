@@ -62,6 +62,19 @@ async function main() {
       }
     },
     {
+      name: 'service_fee_yonna_wallet',
+      value: 0.03, // 3% service fee for Yonna Forex wallet payments
+      description: 'Service fee percentage for Yonna Forex wallet payment gateway transactions',
+      serviceType: 'payment_gateway',
+      metadata: {
+        gateway: 'yonna_forex',
+        feeType: 'percentage',
+        minAmount: 0,
+        maxAmount: null,
+        currency: 'GMD'
+      }
+    },
+    {
       name: 'service_fee_cash_on_delivery',
       value: 0.02, // 2% service fee for cash on delivery
       description: 'Service fee percentage for cash on delivery transactions',

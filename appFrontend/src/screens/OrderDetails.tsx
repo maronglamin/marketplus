@@ -31,6 +31,8 @@ import { StripePayment } from '../components/StripePayment';
 import { stripeService } from '../services/stripeService';
 import { API_URL } from '../config/env';
 import type { AppStackParamList } from '../navigation/AppNavigator';
+import YonnaPaymentModal from '../components/YonnaPaymentModal';
+import { YonnaForexPaymentService } from '../services/YonnaForexPaymentService';
 
 // Use centralized API_URL from env
 const { height: screenHeight } = Dimensions.get('window');
@@ -128,6 +130,15 @@ export function OrderDetails() {
   // Selected payment method for checkout
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
 
+  // Existing transactions state
+  const [existingTransactions, setExistingTransactions] = useState<any[]>([]);
+  const [hasActiveTransaction, setHasActiveTransaction] = useState(false);
+  const [canMakePayment, setCanMakePayment] = useState(true);
+  const [checkingTransactions, setCheckingTransactions] = useState(false);
+
+  // Initialize Yonna Forex service
+  const yonnaForexService = new YonnaForexPaymentService();
+
   // Payment method form data
   const [paymentMethodForms, setPaymentMethodForms] = useState<{[key: string]: any}>({
     card: {
@@ -165,6 +176,7 @@ export function OrderDetails() {
   // Stripe payment state
   const [showStripePayment, setShowStripePayment] = useState(false);
   const [processingStripePayment, setProcessingStripePayment] = useState(false);
+  const [showYonnaPayment, setShowYonnaPayment] = useState(false);
 
   // Helper function to get payment method display name
   const getPaymentMethodDisplayName = (method: any) => {
@@ -502,32 +514,22 @@ export function OrderDetails() {
         break;
 
       case 'MOBILE_MONEY':
-        // Check if the mobile wallet provider has integration
-        const providerId = method.metadata?.providerId;
-        if (providerId) {
-          // Check if we have integration for this provider
-          const provider = mobileWalletProviders.find(p => p.id === providerId);
-          if (provider && provider.isActive) {
-            // TODO: Implement mobile wallet payment flow
-            Alert.alert(
-              'Mobile Wallet Payment',
-              `Redirecting to ${provider.name} payment gateway...`,
-              [{ text: 'OK' }]
-            );
-          } else {
-            Alert.alert(
-              'Payment Gateway Not Available',
-              `${method.provider} payment gateway is not currently available. Please try another payment method.`,
-              [{ text: 'OK' }]
-            );
+        // If Yonna wallet is selected, use integrated Yonna Forex flow
+        {
+          const providerName = (method.provider || method.metadata?.providerName || '').toString().toLowerCase();
+          const isYonna = providerName.includes('yonna');
+          if (isYonna) {
+            setShowYonnaPayment(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            break;
           }
-        } else {
-          Alert.alert(
-            'Payment Method Error',
-            'Mobile wallet provider information is missing. Please try another payment method.',
-            [{ text: 'OK' }]
-          );
         }
+        // Fallback for other mobile wallets
+        Alert.alert(
+          'Mobile Wallet Payment',
+          `Redirecting to ${method.provider} payment gateway...`,
+          [{ text: 'OK' }]
+        );
         break;
 
       case 'DIGITAL_WALLET':
@@ -676,11 +678,38 @@ export function OrderDetails() {
       if (orderData.sellerId === user?.id && orderData.items.length > 0) {
         await loadDeliveryOptions(orderData.items[0].product.id);
       }
+
+      // Check for existing external transactions
+      await checkExistingTransactions();
     } catch (error) {
       console.error('Error loading order details:', error);
       setError('Failed to load order details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkExistingTransactions = async () => {
+    try {
+      setCheckingTransactions(true);
+      const result = await yonnaForexService.checkExistingTransactions(orderId);
+      
+      if (result.success && result.data) {
+        setExistingTransactions(result.data.transactions);
+        setHasActiveTransaction(result.data.hasActiveTransaction);
+        setCanMakePayment(result.data.canMakePayment);
+        
+        console.log('Existing transactions check:', {
+          hasActiveTransaction: result.data.hasActiveTransaction,
+          canMakePayment: result.data.canMakePayment,
+          transactions: result.data.transactions
+        });
+      }
+    } catch (error) {
+      console.error('Error checking existing transactions:', error);
+      // Don't show error to user, just log it
+    } finally {
+      setCheckingTransactions(false);
     }
   };
 
@@ -1563,7 +1592,7 @@ export function OrderDetails() {
             
             // Show different actions based on order status
             if (order.status.toLowerCase() === 'pending') {
-              // Pending: Show both Authorize and Cancel buttons
+              // Pending: Show both Authorize and Cancel buttons (hide cancel if active transaction)
               return (
             <View style={styles.statusActions}>
                   <Text style={styles.statusActionsTitle}>Buyer Actions:</Text>
@@ -1577,33 +1606,57 @@ export function OrderDetails() {
                         Authorize Order
                     </Text>
                   </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.statusButton, styles.buyerCancelButton]}
-                      onPress={() => updateOrderStatus('cancelled')}
-                      disabled={updatingStatus}
-                    >
-                      <Text style={[styles.statusButtonText, styles.buyerCancelButtonText]}>
-                        Cancel Order
-                      </Text>
-                    </TouchableOpacity>
+                    {/* Hide cancel button if there are active transactions */}
+                    {!hasActiveTransaction && (
+                      <TouchableOpacity
+                        style={[styles.statusButton, styles.buyerCancelButton]}
+                        onPress={() => updateOrderStatus('cancelled')}
+                        disabled={updatingStatus}
+                      >
+                        <Text style={[styles.statusButtonText, styles.buyerCancelButtonText]}>
+                          Cancel Order
+                        </Text>
+                      </TouchableOpacity>
+                    )}
               </View>
             </View>
               );
             } else if (order.status.toLowerCase() === 'authorized') {
-              // Authorized: Show only Cancel button
+              // Authorized: Show only Cancel button (hide if active transaction)
               return (
                 <View style={styles.statusActions}>
                   <Text style={styles.statusActionsTitle}>Buyer Actions:</Text>
                   <View style={styles.statusButtons}>
-                    <TouchableOpacity
-                      style={[styles.statusButton, styles.buyerCancelButton]}
-                      onPress={() => updateOrderStatus('cancelled')}
-                      disabled={updatingStatus}
-                    >
-                      <Text style={[styles.statusButtonText, styles.buyerCancelButtonText]}>
-                        Cancel Order
-                      </Text>
-                    </TouchableOpacity>
+                    {/* Hide cancel button if there are active transactions */}
+                    {!hasActiveTransaction ? (
+                      <TouchableOpacity
+                        style={[styles.statusButton, styles.buyerCancelButton]}
+                        onPress={() => updateOrderStatus('cancelled')}
+                        disabled={updatingStatus}
+                      >
+                        <Text style={[styles.statusButtonText, styles.buyerCancelButtonText]}>
+                          Cancel Order
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 12,
+                        backgroundColor: '#FEF3C7',
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#F59E0B',
+                      }}>
+                        <Text style={{
+                          color: '#92400E',
+                          fontSize: 14,
+                          fontWeight: '500',
+                          textAlign: 'center',
+                        }}>
+                          Order cannot be cancelled while payment is in progress
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               );
@@ -1904,9 +1957,18 @@ export function OrderDetails() {
               <TouchableOpacity
                 style={[
                   styles.checkoutButton,
-                  loadingPaymentMethods && styles.disabledButton
+                  (loadingPaymentMethods || checkingTransactions || !canMakePayment) && styles.disabledButton
                 ]}
                 onPress={async () => {
+                  // Don't allow payment if there are existing active transactions
+                  if (!canMakePayment) {
+                    Alert.alert(
+                      'Payment Already in Progress',
+                      'This order already has a payment transaction in progress. Please wait for it to complete.',
+                      [{ text: 'OK' }]
+                    );
+                    return;
+                  }
                   try {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     
@@ -1932,26 +1994,32 @@ export function OrderDetails() {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                   }
                 }}
-                disabled={loadingPaymentMethods}
+                disabled={loadingPaymentMethods || checkingTransactions || !canMakePayment}
               >
-                {loadingPaymentMethods ? (
+                {(loadingPaymentMethods || checkingTransactions) ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
                 )}
                 <Text style={styles.checkoutButtonText}>
-                  {loadingPaymentMethods 
-                    ? 'Checking Payment Methods...' 
-                    : paymentMethods.length > 0 
-                      ? `Proceed to Checkout (${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''})`
-                      : 'Proceed to Checkout'
+                  {checkingTransactions 
+                    ? 'Checking Transactions...'
+                    : loadingPaymentMethods 
+                      ? 'Checking Payment Methods...' 
+                      : !canMakePayment
+                        ? 'Payment in Progress'
+                        : paymentMethods.length > 0 
+                          ? `Pay Now (${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''})`
+                          : 'Pay Now'
                   }
                 </Text>
               </TouchableOpacity>
               <Text style={styles.checkoutNote}>
-                {paymentMethods.length > 0 
-                  ? `You have ${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''} available. Click to complete payment.`
-                  : 'Your order has been authorized. Click to complete payment and finalize your purchase.'
+                {!canMakePayment
+                  ? 'This order has a payment transaction in progress. Please wait for it to complete.'
+                  : paymentMethods.length > 0 
+                    ? `You have ${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''} available. Click to complete payment.`
+                    : 'Your order has been authorized. Click to complete payment and finalize your purchase.'
                 }
               </Text>
             </View>
@@ -2885,6 +2953,27 @@ export function OrderDetails() {
         }}
         transactionType="order"
       />
+
+      {/* Yonna Forex Payment Modal */}
+      <YonnaPaymentModal
+        visible={showYonnaPayment}
+        amount={order?.totalAmount || 0}
+        currency={order?.currencyCode}
+        orderId={order?.orderNumber}
+        onPaymentSuccess={async (transactionId: string) => {
+          setShowYonnaPayment(false);
+          await loadOrderDetails();
+          Alert.alert(
+            'Payment Successful', 
+            `Your payment was processed successfully. Transaction ID: ${transactionId}`,
+            [{ text: 'OK' }]
+          );
+        }}
+        onPaymentError={(errorMsg: string) => {
+          Alert.alert('Payment Error', errorMsg || 'Payment failed. Please try again.');
+        }}
+        onClose={() => setShowYonnaPayment(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -3010,6 +3099,20 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  statusInfo: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  statusInfoText: {
+    color: '#92400E',
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   section: {
     backgroundColor: '#FFFFFF',
@@ -3480,6 +3583,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
   },
   authorizeButton: {
     backgroundColor: '#10B981',

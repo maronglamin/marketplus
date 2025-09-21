@@ -26,6 +26,7 @@ import settlementRoutes from './routes/settlements';
 import rideRequestRoutes from './routes/rideRequest';
 import salesRepRoutes from './routes/salesRep';
 import branchRoutes from './routes/branch';
+import yonnaForexPaymentRoutes from './routes/yonnaForexPaymentRoutes';
 
 const app = express();
 
@@ -66,7 +67,7 @@ app.use(helmet({
 // CORS configuration
 const corsOptions = {
   origin: '*', // Temporarily allow all origins for development
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
   maxAge: 86400 // 24 hours
@@ -131,6 +132,7 @@ app.use('/api/rentals', rentalRouter);
 app.use('/api/rental-messages', rentalMessageRoutes);
 app.use('/api/sales-reps', salesRepRoutes);
 app.use('/api/branches', branchRoutes);
+app.use('/api/payments/yonna-forex', yonnaForexPaymentRoutes);
 
 // Health check endpoint under /api
 app.get('/api/health', (req, res) => {

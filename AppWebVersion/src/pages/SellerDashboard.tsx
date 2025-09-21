@@ -1,0 +1,764 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Eye, ShoppingCart, Star, Edit, Trash2, Package, AlertTriangle, CheckCircle2, Clock, RefreshCw, Shield } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { kycService, type SellerKycResponse } from '../api/kyc';
+import { salesRepService, type SalesRep } from '../api/salesReps';
+import { sellerService } from '../api/seller';
+import { API_CONFIG } from '../config/api';
+
+interface Product {
+  id: string;
+  name: string;
+  price: string;
+  rating: number;
+  image: string;
+  views: number;
+  orderCount: number;
+  stock: number;
+  status: 'active' | 'inactive';
+  createdAt: string;
+}
+
+// Removed unused mockProducts
+
+export function SellerDashboard() {
+  const navigate = useNavigate();
+  const [fabOpen, setFabOpen] = useState(false);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [kyc, setKyc] = useState<SellerKycResponse | null>(null);
+  const [kycError, setKycError] = useState<string | null>(null);
+  const [salesRep, setSalesRep] = useState<SalesRep | null>(null);
+  const [stats, setStats] = useState({
+    totalProducts: 0,
+    pendingOrders: 0,
+    totalOrders: 0,
+    totalRevenue: 0,
+    revenueCurrency: 'USD',
+    hasOtherCurrencies: false,
+  });
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [productsPage, setProductsPage] = useState(1);
+  const [hasMoreProducts, setHasMoreProducts] = useState(true);
+  const [productsTotal, setProductsTotal] = useState(0);
+  const PAGE_SIZE = 9;
+  const [refreshingKyc, setRefreshingKyc] = useState(false);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
+
+  const isSalesRep = !!(salesRep && salesRep.status === 'ACTIVE');
+
+  const getImageUrl = (image: string) => {
+    if (!image) return 'https://via.placeholder.com/64?text=No+Image';
+    if (image.startsWith('http')) return image;
+    const base = API_CONFIG.BASE_URL.replace('/api', '');
+    return `${base}${image.startsWith('/') ? image : `/${image}`}`;
+  };
+
+  const getCurrencySymbol = (currencyCode: string) => {
+    const currencySymbols: Record<string, string> = {
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+      JPY: '¥',
+      CAD: 'C$',
+      AUD: 'A$',
+      CHF: 'CHF',
+      CNY: '¥',
+      INR: '₹',
+      BRL: 'R$',
+      MXN: '$',
+      KRW: '₩',
+      SGD: 'S$',
+      HKD: 'HK$',
+      NZD: 'NZ$',
+    };
+    return currencySymbols[currencyCode] || currencyCode;
+  };
+
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        setLoading(true);
+        setKycError(null);
+        // Check if user is a Sales Rep and handle inherited KYC access
+        let rep: SalesRep | null = null;
+        try {
+          rep = await salesRepService.getSalesRepByUser();
+        } catch (err: any) {
+          // Not a sales rep or API returned 404; proceed to check own KYC
+          rep = null;
+        }
+
+        if (rep && rep.status === 'ACTIVE') {
+          setSalesRep(rep);
+          // Grant access via inherited KYC from parent seller
+          setKyc({
+            id: 'inherited-kyc',
+            userId: rep.userId,
+            status: 'APPROVED',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            businessName: rep.inheritedKyc?.businessName,
+          } as SellerKycResponse);
+        } else {
+          // Not a rep; check user's own KYC
+          const res = await kycService.getKycStatus();
+          setKyc(res);
+        }
+        // If approved (or sales rep inherited), load real stats
+        const statsData = await sellerService.getSellerStats();
+        // Use totalOrders if backend provides it; otherwise compute from endpoint
+        let totalOrders = statsData.totalOrders ?? (statsData.pendingOrders + statsData.totalSales);
+        setStats({
+          totalProducts: statsData.totalProducts,
+          pendingOrders: statsData.pendingOrders,
+          totalOrders,
+          totalRevenue: statsData.totalRevenue,
+          revenueCurrency: statsData.revenueCurrency || 'USD',
+          hasOtherCurrencies: !!statsData.hasOtherCurrencies,
+        });
+
+        // Load first page of seller products for table
+        setLoadingProducts(true);
+        const productsRes = await sellerService.getSellerProducts(1, PAGE_SIZE);
+        const mapped = productsRes.products.map((p: any) => ({
+          id: p.id,
+          name: p.title,
+          price: `${p.currencyCode} ${Number(p.price).toFixed(2)}`,
+          rating: 0,
+          image: getImageUrl(p.images?.[0]?.imageUrl || ''),
+          views: p.views || 0,
+          orderCount: p.orderCount || 0,
+          stock: p.quantity,
+          status: (p.status || 'inactive').toLowerCase(),
+          createdAt: p.createdAt?.slice(0, 10) || '',
+        }));
+        setProducts(mapped);
+        setProductsPage(productsRes.page);
+        setHasMoreProducts(productsRes.hasMore);
+        setProductsTotal(productsRes.total);
+        setLoadingProducts(false);
+      } catch (e: any) {
+        // 404 = no KYC record
+        if (e?.response?.status === 404) {
+          setKyc(null);
+        } else if (e?.response?.status === 401) {
+          setKycError('Please log in to continue');
+        } else {
+          setKycError('Failed to check seller status. Please try again later.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    initialize();
+  }, []);
+
+  // Handle click outside to close header menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (headerMenuRef.current && !headerMenuRef.current.contains(event.target as Node)) {
+        setHeaderMenuOpen(false);
+      }
+    };
+
+    if (headerMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [headerMenuOpen]);
+
+  const refreshKycStatus = async () => {
+    try {
+      setRefreshingKyc(true);
+      const res = await kycService.getKycStatus();
+      setKyc(res);
+    } catch (e: any) {
+      if (e?.response?.status === 404) {
+        setKyc(null);
+      } else if (e?.response?.status === 401) {
+        setKycError('Please log in to continue');
+      } else {
+        setKycError('Failed to refresh status. Please try again later.');
+      }
+    } finally {
+      setRefreshingKyc(false);
+    }
+  };
+
+  const toggleProductStatus = (productId: string) => {
+    setProducts(products.map(product => 
+      product.id === productId 
+        ? { ...product, status: product.status === 'active' ? 'inactive' : 'active' }
+        : product
+    ));
+  };
+
+  const deleteProduct = (productId: string) => {
+    if (window.confirm('Are you sure you want to delete this product?')) {
+      setProducts(products.filter(product => product.id !== productId));
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle auth/other errors
+  if (kycError) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-2xl mx-auto px-4 py-10">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-red-100">
+            <div className="flex items-start">
+              <div className="p-2 bg-red-50 rounded-lg mr-3">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Unable to access Seller Dashboard</h2>
+                <p className="text-red-700 mt-1">{kycError}</p>
+                <div className="mt-4 flex gap-3">
+                  <button onClick={refreshKycStatus} disabled={refreshingKyc} className="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg disabled:opacity-50">
+                    <RefreshCw className={`w-4 h-4 mr-2 ${refreshingKyc ? 'animate-spin' : ''}`} />
+                    Retry
+                  </button>
+                  <Link to="/home" className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Go Home</Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If no KYC record, show Become a Seller prompt and link to KYC form
+  if (!kyc) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+          <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100">
+            <div className="flex items-center mb-4">
+              <div className="p-3 bg-blue-50 rounded-lg mr-3">
+                <Shield className="w-6 h-6 text-blue-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900">Become a Seller</h1>
+            </div>
+            <p className="text-gray-700 mb-6">Complete your seller verification to start listing products and making sales.</p>
+            <ul className="list-disc pl-5 text-gray-700 space-y-1 mb-6">
+              <li>Provide business details and registration information</li>
+              <li>Confirm your business location and contact details</li>
+              <li>Upload required documents and banking information</li>
+            </ul>
+            <div className="flex gap-3">
+              <Link to="/seller/kyc" className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Get Started</Link>
+              <button onClick={refreshKycStatus} disabled={refreshingKyc} className="px-5 py-3 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50 inline-flex items-center">
+                <RefreshCw className={`w-4 h-4 mr-2 ${refreshingKyc ? 'animate-spin' : ''}`} /> Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If KYC pending
+  if (kyc.status === 'PENDING') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-2xl mx-auto px-4 py-10">
+          <div className="bg-white rounded-xl shadow-sm p-8 border border-yellow-100">
+            <div className="flex items-start">
+              <div className="p-3 bg-yellow-50 rounded-lg mr-3">
+                <Clock className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-gray-900">Verification in Progress</h2>
+                <p className="text-gray-700 mt-2">Your seller verification is being reviewed. We'll notify you once it's approved.</p>
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500">Step 1</p>
+                    <p className="text-sm font-medium text-gray-800">Business Details</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500">Step 2</p>
+                    <p className="text-sm font-medium text-gray-800">Address & Contact</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500">Step 3</p>
+                    <p className="text-sm font-medium text-gray-800">Documents & Bank</p>
+                  </div>
+                </div>
+                <div className="mt-6 flex gap-3">
+                  <button onClick={refreshKycStatus} disabled={refreshingKyc} className="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg disabled:opacity-50">
+                    <RefreshCw className={`w-4 h-4 mr-2 ${refreshingKyc ? 'animate-spin' : ''}`} />
+                    Refresh Status
+                  </button>
+                  <Link to="/home" className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Go Home</Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If rejected
+  if (kyc.status === 'REJECTED') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-2xl mx-auto px-4 py-10">
+          <div className="bg-white rounded-xl shadow-sm p-8 border border-red-100">
+            <div className="flex items-start">
+              <div className="p-3 bg-red-50 rounded-lg mr-3">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-gray-900">Verification Rejected</h2>
+                <p className="text-gray-700 mt-2">{kyc.rejectionReason || 'Please review and update your information.'}</p>
+                <div className="mt-6 flex gap-3">
+                  <Link to="/seller/kyc" className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Update Verification</Link>
+                  <button onClick={refreshKycStatus} disabled={refreshingKyc} className="px-5 py-3 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50 inline-flex items-center">
+                    <RefreshCw className={`w-4 h-4 mr-2 ${refreshingKyc ? 'animate-spin' : ''}`} /> Refresh
+                  </button>
+                  <Link to="/home" className="px-5 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Go Home</Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Approved — show dashboard
+  return (
+    <div className="min-h-screen bg-gray-50 relative">
+      <div className="max-w-7xl mx-auto p-4">
+        {/* Header */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{isSalesRep ? 'Sales Rep Dashboard' : 'Seller Dashboard'}</h1>
+              <p className="text-gray-600">{isSalesRep ? 'Track your branch sales and performance' : 'Manage your products and track your sales'}</p>
+            </div>
+            <div className="relative" ref={headerMenuRef}>
+              {headerMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-10" style={{ minWidth: '200px' }}>
+                  <button
+                    onClick={() => { 
+                      console.log('Add Product clicked');
+                      setHeaderMenuOpen(false); 
+                      navigate('/seller/add-product'); 
+                    }}
+                    className="w-full px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 text-left flex items-center"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Product
+                  </button>
+                  <button
+                    onClick={() => { 
+                      console.log('Add Sales Rep clicked');
+                      setHeaderMenuOpen(false); 
+                      navigate('/seller/sales-reps'); 
+                    }}
+                    className="w-full px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 text-left border-t border-gray-200 flex items-center"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Sales Rep
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  console.log('Button clicked, current state:', headerMenuOpen);
+                  setHeaderMenuOpen((v) => !v);
+                }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Add Product
+                <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <Package className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Products</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalProducts}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Removed Total Views card per requirement */}
+
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-yellow-100 rounded-lg">
+                <ShoppingCart className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Pending Orders</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.pendingOrders}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-orange-100 rounded-lg">
+                <ShoppingCart className="w-6 h-6 text-orange-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">All Orders</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalOrders}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center">
+              <div className="p-3 bg-purple-100 rounded-lg">
+                <Star className="w-6 h-6 text-purple-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {getCurrencySymbol(stats.revenueCurrency)} {stats.totalRevenue.toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {stats.revenueCurrency} {stats.hasOtherCurrencies ? '(Latest TNX)' : ''}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Products Table */}
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Your Products</h2>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Product
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Price
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Stock
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Views
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Orders
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {products.map((product) => (
+                  <tr
+                    key={product.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => navigate(`/seller/product/${product.id}`)}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <img
+                          className="h-12 w-12 rounded-lg object-cover"
+                          src={product.image}
+                          alt={product.name}
+                        />
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {product.name}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {product.createdAt}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {product.price}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {product.stock}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {product.views}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {product.orderCount}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        product.status === 'active'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {product.status}
+                      </span>
+                    </td>
+                    
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              {(() => {
+                const start = (productsPage - 1) * PAGE_SIZE + 1;
+                const end = Math.min(productsPage * PAGE_SIZE, productsTotal);
+                const totalPages = Math.max(1, Math.ceil(productsTotal / PAGE_SIZE));
+                return `Showing ${productsTotal === 0 ? 0 : start}-${end} of ${productsTotal} • Page ${productsPage} of ${totalPages}`;
+              })()}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  if (productsPage <= 1) return;
+                  setLoadingProducts(true);
+                  const prevPage = productsPage - 1;
+                  const res = await sellerService.getSellerProducts(prevPage, PAGE_SIZE);
+                  const mapped = res.products.map((p: any) => ({
+                    id: p.id,
+                    name: p.title,
+                    price: `${p.currencyCode} ${Number(p.price).toFixed(2)}`,
+                    rating: 0,
+                    image: getImageUrl(p.images?.[0]?.imageUrl || ''),
+                    views: p.views || 0,
+                    orderCount: p.orderCount || 0,
+                    stock: p.quantity,
+                    status: (p.status || 'inactive').toLowerCase(),
+                    createdAt: p.createdAt?.slice(0, 10) || '',
+                  }));
+                  setProducts(mapped);
+                  setProductsPage(res.page);
+                  setHasMoreProducts(res.hasMore);
+                  setProductsTotal(res.total);
+                  setLoadingProducts(false);
+                }}
+                disabled={productsPage <= 1 || loadingProducts}
+                className="px-3 py-2 rounded-lg border text-sm disabled:opacity-50"
+              >
+                Previous
+              </button>
+              {(() => {
+                const totalPages = Math.max(1, Math.ceil(productsTotal / PAGE_SIZE));
+                const windowSize = 5;
+                let start = Math.max(1, productsPage - Math.floor(windowSize / 2));
+                let end = Math.min(totalPages, start + windowSize - 1);
+                if (end - start + 1 < windowSize) {
+                  start = Math.max(1, end - windowSize + 1);
+                }
+                const pages: number[] = [];
+                for (let p = start; p <= end; p++) pages.push(p);
+                return (
+                  <div className="flex items-center gap-1">
+                    {start > 1 && (
+                      <button
+                        onClick={async () => {
+                          if (loadingProducts) return;
+                          setLoadingProducts(true);
+                          const res = await sellerService.getSellerProducts(1, PAGE_SIZE);
+                          const mapped = res.products.map((p: any) => ({
+                            id: p.id,
+                            name: p.title,
+                            price: `${p.currencyCode} ${Number(p.price).toFixed(2)}`,
+                            rating: 0,
+                            image: getImageUrl(p.images?.[0]?.imageUrl || ''),
+                            views: p.views || 0,
+                            orderCount: p.orderCount || 0,
+                            stock: p.quantity,
+                            status: (p.status || 'inactive').toLowerCase(),
+                            createdAt: p.createdAt?.slice(0, 10) || '',
+                          }));
+                          setProducts(mapped);
+                          setProductsPage(res.page);
+                          setHasMoreProducts(res.hasMore);
+                          setProductsTotal(res.total);
+                          setLoadingProducts(false);
+                        }}
+                        className="px-3 py-2 rounded-lg border text-sm"
+                      >
+                        1
+                      </button>
+                    )}
+                    {start > 2 && <span className="px-2 text-sm text-gray-500">…</span>}
+                    {pages.map((p) => (
+                      <button
+                        key={p}
+                        onClick={async () => {
+                          if (loadingProducts || p === productsPage) return;
+                          setLoadingProducts(true);
+                          const res = await sellerService.getSellerProducts(p, PAGE_SIZE);
+                          const mapped = res.products.map((pr: any) => ({
+                            id: pr.id,
+                            name: pr.title,
+                            price: `${pr.currencyCode} ${Number(pr.price).toFixed(2)}`,
+                            rating: 0,
+                            image: getImageUrl(pr.images?.[0]?.imageUrl || ''),
+                            views: pr.views || 0,
+                            orderCount: pr.orderCount || 0,
+                            stock: pr.quantity,
+                            status: (pr.status || 'inactive').toLowerCase(),
+                            createdAt: pr.createdAt?.slice(0, 10) || '',
+                          }));
+                          setProducts(mapped);
+                          setProductsPage(res.page);
+                          setHasMoreProducts(res.hasMore);
+                          setProductsTotal(res.total);
+                          setLoadingProducts(false);
+                        }}
+                        className={`px-3 py-2 rounded-lg border text-sm ${p === productsPage ? 'bg-blue-600 text-white border-blue-600' : ''}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    {end < totalPages - 1 && <span className="px-2 text-sm text-gray-500">…</span>}
+                    {end < totalPages && (
+                      <button
+                        onClick={async () => {
+                          if (loadingProducts) return;
+                          setLoadingProducts(true);
+                          const res = await sellerService.getSellerProducts(totalPages, PAGE_SIZE);
+                          const mapped = res.products.map((p: any) => ({
+                            id: p.id,
+                            name: p.title,
+                            price: `${p.currencyCode} ${Number(p.price).toFixed(2)}`,
+                            rating: 0,
+                            image: getImageUrl(p.images?.[0]?.imageUrl || ''),
+                            views: p.views || 0,
+                            orderCount: p.orderCount || 0,
+                            stock: p.quantity,
+                            status: (p.status || 'inactive').toLowerCase(),
+                            createdAt: p.createdAt?.slice(0, 10) || '',
+                          }));
+                          setProducts(mapped);
+                          setProductsPage(res.page);
+                          setHasMoreProducts(res.hasMore);
+                          setProductsTotal(res.total);
+                          setLoadingProducts(false);
+                        }}
+                        className="px-3 py-2 rounded-lg border text-sm"
+                      >
+                        {totalPages}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+              <button
+                onClick={async () => {
+                  if (!hasMoreProducts) return;
+                  setLoadingProducts(true);
+                  const nextPage = productsPage + 1;
+                  const res = await sellerService.getSellerProducts(nextPage, PAGE_SIZE);
+                  const mapped = res.products.map((p: any) => ({
+                    id: p.id,
+                    name: p.title,
+                    price: `${p.currencyCode} ${Number(p.price).toFixed(2)}`,
+                    rating: 0,
+                    image: getImageUrl(p.images?.[0]?.imageUrl || ''),
+                    views: p.views || 0,
+                    orderCount: p.orderCount || 0,
+                    stock: p.quantity,
+                    status: (p.status || 'inactive').toLowerCase(),
+                    createdAt: p.createdAt?.slice(0, 10) || '',
+                  }));
+                  setProducts(mapped);
+                  setProductsPage(res.page);
+                  setHasMoreProducts(res.hasMore);
+                  setProductsTotal(res.total);
+                  setLoadingProducts(false);
+                }}
+                disabled={!hasMoreProducts || loadingProducts}
+                className="px-3 py-2 rounded-lg border text-sm disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {products.length === 0 && (
+          <div className="text-center py-12">
+            <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No products yet</h3>
+            <p className="text-gray-500 mb-4">Start selling by adding your first product</p>
+            <Link
+              to="/seller/add-product"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Add Your First Product
+            </Link>
+          </div>
+        )}
+      </div>
+
+      {/* Floating Action Button with menu */}
+      <div className="fixed bottom-20 right-6 z-30">
+        {fabOpen && (
+          <div className="mb-3 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+            <button
+              onClick={() => { setFabOpen(false); navigate('/seller/add-product'); }}
+              className="w-full px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 text-left"
+            >
+              Add Product
+            </button>
+            <button
+              onClick={() => { setFabOpen(false); navigate('/seller/sales-reps'); }}
+              className="w-full px-4 py-3 text-sm text-gray-800 hover:bg-gray-50 text-left border-t border-gray-200"
+            >
+              Add Sales Rep
+            </button>
+          </div>
+        )}
+        <button
+          onClick={() => setFabOpen((v) => !v)}
+          className="bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-300 transition-colors w-14 h-14 flex items-center justify-center"
+          aria-label="Quick actions"
+        >
+          <Plus className={`w-6 h-6 transition-transform ${fabOpen ? 'rotate-45' : ''}`} />
+        </button>
+      </div>
+    </div>
+  );
+}

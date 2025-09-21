@@ -10,7 +10,10 @@
     "lint": "eslint . --ext .ts",
     "test": "jest",
     "check-deps": "node scripts/check-dependencies.js --check",
-    "update-deps": "node scripts/check-dependencies.js --update"
+    "update-deps": "node scripts/check-dependencies.js --update",
+    "validate-yonna-env": "node scripts/validate-yonna-env.js",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "keywords": [],
   "author": "",
@@ -39,7 +42,10 @@
     "twilio": "^4.22.0",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
-    "zod": "^3.22.4"
+    "zod": "^3.22.4",
+    "expo": "~53.0.22",
+    "react": "19.0.0",
+    "react-native": "0.79.6"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

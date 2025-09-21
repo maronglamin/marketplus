@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { authenticate } from '../middleware/auth';
 import { PrismaClient, TransactionType } from '@prisma/client';
 import UCPService from '../services/ucpService';
+import yonnaForexPaymentRoutes from './yonnaForexPaymentRoutes';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -11,6 +12,34 @@ const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-05-28.basil',
 });
+
+/*
+ * STRIPE INTEGRATION NOTES:
+ * 
+ * Current Implementation:
+ * - Uses server-side payment intent creation and confirmation
+ * - Disables redirect-based payment methods to avoid return_url requirement
+ * - Suitable for demo/testing purposes
+ * 
+ * For Production Stripe Integration:
+ * 1. Use Stripe.js on the frontend for payment method collection
+ * 2. Create payment intents on the backend
+ * 3. Confirm payments on the frontend using Stripe.js
+ * 4. Handle 3D Secure authentication properly
+ * 5. Implement webhooks for payment status updates
+ * 6. Use Stripe Elements for better UX
+ * 
+ * Example frontend integration:
+ * ```javascript
+ * const stripe = Stripe('pk_test_...');
+ * const {error} = await stripe.confirmCardPayment(clientSecret, {
+ *   payment_method: {
+ *     card: cardElement,
+ *     billing_details: { name: 'Customer Name' }
+ *   }
+ * });
+ * ```
+ */
 
 // Create payment intent
 router.post('/create-payment-intent', authenticate, async (req, res) => {
@@ -110,6 +139,9 @@ router.post('/create-payment-intent', authenticate, async (req, res) => {
       description: description
     });
 
+    // Create payment intent with automatic payment methods
+    // Note: For production, consider using Stripe.js on the frontend for better UX
+    // and proper handling of 3D Secure authentication
     const paymentIntent = await stripe.paymentIntents.create({
       amount: stripeAmount,
       currency: currency.toLowerCase(),
@@ -121,6 +153,7 @@ router.post('/create-payment-intent', authenticate, async (req, res) => {
       },
       automatic_payment_methods: {
         enabled: true,
+        allow_redirects: 'never', // Disable redirect-based payment methods to avoid return_url requirement
       },
     });
 
@@ -528,5 +561,8 @@ function calculateStripeFees(amount: number, currency: string): number {
   
   return totalFees;
 }
+
+// Register Yonna Forex payment routes
+router.use('/', yonnaForexPaymentRoutes);
 
 export default router; 

@@ -31,6 +31,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../api/api';
 import { MobileWalletPicker } from '../../components/MobileWalletPicker';
 import { mobileWalletService } from '../../services/mobileWalletService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface PaymentMethod {
   id: string;
@@ -67,15 +68,40 @@ export function PaymentMethods() {
 
   // Mobile money provider states
   const [selectedMobileProviderId, setSelectedMobileProviderId] = useState<string | null>(null);
+  // Mobile number state (prefilled from user and editable as fallback)
+  const [mobileNumber, setMobileNumber] = useState<string>('');
+  const [isFetchingUser, setIsFetchingUser] = useState<boolean>(false);
+
+  const fetchFreshUserPhone = async () => {
+    try {
+      setIsFetchingUser(true);
+      const res = await api.get('/api/users/me');
+      const fresh = res?.data;
+      const phone = fresh?.phoneNumber || fresh?.phone;
+      if (phone && (!mobileNumber || mobileNumber.trim().length === 0)) {
+        setMobileNumber(String(phone));
+      }
+    } catch (e) {
+      console.log('Failed to fetch fresh user via JWT for payment methods');
+    } finally {
+      setIsFetchingUser(false);
+    }
+  };
 
   useEffect(() => {
     loadPaymentMethods();
+    // Also fetch latest user info via JWT to prefill phone
+    fetchFreshUserPhone();
   }, []);
 
   // When opening modal for Mobile Money, default to first active provider from mobileWalletService
   useEffect(() => {
     const shouldInit = (showAddModal || showEditModal) && formData.type === 'MOBILE_MONEY';
     if (!shouldInit) return;
+    // Ensure latest phone from backend (JWT) if not already set
+    if (!mobileNumber || mobileNumber.trim().length === 0) {
+      fetchFreshUserPhone();
+    }
     const providers = mobileWalletService.getActiveProviders();
     const initial = editingMethod
       ? providers.find(p => p.name === editingMethod.provider)?.id || providers[0]?.id || null
@@ -89,14 +115,18 @@ export function PaymentMethods() {
     try {
       setLoading(true);
       
-      // Ensure user is authenticated
-      if (!user?.id) {
-        console.log('User not authenticated, skipping payment method load');
-        setPaymentMethods([]);
-        return;
+      // Attempt to get current user via JWT to determine userId for filtering
+      let currentUserId: string | undefined = user?.id;
+      try {
+        const meRes = await api.get('/api/users/me');
+        const meData = meRes?.data;
+        if (meData?.id) currentUserId = meData.id;
+      } catch (e) {
+        // If this fails, proceed without filtering
+        console.log('loadPaymentMethods: Failed to fetch /api/users/me, proceeding without strict filter');
       }
 
-      console.log('Loading payment methods for current user:', user.id);
+      console.log('Loading payment methods (jwt-backed):', { currentUserId });
       
       let response;
       try {
@@ -119,7 +149,7 @@ export function PaymentMethods() {
               isDefault: true,
               isActive: true,
               status: 'ACTIVE',
-              userId: user.id,
+              userId: currentUserId,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
               metadata: {
@@ -137,7 +167,7 @@ export function PaymentMethods() {
               isDefault: false,
               isActive: true,
               status: 'ACTIVE',
-              userId: user.id,
+              userId: currentUserId,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
               metadata: {
@@ -148,7 +178,7 @@ export function PaymentMethods() {
             }
           ];
           
-          console.log('Using mock payment methods for current user:', user.id, mockPaymentMethods);
+          console.log('Using mock payment methods for current user:', currentUserId, mockPaymentMethods);
           setPaymentMethods(mockPaymentMethods);
           return;
         }
@@ -162,11 +192,13 @@ export function PaymentMethods() {
       console.log('Raw API response for payment methods:', {
         responseData: response?.data,
         allPaymentMethods: allPaymentMethods,
-        currentUserId: user.id
+        currentUserId: currentUserId
       });
       
-      // Filter payment methods by current user ID
-      const userPaymentMethods = allPaymentMethods.filter((pm: any) => pm.userId === user.id);
+      // Filter payment methods by current user ID if available, otherwise show all
+      const userPaymentMethods = currentUserId
+        ? allPaymentMethods.filter((pm: any) => pm.userId === currentUserId)
+        : allPaymentMethods;
       
       // Parse metadata for each payment method if it's a string
       const parsedUserPaymentMethods = userPaymentMethods.map((pm: any) => {
@@ -201,7 +233,7 @@ export function PaymentMethods() {
       });
       
       console.log('Payment methods filtering results:', {
-        currentUserId: user.id,
+        currentUserId: currentUserId,
         totalPaymentMethods: allPaymentMethods.length,
         userPaymentMethodsCount: userPaymentMethods.length,
         userPaymentMethods: parsedUserPaymentMethods.map((pm: any) => ({
@@ -239,10 +271,30 @@ export function PaymentMethods() {
     }
   };
 
-  const handleAddPaymentMethod = () => {
+  const handleAddPaymentMethod = async () => {
+    const providers = mobileWalletService.getActiveProviders();
+    const initialId = providers[0]?.id || null;
+    const initialName = providers[0]?.name || '';
+    setSelectedMobileProviderId(initialId);
+
+    // Prefill mobile number from auth or AsyncStorage
+    let candidate = user?.phoneNumber as string | undefined;
+    if (!candidate) {
+      try {
+        const storedUserStr = await AsyncStorage.getItem('user');
+        if (storedUserStr) {
+          const storedUser = JSON.parse(storedUserStr);
+          candidate = storedUser?.phoneNumber || storedUser?.phone;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    setMobileNumber((candidate || '').toString());
+
     setFormData({
-      type: 'CREDIT_CARD',
-      provider: '',
+      type: 'MOBILE_MONEY',
+      provider: initialName || (initialId || ''),
       accountName: '',
       isDefault: false,
     });
@@ -315,14 +367,27 @@ export function PaymentMethods() {
     try {
       const isMobileMoney = formData.type === 'MOBILE_MONEY';
       const resolvedProvider = isMobileMoney ? (formData.provider || selectedMobileProviderId || '') : formData.provider;
+      if (isMobileMoney && !resolvedProvider) {
+        Alert.alert('Error', 'Mobile money provider is required');
+        return;
+      }
+      const accountIdVal = isMobileMoney ? (mobileNumber || '').trim() : 'CARD';
+      const accountNameVal = isMobileMoney ? (mobileNumber || '').trim() : formData.accountName;
+      if (!formData.type || !resolvedProvider || !accountIdVal || !accountNameVal) {
+        console.log('Validation failed before submit:', { type: formData.type, resolvedProvider, accountIdVal, accountNameVal });
+        Alert.alert('Error', 'Missing required fields');
+        return;
+      }
       const paymentData = {
         type: formData.type,
         provider: resolvedProvider,
-        accountId: isMobileMoney ? (user?.phoneNumber || '') : 'CARD',
-        accountName: isMobileMoney ? (user?.phoneNumber || '') : formData.accountName,
+        accountId: accountIdVal,
+        accountName: accountNameVal,
         isDefault: formData.isDefault,
-        metadata: isMobileMoney ? { phoneNumber: user?.phoneNumber || '' } : {},
+        metadata: isMobileMoney ? { phoneNumber: accountIdVal, providerId: selectedMobileProviderId || undefined, providerName: formData.provider || undefined } : {},
       };
+
+      console.log('Saving payment method payload keys:', Object.keys(paymentData));
 
       if (editingMethod) {
         await api.patch(`/api/payment-methods/${editingMethod.id}`, paymentData);
@@ -335,7 +400,9 @@ export function PaymentMethods() {
       setShowAddModal(false);
       setShowEditModal(false);
       setEditingMethod(null);
-      loadPaymentMethods();
+      if (user?.id) {
+        loadPaymentMethods();
+      }
     } catch (error: any) {
       console.error('Error saving payment method:', error);
       if (error?.response?.status === 409) {
@@ -932,7 +999,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
-    gap: 12,
+    gap: 24,
   },
   cancelButton: {
     flex: 1,

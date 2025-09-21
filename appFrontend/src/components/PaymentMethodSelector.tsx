@@ -1,548 +1,262 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
   StyleSheet,
-  SafeAreaView,
-  Dimensions,
+  Modal,
+  ScrollView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { api } from '../services/api';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { AppStackParamList } from '../navigation/AppNavigator';
-import * as Haptics from 'expo-haptics';
+import YonnaForexPaymentForm from './YonnaForexPaymentForm';
 
-interface PaymentMethod {
-  id: string;
-  type: string;
-  provider: string;
-  accountName: string;
-  accountId: string;
-  isDefault: boolean;
-  status: string;
-  metadata?: any;
+export type PaymentMethod = 'stripe' | 'yonna-forex' | 'cash' | 'bank-transfer';
+
+interface PaymentMethodOption {
+  id: PaymentMethod;
+  name: string;
+  description: string;
+  icon: string;
+  available: boolean;
 }
 
 interface PaymentMethodSelectorProps {
-  visible: boolean;
-  onClose: () => void;
-  onSelectPaymentMethod: (paymentMethod: PaymentMethod) => void;
-  onStripePayment: () => void;
   amount: number;
-  currency: string;
-  title?: string;
+  onPaymentMethodSelected: (method: PaymentMethod) => void;
+  onPaymentSuccess: (transactionId: string, method: PaymentMethod) => void;
+  onPaymentError: (error: string) => void;
+  onCancel: () => void;
 }
 
-export function PaymentMethodSelector({
-  visible,
-  onClose,
-  onSelectPaymentMethod,
-  onStripePayment,
+const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
   amount,
-  currency,
-  title = 'Select Payment Method'
-}: PaymentMethodSelectorProps) {
-  const screenHeight = Dimensions.get('window').height;
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  onPaymentMethodSelected,
+  onPaymentSuccess,
+  onPaymentError,
+  onCancel,
+}) => {
+  const [showYonnaForexForm, setShowYonnaForexForm] = useState(false);
 
-  useEffect(() => {
-    if (visible) {
-      loadPaymentMethods();
-    }
-  }, [visible]);
+  const paymentMethods: PaymentMethodOption[] = [
+    {
+      id: 'stripe',
+      name: 'Credit/Debit Card',
+      description: 'Pay with Visa, Mastercard, or American Express',
+      icon: '💳',
+      available: true,
+    },
+    {
+      id: 'yonna-forex',
+      name: 'Yonna Forex Wallet',
+      description: 'Pay with your Yonna Forex mobile wallet',
+      icon: '📱',
+      available: true,
+    },
+    {
+      id: 'cash',
+      name: 'Cash Payment',
+      description: 'Pay with cash on delivery',
+      icon: '💵',
+      available: true,
+    },
+    {
+      id: 'bank-transfer',
+      name: 'Bank Transfer',
+      description: 'Direct bank transfer',
+      icon: '🏦',
+      available: true,
+    },
+  ];
 
-  const loadPaymentMethods = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await api.get('/api/payment-methods');
-      if (response.data?.success) {
-        console.log('Payment methods loaded:', response.data.data);
-        setPaymentMethods(response.data.data || []);
-      } else {
-        setError('Failed to load payment methods');
-        setPaymentMethods([]);
-      }
-    } catch (error: any) {
-      console.error('Error loading payment methods:', error);
-      setError(error.response?.data?.message || 'Failed to load payment methods');
-      setPaymentMethods([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSelectPaymentMethod = (paymentMethod: PaymentMethod) => {
-    console.log('🎯 Payment method selected:', {
-      id: paymentMethod.id,
-      type: paymentMethod.type,
-      provider: paymentMethod.provider,
-      accountName: paymentMethod.accountName
-    });
-    
-    // Handle different payment method types
-    switch (paymentMethod.type) {
-      case 'CREDIT_CARD':
-      case 'DEBIT_CARD':
-        // Use Stripe for card payments
-        console.log('🎯 Card payment selected, opening Stripe modal');
-        // Trigger Stripe first, then close the selector so selectedRental remains intact
-        try {
-          onStripePayment();
-        } finally {
-          onClose();
-        }
-        break;
-
-      case 'MOBILE_MONEY':
-        // Check if the mobile wallet provider has integration
-        const providerId = paymentMethod.metadata?.providerId;
-        if (providerId) {
-          // For now, show an alert about mobile wallet integration
-          Alert.alert(
-            'Mobile Wallet Payment',
-            `Processing payment through ${paymentMethod.provider}...`,
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  onSelectPaymentMethod(paymentMethod);
-                  onClose();
-                }
-              }
-            ]
-          );
-        } else {
-          Alert.alert(
-            'Payment Method Error',
-            'Mobile wallet provider information is missing. Please try another payment method.',
-            [{ text: 'OK' }]
-          );
-        }
-        break;
-
-      case 'BANK_TRANSFER':
-        Alert.alert(
-          'Bank Transfer Payment',
-          `Processing bank transfer payment through ${paymentMethod.provider}...`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                onSelectPaymentMethod(paymentMethod);
-                onClose();
-              }
-            }
-          ]
-        );
-        break;
-
-      case 'CRYPTO':
-        Alert.alert(
-          'Cryptocurrency Payment',
-          `Processing cryptocurrency payment through ${paymentMethod.provider}...`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                onSelectPaymentMethod(paymentMethod);
-                onClose();
-              }
-            }
-          ]
-        );
-        break;
-
-      case 'DIGITAL_WALLET':
-        // Handle cash on delivery or other digital wallet types
-        if (paymentMethod.provider === 'Cash on Delivery') {
-          Alert.alert(
-            'Cash on Delivery',
-            'Your payment will be processed for cash on delivery. The seller will contact you to arrange payment upon delivery.',
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  onSelectPaymentMethod(paymentMethod);
-                  onClose();
-                }
-              }
-            ]
-          );
-        } else {
-          Alert.alert(
-            'Digital Wallet Payment',
-            `Processing payment through ${paymentMethod.provider}...`,
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  onSelectPaymentMethod(paymentMethod);
-                  onClose();
-                }
-              }
-            ]
-          );
-        }
-        break;
-
-      default:
-        console.log('Unknown payment method type:', paymentMethod.type);
-        // For unknown types, try to determine if it's a card payment based on provider
-        if (paymentMethod.provider && (
-          paymentMethod.provider.toLowerCase().includes('visa') ||
-          paymentMethod.provider.toLowerCase().includes('mastercard') ||
-          paymentMethod.provider.toLowerCase().includes('amex') ||
-          paymentMethod.provider.toLowerCase().includes('card')
-        )) {
-          console.log('Detected card payment by provider, opening Stripe modal');
-          onClose();
-          onStripePayment();
-        } else {
-          Alert.alert(
-            'Payment Method Not Supported',
-            `${paymentMethod.type} payment method is not currently supported. Please try another payment method.`,
-            [{ text: 'OK' }]
-          );
-        }
-        break;
+  const handlePaymentMethodPress = (method: PaymentMethod) => {
+    if (method === 'yonna-forex') {
+      setShowYonnaForexForm(true);
+    } else {
+      onPaymentMethodSelected(method);
     }
   };
 
-  const getPaymentMethodIcon = (type: string, provider: string) => {
-    switch (type) {
-      case 'CREDIT_CARD':
-      case 'DEBIT_CARD':
-        return 'card';
-      case 'BANK_TRANSFER':
-        return 'business';
-      case 'MOBILE_MONEY':
-        return 'phone-portrait';
-      case 'CRYPTO':
-        return 'logo-bitcoin';
-      case 'DIGITAL_WALLET':
-        return 'wallet';
-      default:
-        return 'card';
-    }
+  const handleYonnaForexSuccess = (transactionId: string) => {
+    setShowYonnaForexForm(false);
+    onPaymentSuccess(transactionId, 'yonna-forex');
   };
 
-  const getPaymentMethodColor = (type: string) => {
-    switch (type) {
-      case 'CREDIT_CARD':
-      case 'DEBIT_CARD':
-        return '#3B82F6';
-      case 'BANK_TRANSFER':
-        return '#10B981';
-      case 'MOBILE_MONEY':
-        return '#F59E0B';
-      case 'CRYPTO':
-        return '#8B5CF6';
-      case 'DIGITAL_WALLET':
-        return '#EF4444';
-      default:
-        return '#6B7280';
-    }
+  const handleYonnaForexError = (error: string) => {
+    onPaymentError(error);
   };
 
-  const formatAmount = (amount: number, currency: string) => {
-    return `${currency} ${amount.toLocaleString()}`;
+  const handleYonnaForexCancel = () => {
+    setShowYonnaForexForm(false);
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <SafeAreaView style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          {/* Handle Bar */}
-          <View style={styles.handleBar} />
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>{title}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Select Payment Method</Text>
+        <Text style={styles.amountText}>Amount: ${amount.toFixed(2)}</Text>
+      </View>
 
-          {/* Amount Display */}
-          <View style={styles.amountSection}>
-            <Text style={styles.amountLabel}>Total Amount</Text>
-            <Text style={styles.amount}>{formatAmount(amount, currency)}</Text>
-          </View>
+      <ScrollView style={styles.methodsList} showsVerticalScrollIndicator={false}>
+        {paymentMethods.map((method) => (
+          <TouchableOpacity
+            key={method.id}
+            style={[
+              styles.methodItem,
+              !method.available && styles.methodItemDisabled,
+            ]}
+            onPress={() => method.available && handlePaymentMethodPress(method.id)}
+            disabled={!method.available}
+          >
+            <View style={styles.methodIcon}>
+              <Text style={styles.iconText}>{method.icon}</Text>
+            </View>
+            <View style={styles.methodInfo}>
+              <Text style={[
+                styles.methodName,
+                !method.available && styles.methodNameDisabled,
+              ]}>
+                {method.name}
+              </Text>
+              <Text style={[
+                styles.methodDescription,
+                !method.available && styles.methodDescriptionDisabled,
+              ]}>
+                {method.description}
+              </Text>
+            </View>
+            <View style={styles.methodArrow}>
+              <Text style={styles.arrowText}>›</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-          {/* Payment Methods */}
-          <ScrollView style={styles.paymentMethodsContainer} showsVerticalScrollIndicator={false}>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#3B82F6" />
-                <Text style={styles.loadingText}>Loading payment methods...</Text>
-              </View>
-            ) : error ? (
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={48} color="#EF4444" />
-                <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity onPress={loadPaymentMethods} style={styles.retryButton}>
-                  <Text style={styles.retryButtonText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
-            ) : paymentMethods.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="card-outline" size={48} color="#9CA3AF" />
-                <Text style={styles.emptyTitle}>No Payment Methods</Text>
-                <Text style={styles.emptyText}>You haven't added any payment methods yet.</Text>
-              </View>
-            ) : (
-              paymentMethods.map((method) => (
-                <TouchableOpacity
-                  key={method.id}
-                  style={styles.paymentMethodCard}
-                  onPress={() => handleSelectPaymentMethod(method)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.paymentMethodContent}>
-                    <View style={styles.paymentMethodIcon}>
-                      <Ionicons
-                        name={getPaymentMethodIcon(method.type, method.provider) as any}
-                        size={24}
-                        color={getPaymentMethodColor(method.type)}
-                      />
-                    </View>
-                    <View style={styles.paymentMethodInfo}>
-                      <Text style={styles.paymentMethodName}>{method.accountName}</Text>
-                      <Text style={styles.paymentMethodType}>
-                        {method.type.replace('_', ' ')} • {method.provider}
-                      </Text>
-                      {method.isDefault && (
-                        <View style={styles.defaultBadge}>
-                          <Text style={styles.defaultBadgeText}>Default</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+          <Text style={styles.cancelButtonText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
 
-          {/* Footer - Add New Payment Method CTA */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.addPaymentCTA}
-              activeOpacity={0.85}
-              onPress={() => {
-                try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
-                onClose();
-                // Navigate to Account Settings -> Payment Methods
-                navigation.navigate('PaymentMethods');
-              }}
-            >
-              <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.addPaymentCTAText}>Add New Payment Method</Text>
-            </TouchableOpacity>
-          </View>
-          
-
-        </View>
-      </SafeAreaView>
-    </Modal>
+      {/* Yonna Forex Payment Modal */}
+      <Modal
+        visible={showYonnaForexForm}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <YonnaForexPaymentForm
+          amount={amount}
+          onPaymentSuccess={handleYonnaForexSuccess}
+          onPaymentError={handleYonnaForexError}
+          onCancel={handleYonnaForexCancel}
+        />
+      </Modal>
+    </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  container: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    height: '85%',
-    paddingBottom: 12,
-  },
-  handleBar: {
-    width: 40,
-    height: 4,
-    backgroundColor: '#D1D5DB',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 8,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    padding: 20,
+    backgroundColor: '#F8F9FA',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#E9ECEF',
   },
   title: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  amountSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-  },
-  amountLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-  amount: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#1F2937',
+    fontWeight: 'bold',
+    color: '#333333',
+    marginBottom: 8,
   },
-  paymentMethodsContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  errorText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#EF4444',
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: '#3B82F6',
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyTitle: {
+  amountText: {
     fontSize: 18,
+    color: '#007AFF',
     fontWeight: '600',
-    color: '#374151',
-    marginTop: 12,
   },
-  emptyText: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 4,
+  methodsList: {
+    flex: 1,
+    padding: 20,
   },
-  paymentMethodCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  paymentMethodContent: {
+  methodItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 16,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9ECEF',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  paymentMethodIcon: {
+  methodItemDisabled: {
+    opacity: 0.5,
+  },
+  methodIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F8F9FA',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
-  paymentMethodInfo: {
+  iconText: {
+    fontSize: 24,
+  },
+  methodInfo: {
     flex: 1,
   },
-  paymentMethodName: {
+  methodName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  paymentMethodType: {
-    fontSize: 14,
-    color: '#6B7280',
+    color: '#333333',
     marginBottom: 4,
   },
-  defaultBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
+  methodNameDisabled: {
+    color: '#999999',
   },
-  defaultBadgeText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#FFFFFF',
+  methodDescription: {
+    fontSize: 14,
+    color: '#666666',
+  },
+  methodDescriptionDisabled: {
+    color: '#CCCCCC',
+  },
+  methodArrow: {
+    marginLeft: 12,
+  },
+  arrowText: {
+    fontSize: 20,
+    color: '#CCCCCC',
+    fontWeight: '300',
   },
   footer: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
+    padding: 20,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderTopColor: '#E9ECEF',
   },
-  addPaymentCTA: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
+  cancelButton: {
     paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DDDDDD',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
   },
-  addPaymentCTAText: {
-    color: '#FFFFFF',
+  cancelButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    marginLeft: 8,
+    color: '#666666',
   },
 });
+
+export default PaymentMethodSelector;

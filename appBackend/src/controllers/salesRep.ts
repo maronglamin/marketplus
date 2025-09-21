@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { PrismaClient } from '@prisma/client'
 import { logger } from '../utils/logger'
+import { hashPin } from '../utils/pin'
 
 const prisma = new PrismaClient()
 
@@ -322,12 +323,19 @@ export const createSalesRep = async (req: AuthenticatedRequest, res: Response) =
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    const { firstName, lastName, phoneNumber, email, branchId } = req.body
+    const { firstName, lastName, phoneNumber, email, branchId, pin } = req.body
 
     // Validate required fields
-    if (!firstName || !lastName || !phoneNumber || !branchId) {
+    if (!firstName || !lastName || !phoneNumber || !branchId || !pin) {
       return res.status(400).json({ 
-        error: 'Missing required fields: firstName, lastName, phoneNumber, branchId' 
+        error: 'Missing required fields: firstName, lastName, phoneNumber, branchId, pin' 
+      })
+    }
+
+    // Validate PIN format (4 digits only)
+    if (!/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ 
+        error: 'PIN must be exactly 4 digits' 
       })
     }
 
@@ -387,13 +395,16 @@ export const createSalesRep = async (req: AuthenticatedRequest, res: Response) =
 
       userId = existingUser.id
     } else {
+      // Hash the PIN before storing
+      const hashedPin = await hashPin(pin)
+      
       // Create new user for the sales rep
       const newUser = await prisma.user.create({
         data: {
           firstName,
           lastName,
           phoneNumber,
-          pin: '0000', // Default PIN, user will be required to change on first login
+          pin: hashedPin, // Hashed PIN for security
         }
       })
       userId = newUser.id
