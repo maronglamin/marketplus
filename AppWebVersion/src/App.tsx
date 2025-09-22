@@ -24,6 +24,16 @@ import { SalesReps } from './pages/SalesReps';
 import { Products } from './pages/Products';
 import { Categories } from './pages/Categories';
 import { Orders } from './pages/Orders';
+import { RevenueDetails } from './pages/RevenueDetails';
+import { TransactionHistory } from './pages/TransactionHistory';
+import { TransactionCurrencyOverview } from './pages/TransactionCurrencyOverview';
+import { TransactionDetail } from './pages/TransactionDetail';
+import { SettlementRequest } from './pages/SettlementRequest';
+import { SettlementDetail } from './pages/SettlementDetail';
+import { SettlementHistory } from './pages/SettlementHistory';
+import { ReportsScreen } from './pages/ReportsScreen';
+import { RepOrderReport } from './pages/RepOrderReport';
+import { RepProductReport } from './pages/RepProductReport';
 
 function App() {
   return (
@@ -33,6 +43,30 @@ function App() {
           {/* Public routes - no authentication required */}
           <Route path="/" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          
+          <Route path="/transactions" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <TransactionCurrencyOverview />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/transactions/:currency" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <TransactionHistory />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
           
           {/* Protected routes - require authentication */}
           <Route path="/home" element={
@@ -249,6 +283,129 @@ function App() {
                 <BottomNavigation />
               </div>
             </ProtectedRoute>
+          } />
+
+          {/* Debug route */}
+          <Route path="/transactions-debug" element={
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+              <div className="text-center">
+                <h1 className="text-2xl font-bold text-gray-900 mb-4">Transactions Debug</h1>
+                <p className="text-gray-600 mb-4">This route is working!</p>
+                <p className="text-sm text-gray-500">Current path: {window.location.pathname}</p>
+              </div>
+            </div>
+          } />
+
+          {/* Revenue and Transaction Routes */}
+          <Route path="/revenue-details" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <RevenueDetails />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/transaction-detail/:transactionId" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <TransactionDetail />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          {/* Settlement Routes */}
+          <Route path="/settlement-request" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <SettlementRequest />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/settlement-detail/:settlementId" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <SettlementDetail />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/settlement-history" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <SettlementHistory />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          {/* Reports Screen Route */}
+          <Route path="/reports" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <ReportsScreen />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          {/* Rep Order Report Route */}
+          <Route path="/rep-order-report" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <RepOrderReport />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          {/* Rep Product Report Route */}
+          <Route path="/rep-product-report" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <RepProductReport />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          {/* Catch-all route for debugging */}
+          <Route path="*" element={
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+              <div className="text-center">
+                <h1 className="text-2xl font-bold text-gray-900 mb-4">404 - Page Not Found</h1>
+                <p className="text-gray-600 mb-4">The page you're looking for doesn't exist.</p>
+                <p className="text-sm text-gray-500">Current path: {window.location.pathname}</p>
+              </div>
+            </div>
           } />
         </Routes>
       </Router>

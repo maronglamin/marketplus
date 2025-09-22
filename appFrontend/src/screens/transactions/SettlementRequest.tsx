@@ -760,6 +760,7 @@ export function SettlementRequest() {
                     <View style={styles.accountInfo}>
                       <Text style={styles.accountName}>{wallet.walletType.replace('_', ' ')}</Text>
                       <Text style={styles.accountNumber}>{wallet.account}</Text>
+                      <Text style={styles.walletAddress}>{wallet.walletAddress}</Text>
                       <Text style={styles.bankName}>{wallet.currency}</Text>
                     </View>
                     <Ionicons 
@@ -1391,6 +1392,12 @@ const styles = StyleSheet.create({
   accountNumber: {
     fontSize: 14,
     color: '#6B7280',
+    marginBottom: 2,
+  },
+  walletAddress: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontFamily: 'monospace',
     marginBottom: 2,
   },
   bankName: {

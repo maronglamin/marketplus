@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Eye, ShoppingCart, Star, Edit, Trash2, Package, AlertTriangle, CheckCircle2, Clock, RefreshCw, Shield } from 'lucide-react';
+import { Plus, Eye, ShoppingCart, Star, Edit, Trash2, Package, AlertTriangle, CheckCircle2, Clock, RefreshCw, Shield, History, ArrowRight, BarChart3 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { kycService, type SellerKycResponse } from '../api/kyc';
 import { salesRepService, type SalesRep } from '../api/salesReps';
@@ -37,6 +37,7 @@ export function SellerDashboard() {
     totalRevenue: 0,
     revenueCurrency: 'USD',
     hasOtherCurrencies: false,
+    salesReps: 0,
   });
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [productsPage, setProductsPage] = useState(1);
@@ -107,9 +108,36 @@ export function SellerDashboard() {
           setKyc(res);
         }
         // If approved (or sales rep inherited), load real stats
-        const statsData = await sellerService.getSellerStats();
+        let statsData;
+        try {
+          statsData = await sellerService.getSellerStats();
+          console.log('✅ Stats API call successful:', statsData);
+        } catch (error) {
+          console.error('❌ Stats API call failed:', error);
+          // Set default values if API fails
+          statsData = {
+            totalProducts: 0,
+            activeProducts: 0,
+            totalSales: 0,
+            pendingOrders: 0,
+            totalRevenue: 0,
+            revenueCurrency: 'USD',
+            hasOtherCurrencies: false
+          };
+        }
+        
         // Use totalOrders if backend provides it; otherwise compute from endpoint
         let totalOrders = statsData.totalOrders ?? (statsData.pendingOrders + statsData.totalSales);
+        
+        // Load sales reps count
+        let salesRepsCount = 0;
+        try {
+          const salesRepsData = await salesRepService.getSalesReps();
+          salesRepsCount = salesRepsData.length;
+        } catch (error) {
+          console.log('No sales reps found or error loading sales reps');
+        }
+        
         setStats({
           totalProducts: statsData.totalProducts,
           pendingOrders: statsData.pendingOrders,
@@ -117,6 +145,7 @@ export function SellerDashboard() {
           totalRevenue: statsData.totalRevenue,
           revenueCurrency: statsData.revenueCurrency || 'USD',
           hasOtherCurrencies: !!statsData.hasOtherCurrencies,
+          salesReps: salesRepsCount,
         });
 
         // Load first page of seller products for table
@@ -426,17 +455,29 @@ export function SellerDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <ShoppingCart className="w-6 h-6 text-orange-600" />
+          <Link
+            to="/reports"
+            className="bg-white rounded-xl shadow-sm p-6 cursor-pointer hover:shadow-md transition-all duration-200 hover:scale-[1.02] group relative"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="p-3 bg-purple-100 rounded-lg group-hover:bg-purple-200 transition-colors">
+                  <Shield className="w-6 h-6 text-purple-600" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-600">Sales Reps</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats.salesReps || 0}</p>
+                </div>
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">All Orders</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalOrders}</p>
+              <div className="flex items-center text-purple-600 group-hover:text-purple-700 transition-colors">
+                <BarChart3 className="w-5 h-5 mr-2" />
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </div>
             </div>
-          </div>
+            <div className="absolute bottom-2 left-2">
+              <p className="text-xs text-gray-400 group-hover:text-gray-500 transition-colors">view salesreps report</p>
+            </div>
+          </Link>
 
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center">
@@ -458,8 +499,16 @@ export function SellerDashboard() {
 
         {/* Products Table */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Your Products</h2>
+            <Link
+              to="/transactions"
+              className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors group"
+            >
+              <History className="w-4 h-4 mr-2" />
+              Transaction History
+              <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
           </div>
           
           <div className="overflow-x-auto">
@@ -581,20 +630,81 @@ export function SellerDashboard() {
               </button>
               {(() => {
                 const totalPages = Math.max(1, Math.ceil(productsTotal / PAGE_SIZE));
-                const windowSize = 5;
-                let start = Math.max(1, productsPage - Math.floor(windowSize / 2));
-                let end = Math.min(totalPages, start + windowSize - 1);
-                if (end - start + 1 < windowSize) {
-                  start = Math.max(1, end - windowSize + 1);
+                const maxVisiblePages = 4;
+                
+                // If total pages is 4 or less, show all pages
+                if (totalPages <= maxVisiblePages) {
+                  const pages: number[] = [];
+                  for (let p = 1; p <= totalPages; p++) pages.push(p);
+                  return (
+                    <div className="flex items-center gap-1">
+                      {pages.map((p) => (
+                        <button
+                          key={p}
+                          onClick={async () => {
+                            if (loadingProducts || p === productsPage) return;
+                            setLoadingProducts(true);
+                            const res = await sellerService.getSellerProducts(p, PAGE_SIZE);
+                            const mapped = res.products.map((pr: any) => ({
+                              id: pr.id,
+                              name: pr.title,
+                              price: `${pr.currencyCode} ${Number(pr.price).toFixed(2)}`,
+                              rating: 0,
+                              image: getImageUrl(pr.images?.[0]?.imageUrl || ''),
+                              views: pr.views || 0,
+                              orderCount: pr.orderCount || 0,
+                              stock: pr.quantity,
+                              status: (pr.status || 'inactive').toLowerCase(),
+                              createdAt: pr.createdAt?.slice(0, 10) || '',
+                            }));
+                            setProducts(mapped);
+                            setProductsPage(res.page);
+                            setHasMoreProducts(res.hasMore);
+                            setProductsTotal(res.total);
+                            setLoadingProducts(false);
+                          }}
+                          className={`px-3 py-2 rounded-lg border text-sm ${p === productsPage ? 'bg-blue-600 text-white border-blue-600' : ''}`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  );
                 }
+
+                // For more than 4 pages, show dynamic pagination
+                let startPage: number;
+                let endPage: number;
+                let showStartEllipsis = false;
+                let showEndEllipsis = false;
+
+                if (productsPage <= 3) {
+                  // Show first 4 pages
+                  startPage = 1;
+                  endPage = 4;
+                  showEndEllipsis = totalPages > 4;
+                } else if (productsPage >= totalPages - 2) {
+                  // Show last 4 pages
+                  startPage = totalPages - 3;
+                  endPage = totalPages;
+                  showStartEllipsis = totalPages > 4;
+                } else {
+                  // Show current page in the middle
+                  startPage = productsPage - 1;
+                  endPage = productsPage + 2;
+                  showStartEllipsis = true;
+                  showEndEllipsis = true;
+                }
+
                 const pages: number[] = [];
-                for (let p = start; p <= end; p++) pages.push(p);
+                for (let p = startPage; p <= endPage; p++) pages.push(p);
+
                 return (
                   <div className="flex items-center gap-1">
-                    {start > 1 && (
+                    {/* First page */}
                       <button
                         onClick={async () => {
-                          if (loadingProducts) return;
+                        if (loadingProducts || 1 === productsPage) return;
                           setLoadingProducts(true);
                           const res = await sellerService.getSellerProducts(1, PAGE_SIZE);
                           const mapped = res.products.map((p: any) => ({
@@ -615,13 +725,20 @@ export function SellerDashboard() {
                           setProductsTotal(res.total);
                           setLoadingProducts(false);
                         }}
-                        className="px-3 py-2 rounded-lg border text-sm"
+                      className={`px-3 py-2 rounded-lg border text-sm ${1 === productsPage ? 'bg-blue-600 text-white border-blue-600' : ''}`}
                       >
                         1
                       </button>
+
+                    {/* Start ellipsis */}
+                    {showStartEllipsis && (
+                      <>
+                        <span className="px-2 text-sm text-gray-500">…</span>
+                      </>
                     )}
-                    {start > 2 && <span className="px-2 text-sm text-gray-500">…</span>}
-                    {pages.map((p) => (
+
+                    {/* Middle pages */}
+                    {pages.filter(p => p !== 1 && p !== totalPages).map((p) => (
                       <button
                         key={p}
                         onClick={async () => {
@@ -651,11 +768,19 @@ export function SellerDashboard() {
                         {p}
                       </button>
                     ))}
-                    {end < totalPages - 1 && <span className="px-2 text-sm text-gray-500">…</span>}
-                    {end < totalPages && (
+
+                    {/* End ellipsis */}
+                    {showEndEllipsis && (
+                      <>
+                        <span className="px-2 text-sm text-gray-500">…</span>
+                      </>
+                    )}
+
+                    {/* Last page */}
+                    {totalPages > 1 && (
                       <button
                         onClick={async () => {
-                          if (loadingProducts) return;
+                          if (loadingProducts || totalPages === productsPage) return;
                           setLoadingProducts(true);
                           const res = await sellerService.getSellerProducts(totalPages, PAGE_SIZE);
                           const mapped = res.products.map((p: any) => ({
@@ -676,7 +801,7 @@ export function SellerDashboard() {
                           setProductsTotal(res.total);
                           setLoadingProducts(false);
                         }}
-                        className="px-3 py-2 rounded-lg border text-sm"
+                        className={`px-3 py-2 rounded-lg border text-sm ${totalPages === productsPage ? 'bg-blue-600 text-white border-blue-600' : ''}`}
                       >
                         {totalPages}
                       </button>
