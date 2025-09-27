@@ -30,6 +30,8 @@ import { api } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StripePayment } from '../components/StripePayment';
 import { stripeService } from '../services/stripeService';
+import YonnaPaymentModal from '../components/YonnaPaymentModal';
+import { YonnaForexPaymentService } from '../services/YonnaForexPaymentService';
 import { TokenNotificationCard } from '../components/TokenNotificationCard';
 import { useTokenNotification } from '../contexts/TokenNotificationContext';
 
@@ -107,8 +109,12 @@ export function CustomerRides() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [showStripePayment, setShowStripePayment] = useState(false);
   const [processingStripePayment, setProcessingStripePayment] = useState(false);
+  const [showYonnaPayment, setShowYonnaPayment] = useState(false);
   const [selectedRideForPayment, setSelectedRideForPayment] = useState<RideRequest | null>(null);
   const [modalKey, setModalKey] = useState(0); // Force modal re-render
+  
+  // Initialize Yonna Forex service
+  const yonnaForexService = new YonnaForexPaymentService();
 
   // Rating-related state
   const [showRatingModal, setShowRatingModal] = useState(false);
@@ -379,6 +385,44 @@ export function CustomerRides() {
   const handlePaymentMethodSelect = (methodId: string) => {
     setSelectedPaymentMethod(methodId);
     console.log('💳 Selected payment method:', methodId);
+
+    try {
+      const method = paymentMethods.find(m => m.id === methodId);
+      if (!method) {
+        Alert.alert('Error', 'Selected payment method not found');
+        return;
+      }
+
+      switch (method.type) {
+        case 'CREDIT_CARD':
+        case 'DEBIT_CARD': {
+          console.log('💳 Proceeding with Stripe from method tap...');
+          setShowPaymentModal(false);
+          setShowStripePayment(true);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          break;
+        }
+        case 'MOBILE_MONEY': {
+          const providerName = (method.provider || method.metadata?.providerName || '').toString().toLowerCase();
+          const isYonna = providerName.includes('yonna');
+          if (isYonna) {
+            console.log('💰 Proceeding with Yonna from method tap...');
+            setShowPaymentModal(false);
+            setShowYonnaPayment(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          } else {
+            Alert.alert('Mobile Wallet Payment', `Redirecting to ${method.provider} payment gateway...`, [{ text: 'OK' }]);
+          }
+          break;
+        }
+        default: {
+          Alert.alert('Payment Method Not Supported', 'This payment method is not currently supported for ride payments.', [{ text: 'OK' }]);
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error in handlePaymentMethodSelect:', error);
+    }
   };
 
   const getPaymentMethodDisplayName = (method: any): string => {
@@ -413,14 +457,62 @@ export function CustomerRides() {
 
       console.log('💳 Processing payment with method:', selectedMethod.type);
 
-      if (selectedMethod.type === 'CREDIT_CARD') {
-        console.log('💳 Opening Stripe payment modal...');
-        setShowStripePayment(true);
-      } else {
-        Alert.alert(
-          'Payment Method Not Supported', 
-          'Only credit card payments are currently supported for ride payments.'
-        );
+      // Handle different payment method types
+      switch (selectedMethod.type) {
+        case 'CREDIT_CARD':
+        case 'DEBIT_CARD':
+          console.log('💳 Opening Stripe payment modal...');
+          // Close the bottom sheet to avoid clipping
+          setShowPaymentModal(false);
+          setShowStripePayment(true);
+          break;
+
+        case 'MOBILE_MONEY':
+          // Check if it's Yonna wallet
+          const providerName = (selectedMethod.provider || selectedMethod.metadata?.providerName || '').toString().toLowerCase();
+          const isYonna = providerName.includes('yonna');
+          if (isYonna) {
+            console.log('💰 Opening Yonna payment modal...');
+            console.log('💰 Current showYonnaPayment state:', showYonnaPayment);
+            console.log('💰 Current selectedRideForPayment:', selectedRideForPayment?.requestId);
+            // Close the bottom sheet to avoid clipping
+            setShowPaymentModal(false);
+            setShowYonnaPayment(true);
+            console.log('💰 Set showYonnaPayment to true');
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            break;
+          }
+          // Fallback for other mobile wallets
+          Alert.alert(
+            'Mobile Wallet Payment',
+            `Redirecting to ${selectedMethod.provider} payment gateway...`,
+            [{ text: 'OK' }]
+          );
+          break;
+
+        case 'BANK_TRANSFER':
+          Alert.alert(
+            'Bank Transfer Payment',
+            'Bank transfer payments are not yet supported for ride payments.',
+            [{ text: 'OK' }]
+          );
+          break;
+
+        case 'CRYPTO':
+          Alert.alert(
+            'Cryptocurrency Payment',
+            'Cryptocurrency payments are not yet supported for ride payments.',
+            [{ text: 'OK' }]
+          );
+          break;
+
+        default:
+          Alert.alert(
+            'Payment Method Not Supported',
+            'This payment method is not currently supported for ride payments.',
+            [{ text: 'OK' }]
+          );
+          break;
       }
     } catch (error: any) {
       console.error('❌ Error in handleProceedToPayment:', error);
@@ -485,6 +577,70 @@ export function CustomerRides() {
   const handleStripePaymentError = (error: string) => {
     console.error('❌ Stripe payment error:', error);
     setShowStripePayment(false);
+    Alert.alert(
+      'Payment Failed',
+      error || 'There was an error processing your payment. Please try again.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleYonnaPaymentSuccess = async (transactionId: string) => {
+    try {
+      console.log('✅ Yonna payment successful:', transactionId);
+      
+      if (!selectedRideForPayment) {
+        throw new Error('No ride selected for payment');
+      }
+
+      // Process the ride payment
+      const response = await api.post(`/api/ride-requests/${selectedRideForPayment.requestId}/process-payment`, {
+        paymentIntentId: transactionId,
+        paymentMethod: 'YONNA_FOREX',
+        amount: selectedRideForPayment.estimatedPrice
+      });
+
+      if (response.data.success) {
+        console.log('✅ Ride payment processed successfully');
+        
+        // Close modals
+        setShowYonnaPayment(false);
+        setShowPaymentModal(false);
+        
+        // Reset states
+        setSelectedRideForPayment(null);
+        setSelectedPaymentMethod(null);
+        
+        // Show success message
+        Alert.alert(
+          'Payment Successful! 🎉',
+          'Your ride payment has been processed successfully.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Reload ride requests to reflect payment status
+                loadRideRequests(1, false);
+              }
+            }
+          ]
+        );
+      } else {
+        throw new Error(response.data.message || 'Payment processing failed');
+      }
+    } catch (error: any) {
+      console.error('❌ Error processing ride payment:', error);
+      setShowYonnaPayment(false);
+      Alert.alert(
+        'Payment Processing Failed',
+        error.message || 'There was an error processing your payment. Please contact support.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handleYonnaPaymentError = (error: string) => {
+    console.error('❌ Yonna payment error:', error);
+    setShowYonnaPayment(false);
     Alert.alert(
       'Payment Failed',
       error || 'There was an error processing your payment. Please try again.',
@@ -977,13 +1133,14 @@ export function CustomerRides() {
         visible={showPaymentModal}
         animationType="slide"
         transparent={true}
+        statusBarTranslucent={true}
         onRequestClose={() => setShowPaymentModal(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={[styles.modalContent, { maxHeight: screenHeight * 0.85, minHeight: screenHeight * 0.8 }]}>
+        <View style={styles.modalOverlay}>
+          <View style={[
+            styles.modalContent,
+            { height: Math.round(screenHeight * 0.9), width: '100%' }
+          ]}>
             {/* Handle Bar */}
             <View style={styles.handleBar} />
             
@@ -1027,122 +1184,147 @@ export function CustomerRides() {
               </View>
             )}
 
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              {/* Available Payment Methods */}
-              <View style={styles.availablePaymentMethodsCard}>
-                <Text style={styles.availablePaymentMethodsTitle}>Available Payment Methods</Text>
-                
-                {loadingPaymentMethods ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#14B8A6" />
-                    <Text style={styles.loadingText}>Loading payment methods...</Text>
-                  </View>
-                ) : paymentMethods.length === 0 ? (
-                  <View style={styles.noPaymentMethodsContainer}>
-                    <Ionicons name="card-outline" size={48} color="#9CA3AF" />
-                    <Text style={styles.noPaymentMethodsTitle}>No Payment Methods</Text>
-                    <Text style={styles.noPaymentMethodsSubtitle}>
-                      You need to add a payment method to pay for this ride.
-                    </Text>
-                    <TouchableOpacity 
-                      style={styles.addPaymentMethodButton}
-                      onPress={() => {
-                        setShowPaymentModal(false);
-                        setSelectedRideForPayment(null);
-                        navigation.navigate('AccountSettings');
-                      }}
-                    >
-                      <Text style={styles.addPaymentMethodButtonText}>Add Payment Method</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  paymentMethods.map((method) => (
-                    <TouchableOpacity
-                      key={method.id}
-                      style={[
-                        styles.paymentMethodItem,
-                        selectedPaymentMethod === method.id && styles.selectedPaymentMethodItem,
-                        method.isDefault && styles.defaultPaymentMethodItem
-                      ]}
-                      onPress={() => handlePaymentMethodSelect(method.id)}
-                    >
-                      <View style={styles.paymentMethodItemIcon}>
-                        <Ionicons 
-                          name={method.type === 'CREDIT_CARD' ? 'card-outline' : 
-                               method.type === 'MOBILE_MONEY' ? 'phone-portrait-outline' :
-                               method.type === 'BANK_TRANSFER' ? 'business-outline' :
-                               method.type === 'CRYPTO' ? 'logo-bitcoin' : 'wallet-outline'} 
-                          size={24} 
-                          color="#2563EB" 
-                        />
-                      </View>
-                      <View style={styles.paymentMethodItemDetails}>
-                        <View style={styles.paymentMethodItemHeader}>
-                          <Text style={styles.paymentMethodItemProvider}>
-                            {getPaymentMethodDisplayName(method)}
-                          </Text>
-                          <View style={styles.paymentMethodItemMeta}>
-                            {method.isDefault && (
-                              <View style={styles.defaultBadge}>
-                                <Text style={styles.defaultBadgeText}>Default</Text>
+            <View style={styles.modalInner}>
+              <ScrollView 
+                style={styles.modalBody} 
+                contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Available Payment Methods */}
+                <View style={styles.availablePaymentMethodsCard}>
+                  <Text style={styles.availablePaymentMethodsTitle}>Available Payment Methods</Text>
+                  
+                  {loadingPaymentMethods ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color="#14B8A6" />
+                      <Text style={styles.loadingText}>Loading payment methods...</Text>
+                    </View>
+                  ) : paymentMethods.length === 0 ? (
+                    <View style={styles.noPaymentMethodsContainer}>
+                      <Ionicons name="card-outline" size={48} color="#9CA3AF" />
+                      <Text style={styles.noPaymentMethodsTitle}>No Payment Methods</Text>
+                      <Text style={styles.noPaymentMethodsSubtitle}>
+                        You need to add a payment method to pay for this ride.
+                      </Text>
+                      <TouchableOpacity 
+                        style={styles.addPaymentMethodButton}
+                        onPress={() => {
+                          setShowPaymentModal(false);
+                          setSelectedRideForPayment(null);
+                          navigation.navigate('AccountSettings');
+                        }}
+                      >
+                        <Text style={styles.addPaymentMethodButtonText}>Add Payment Method</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    paymentMethods.map((method) => (
+                      <TouchableOpacity
+                        key={method.id}
+                        style={[
+                          styles.paymentMethodItem,
+                          selectedPaymentMethod === method.id && styles.selectedPaymentMethodItem,
+                          method.isDefault && styles.defaultPaymentMethodItem
+                        ]}
+                        onPress={() => handlePaymentMethodSelect(method.id)}
+                      >
+                        <View style={styles.paymentMethodItemIcon}>
+                          <Ionicons 
+                            name={method.type === 'CREDIT_CARD' ? 'card-outline' : 
+                                 method.type === 'MOBILE_MONEY' ? 'phone-portrait-outline' :
+                                 method.type === 'BANK_TRANSFER' ? 'business-outline' :
+                                 method.type === 'CRYPTO' ? 'logo-bitcoin' : 'wallet-outline'} 
+                            size={24} 
+                            color="#2563EB" 
+                          />
+                        </View>
+                        <View style={styles.paymentMethodItemDetails}>
+                          <View style={styles.paymentMethodItemHeader}>
+                            <Text style={styles.paymentMethodItemProvider}>
+                              {getPaymentMethodDisplayName(method)}
+                            </Text>
+                            <View style={styles.paymentMethodItemMeta}>
+                              {method.isDefault && (
+                                <View style={styles.defaultBadge}>
+                                  <Text style={styles.defaultBadgeText}>Default</Text>
+                                </View>
+                              )}
+                              <View style={styles.paymentMethodItemArrow}>
+                                <Ionicons name="chevron-forward" size={16} color="#2563EB" />
                               </View>
-                            )}
-                            <View style={styles.paymentMethodItemArrow}>
-                              <Ionicons name="chevron-forward" size={16} color="#2563EB" />
                             </View>
                           </View>
+                          <Text style={styles.paymentMethodItemAccount}>
+                            {method.accountName}
+                          </Text>
                         </View>
-                        <Text style={styles.paymentMethodItemAccount}>
-                          {method.accountName}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </View>
-            </ScrollView>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
+              </ScrollView>
 
-            {/* Action Buttons - Fixed at bottom */}
-            <View style={styles.paymentActionButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.proceedToCheckoutButton,
-                  !selectedPaymentMethod && styles.disabledButton
-                ]}
-                onPress={handleProceedToPayment}
-                disabled={!selectedPaymentMethod}
-              >
-                <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.proceedToCheckoutButtonText}>
-                  Process Payment
-                </Text>
-              </TouchableOpacity>
+              {/* Action Buttons - Fixed at bottom */}
+              <View style={styles.paymentActionButtons}>
+                <TouchableOpacity
+                  style={[
+                    styles.proceedToCheckoutButton,
+                    !selectedPaymentMethod && styles.disabledButton
+                  ]}
+                  onPress={handleProceedToPayment}
+                  disabled={!selectedPaymentMethod}
+                >
+                  <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.proceedToCheckoutButtonText}>
+                    Process Payment
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
 
-        {/* Stripe Payment Modal - Inside Payment Modal */}
-        {showStripePayment && selectedRideForPayment && (
-          <>
-            {console.log('🎯 Rendering StripePayment component with amount:', selectedRideForPayment.estimatedPrice)}
-            <StripePayment
-              visible={showStripePayment}
-              onClose={() => setShowStripePayment(false)}
-              amount={typeof selectedRideForPayment.estimatedPrice === 'string' ? parseFloat(selectedRideForPayment.estimatedPrice) : selectedRideForPayment.estimatedPrice} // Amount in original currency units
-              currency={selectedRideForPayment.currency?.toLowerCase() || 'gmd'}
-              orderId={selectedRideForPayment.requestId}
-              customerId={user?.id || ''}
-              onPaymentSuccess={handleStripePaymentSuccess}
-              onPaymentError={handleStripePaymentError}
-              userInfo={{
-                firstName: user?.firstName || '',
-                lastName: user?.lastName || ''
-              }}
-              transactionType="ride"
-            />
-          </>
-        )}
+        {/* Stripe Payment Modal moved outside of this bottom sheet modal */}
       </Modal>
+
+      {/* Yonna Payment Modal */}
+      {(() => { 
+        console.log('🎯 Yonna modal render check:', { 
+          selectedRideForPayment: !!selectedRideForPayment, 
+          showYonnaPayment, 
+          shouldRender: selectedRideForPayment && showYonnaPayment 
+        }); 
+        return null; 
+      })()}
+      <YonnaPaymentModal
+        visible={showYonnaPayment && !!selectedRideForPayment}
+        onClose={() => {
+          setShowYonnaPayment(false);
+          setSelectedRideForPayment(null);
+        }}
+        amount={selectedRideForPayment ? (typeof selectedRideForPayment.estimatedPrice === 'string' ? parseFloat(selectedRideForPayment.estimatedPrice) : selectedRideForPayment.estimatedPrice) : 0}
+        currency={(selectedRideForPayment?.currency || 'GMD').toUpperCase()}
+        orderId={selectedRideForPayment?.requestId || ''}
+        onPaymentSuccess={handleYonnaPaymentSuccess}
+        onPaymentError={handleYonnaPaymentError}
+        transactionType="ride"
+      />
+
+    {/* Stripe Payment Modal - placed at root level to avoid nesting under bottom sheet */}
+    {showStripePayment && selectedRideForPayment && (
+      <StripePayment
+        visible={showStripePayment}
+        onClose={() => setShowStripePayment(false)}
+        amount={typeof selectedRideForPayment.estimatedPrice === 'string' ? parseFloat(selectedRideForPayment.estimatedPrice) : selectedRideForPayment.estimatedPrice}
+        currency={(selectedRideForPayment.currency || 'GMD').toUpperCase()}
+        orderId={selectedRideForPayment.requestId}
+        customerId={user?.id || ''}
+        onPaymentSuccess={handleStripePaymentSuccess}
+        onPaymentError={handleStripePaymentError}
+        userInfo={{ firstName: user?.firstName || '', lastName: user?.lastName || '' }}
+        transactionType="ride"
+      />
+    )}
 
       {/* Rating Modal */}
       <Modal
@@ -1716,6 +1898,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    alignItems: 'stretch',
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
@@ -1727,6 +1910,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
+    overflow: 'hidden',
+  },
+  modalInner: {
+    flex: 1,
   },
   handleBar: {
     width: 40,
@@ -1797,7 +1984,6 @@ const styles = StyleSheet.create({
   },
   modalBody: {
     flex: 1,
-    paddingHorizontal: 20,
   },
   availablePaymentMethodsCard: {
     backgroundColor: '#FFFFFF',

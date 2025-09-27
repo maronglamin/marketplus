@@ -2,8 +2,8 @@ import React from 'react';
 import {
   Home,
   ShoppingBag,
-  Search,
-  Heart,
+  Flame,
+  Clock,
   User,
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
@@ -18,9 +18,9 @@ export function BottomNavigation() {
       path: '/',
     },
     {
-      icon: <Search className="w-6 h-6" />,
-      label: 'Explore',
-      path: '/products',
+      icon: <Flame className="w-6 h-6" />,
+      label: 'Popular',
+      path: '/products/popular',
     },
     {
       icon: <ShoppingBag className="w-6 h-6" />,
@@ -28,9 +28,9 @@ export function BottomNavigation() {
       path: '/products',
     },
     {
-      icon: <Heart className="w-6 h-6" />,
-      label: 'Wishlist',
-      path: '/wishlist',
+      icon: <Clock className="w-6 h-6" />,
+      label: 'New Arrivals',
+      path: '/products/new',
     },
     {
       icon: <User className="w-6 h-6" />,

@@ -310,8 +310,25 @@ export const registerUser = async (req: Request, res: Response) => {
       lastName,
     } = req.body;
 
+    // Normalize phone number to E.164 with leading +
+    const normalizePhone = (raw: unknown): string => {
+      if (typeof raw !== 'string') return '';
+      let value = raw.trim().replace(/[\s-]/g, '');
+      if (value.startsWith('00')) {
+        value = '+' + value.slice(2);
+      }
+      if (!value.startsWith('+')) {
+        value = '+' + value.replace(/\D/g, '');
+      } else {
+        value = '+' + value.slice(1).replace(/\D/g, '');
+      }
+      return value;
+    };
+
+    const normalizedPhone = normalizePhone(phoneNumber);
+
     console.log('Registration request received:', {
-      phoneNumber,
+      phoneNumber: normalizedPhone,
       firstName,
       lastName,
       middleName
@@ -319,7 +336,7 @@ export const registerUser = async (req: Request, res: Response) => {
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { phoneNumber },
+      where: { phoneNumber: normalizedPhone },
       include: { devices: true }
     });
 
@@ -340,6 +357,8 @@ export const registerUser = async (req: Request, res: Response) => {
         firstName: firstName.trim(),
         middleName: middleName?.trim() || null,
         lastName: lastName.trim(),
+        // Ensure stored phone remains normalized (no change if already set)
+        phoneNumber: existingUser.phoneNumber || normalizedPhone,
       }
     });
 

@@ -4,7 +4,7 @@ This guide shows you how to test the Yonna Forex API using simple command-line t
 
 ## Prerequisites
 
-1. **Backend running**: Make sure your backend is running on `http://10.143.131.48:3000`
+1. **Backend running**: Make sure your backend is running on `http://192.168.137.33:3000`
 2. **Valid user**: You need a user account with a phone number in the database
 3. **Yonna credentials**: Ensure your `.env` file has valid Yonna Forex credentials
 
@@ -27,7 +27,7 @@ This script will:
 
 ```bash
 # Login to get a token (replace with your phone number)
-curl -X POST http://10.143.131.48:3000/api/auth/login \
+curl -X POST http://192.168.137.33:3000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "phoneNumber": "+220123456789",
@@ -50,7 +50,7 @@ curl -X POST http://10.143.131.48:3000/api/auth/login \
 
 ```bash
 # Replace YOUR_TOKEN with the token from Step 1
-curl -X GET http://10.143.131.48:3000/api/payments/yonna-forex/currencies \
+curl -X GET http://192.168.137.33:3000/api/payments/yonna-forex/currencies \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Accept: application/json"
 ```
@@ -73,7 +73,7 @@ curl -X GET http://10.143.131.48:3000/api/payments/yonna-forex/currencies \
 
 ```bash
 # Replace YOUR_TOKEN with your actual token
-curl -X POST http://10.143.131.48:3000/api/payments/yonna-forex/process \
+curl -X POST http://192.168.137.33:3000/api/payments/yonna-forex/process \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
@@ -100,7 +100,7 @@ curl -X POST http://10.143.131.48:3000/api/payments/yonna-forex/process \
 ### Step 4: Test Payment Verification
 
 ```bash
-curl -X POST http://10.143.131.48:3000/api/payments/yonna-forex/verify \
+curl -X POST http://192.168.137.33:3000/api/payments/yonna-forex/verify \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
@@ -112,7 +112,7 @@ curl -X POST http://10.143.131.48:3000/api/payments/yonna-forex/verify \
 ### Step 5: Test Payment Status
 
 ```bash
-curl -X GET http://10.143.131.48:3000/api/payments/yonna-forex/status/YF_TEST_12345 \
+curl -X GET http://192.168.137.33:3000/api/payments/yonna-forex/status/YF_TEST_12345 \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Accept: application/json"
 ```
@@ -124,7 +124,7 @@ You can test GET endpoints directly in your browser:
 1. **Get a token first** (use curl or your app)
 2. **Open browser** and go to:
    ```
-   http://10.143.131.48:3000/api/payments/yonna-forex/currencies
+   http://192.168.137.33:3000/api/payments/yonna-forex/currencies
    ```
 3. **Add Authorization header** using a browser extension like "ModHeader" or "Requestly"
 
@@ -138,7 +138,7 @@ You can test GET endpoints directly in your browser:
 
 ### Issue 3: "Network error" or "Connection refused"
 **Solution:** 
-- Check if backend is running: `curl http://10.143.131.48:3000/api/health`
+- Check if backend is running: `curl http://192.168.137.33:3000/api/health`
 - Verify IP address is correct
 - Check if Yonna credentials are set in `.env`
 
@@ -157,10 +157,10 @@ To verify your Yonna credentials are working, check the backend logs when runnin
 
 ```bash
 # Check if backend is running
-curl http://10.143.131.48:3000/api/health
+curl http://192.168.137.33:3000/api/health
 
 # Check if Yonna endpoints are accessible
-curl http://10.143.131.48:3000/api/payments/yonna-forex/currencies
+curl http://192.168.137.33:3000/api/payments/yonna-forex/currencies
 ```
 
 ## Tips

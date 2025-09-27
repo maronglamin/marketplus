@@ -34,7 +34,7 @@ Tell them to send this JSON payload when payment status changes:
 
 ```json
 {
-  "transactionId": "YF_1234567890_ABC123",
+  "appTransactionId": "APP_1234567890_ABC123",
   "status": "completed",
   "amount": 100.00,
   "currency": "GMD",
@@ -105,7 +105,7 @@ curl -X POST ${API_BASE_URL}/api/payments/yonna-forex/test-webhook \
   -H "Content-Type: application/json" \
   -H "X-Yonna-Signature: sha256=APP_WEBHOOK_SECRET_KEY" \
   -d '{
-    "transactionId": "YF_TEST_123456789",
+    "appTransactionId": "APP_TEST_123456789",
     "status": "completed",
     "amount": 100.00,
     "currency": "GMD",
@@ -119,7 +119,7 @@ curl -X POST https://cloudnexus.biz/api/payments/yonna-forex/test-webhook \
   -H "Content-Type: application/json" \
   -H "X-Yonna-Signature: sha256=APP_WEBHOOK_SECRET_KEY" \
   -d '{
-    "transactionId": "YF_TEST_123456789",
+    "appTransactionId": "APP_TEST_123456789",
     "status": "completed",
     "amount": 100.00,
     "currency": "GMD",
@@ -177,9 +177,9 @@ Here's how they should implement the webhook:
 const crypto = require('crypto');
 const axios = require('axios');
 
-async function sendWebhook(transactionId, status, amount, currency, phoneNumber, message) {
+async function sendWebhook(appTransactionId, status, amount, currency, phoneNumber, message) {
   const payload = {
-    transactionId,
+    appTransactionId,
     status,
     amount,
     currency,
@@ -211,14 +211,14 @@ async function sendWebhook(transactionId, status, amount, currency, phoneNumber,
 }
 
 // Usage examples
-await sendWebhook('YF_1234567890_ABC123', 'completed', 100.00, 'GMD', '+220123456789', 'Payment successful');
-await sendWebhook('YF_1234567890_ABC123', 'failed', 100.00, 'GMD', '+220123456789', 'Insufficient funds');
+await sendWebhook('APP_1234567890_ABC123', 'completed', 100.00, 'GMD', '+220123456789', 'Payment successful');
+await sendWebhook('APP_1234567890_ABC123', 'failed', 100.00, 'GMD', '+220123456789', 'Insufficient funds');
 ```
 
 ## Database Schema
 
 We store webhook events in our database with these fields:
-- `transactionId` - The Yonna Forex transaction ID
+- `appTransactionId` - The app-side transaction ID used for reconciliation
 - `status` - Payment status
 - `amount` - Payment amount
 - `currency` - Currency code

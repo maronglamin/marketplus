@@ -16,6 +16,7 @@ export interface YonnaForexPaymentResponse {
   success: boolean;
   transactionId: string;
   paymentUrl?: string;
+  paymentHtml?: string;
   status: 'pending' | 'completed' | 'failed';
   message?: string;
   error?: string;
@@ -46,7 +47,23 @@ export class YonnaForexPaymentService {
    */
   async processPayment(paymentRequest: YonnaForexPaymentRequest): Promise<YonnaForexPaymentResponse> {
     try {
-      const { amount, phone, currency, fee, transactionId, countryCode, description } = paymentRequest;
+      const { amount, phone, currency, fee, transactionId, countryCode } = paymentRequest;
+
+      // Normalize phone to include country code exactly once
+      const trimmedPhone = (phone || '').replace(/\s+/g, '');
+      const trimmedCode = (countryCode || '').replace(/\s+/g, '');
+      let fullPhone = trimmedPhone;
+      if (trimmedPhone.startsWith('+')) {
+        fullPhone = trimmedPhone;
+      } else if (trimmedPhone.startsWith(trimmedCode.replace(/^\+/, ''))) {
+        fullPhone = trimmedCode.startsWith('+') ? `+${trimmedPhone}`.replace(/^\+\+/, '+') : `+${trimmedPhone}`;
+      } else if (trimmedCode) {
+        const cc = trimmedCode.startsWith('+') ? trimmedCode : `+${trimmedCode}`;
+        fullPhone = `${cc}${trimmedPhone}`;
+      } else {
+        // Fallback: ensure plus
+        fullPhone = trimmedPhone.startsWith('+') ? trimmedPhone : `+${trimmedPhone}`;
+      }
 
       // Generate timestamp
       const timestamp = Math.floor(Date.now() / 1000);
@@ -54,7 +71,7 @@ export class YonnaForexPaymentService {
       // Prepare the data object for HMAC signature (matching working example format)
       const dataObject = {
         amount,
-        phone: `${countryCode}${phone}`,
+        phone: fullPhone,
         transactionId: transactionId || `YF_${timestamp}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
         description: '', // Always empty as per working example
         fee,
@@ -120,13 +137,39 @@ export class YonnaForexPaymentService {
         }
       }
 
-      // Parse response based on Yonna Forex API structure
+      // Parse response. Yonna returns an HTML page containing the QR screen.
       if (response.status === 200) {
+        const contentType = response.headers['content-type'] || '';
+        if (typeof response.data === 'string' && contentType.includes('text/html')) {
+          // Try to extract a mobile deeplink/URL from the HTML for app redirect
+          const html: string = response.data;
+          let deeplinkUrl: string | undefined;
+          // Pattern 1: var link = "https://.../corporate?payload=...";
+          const varLinkMatch = html.match(/var\s+link\s*=\s*"([^"]+)"/);
+          if (varLinkMatch && varLinkMatch[1]) {
+            deeplinkUrl = varLinkMatch[1];
+          } else {
+            // Pattern 2: any https URL to /corporate?...
+            const urlMatch = html.match(/https?:\/\/[^"']+\/corporate\?[^"']+/);
+            if (urlMatch && urlMatch[0]) {
+              deeplinkUrl = urlMatch[0];
+            }
+          }
+          return {
+            success: true,
+            transactionId,
+            status: 'pending',
+            message: 'Scan the QR code to complete payment',
+            paymentHtml: html,
+            ...(deeplinkUrl ? { paymentUrl: deeplinkUrl } : {})
+          };
+        }
+
         return {
           success: true,
           transactionId,
-          status: 'completed',
-          message: 'Payment processed successfully'
+          status: 'pending',
+          message: 'Payment initiated. Awaiting customer confirmation'
         };
       } else {
         return {
@@ -177,7 +220,10 @@ export class YonnaForexPaymentService {
       // Add signature to the payload
       requestData.signature = signature;
       
-      const response = await axios.post(`${this.config.baseUrl}/verify`, requestData, {
+      // Some environments expose initiate at /corporate/app, but verify/status at /corporate
+      const baseForVerify = this.config.baseUrl.replace(/\/app\/?$/, '');
+      const verifyUrl = `${baseForVerify}/verify`;
+      const response = await axios.post(verifyUrl, requestData, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -202,7 +248,11 @@ export class YonnaForexPaymentService {
       }
 
     } catch (error: any) {
-      console.error('Yonna Forex verification error:', error);
+      console.error('Yonna Forex verification error:', {
+        url: this.config.baseUrl,
+        derivedUrl: this.config.baseUrl.replace(/\/app\/?$/, '') + '/verify',
+        error: error.response?.data || error.message
+      });
       
       return {
         success: false,
@@ -239,7 +289,9 @@ export class YonnaForexPaymentService {
       // Add signature to the payload
       requestData.signature = signature;
       
-      const response = await axios.post(`${this.config.baseUrl}/status`, requestData, {
+      const baseForStatus = this.config.baseUrl.replace(/\/app\/?$/, '');
+      const statusUrl = `${baseForStatus}/status`;
+      const response = await axios.post(statusUrl, requestData, {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -264,7 +316,11 @@ export class YonnaForexPaymentService {
       }
 
     } catch (error: any) {
-      console.error('Yonna Forex status check error:', error);
+      console.error('Yonna Forex status check error:', {
+        url: this.config.baseUrl,
+        derivedUrl: this.config.baseUrl.replace(/\/app\/?$/, '') + '/status',
+        error: error.response?.data || error.message
+      });
       
       return {
         success: false,

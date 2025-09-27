@@ -788,6 +788,74 @@ router.patch('/:rentalId/customer/reject', authenticate, async (req: any, res) =
   }
 });
 
+// Check rental payment status
+router.get('/:rentalId/payment-status', authenticate, async (req: any, res) => {
+  try {
+    const { rentalId } = req.params;
+    const userId = req.user?.id;
+    
+    if (!rentalId) {
+      return res.status(400).json({ success: false, message: 'rentalId is required' });
+    }
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    // Find the rental request
+    const rental = await prisma.rentalRequest.findUnique({
+      where: { id: rentalId },
+      select: { 
+        id: true,
+        customerId: true,
+        status: true
+      }
+    });
+
+    if (!rental) {
+      return res.status(404).json({ success: false, message: 'Rental request not found' });
+    }
+
+    // Check if the authenticated user is the customer for this rental
+    if (rental.customerId !== userId) {
+      return res.status(403).json({ success: false, message: 'Access denied - can only check payment status for own rental requests' });
+    }
+
+    // Check for pending payments
+    const pendingPayment = await prisma.externalTransaction.findFirst({
+      where: {
+        rentalRequestId: rentalId,
+        status: 'PENDING',
+        customerId: userId
+      },
+      select: {
+        id: true,
+        appTransactionId: true,
+        gatewayProvider: true,
+        amount: true,
+        currencyCode: true,
+        createdAt: true
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        hasPendingPayment: !!pendingPayment,
+        pendingPayment: pendingPayment || null
+      }
+    });
+
+  } catch (error: any) {
+    console.error('Error checking rental payment status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
 // Process rental payment
 router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
   try {
@@ -836,10 +904,15 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
       return res.status(400).json({ success: false, message: 'No agreed price found for this rental request' });
     }
 
+    // Check if this is a Yonna payment
+    const isYonnaPayment = paymentMethodId === 'yonna-forex' || 
+                          (paymentMethod && paymentMethod.provider && 
+                           paymentMethod.provider.toLowerCase().includes('yonna'));
+
     // For Stripe payments, we don't need to validate the payment method in our database
     // since Stripe handles the payment method validation
     let paymentMethod = null;
-    if (paymentMethodId && paymentMethodId !== 'stripe') {
+    if (paymentMethodId && paymentMethodId !== 'stripe' && !isYonnaPayment) {
       paymentMethod = await prisma.paymentMethod.findFirst({
         where: { 
           id: paymentMethodId,
@@ -850,6 +923,28 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
       if (!paymentMethod) {
         return res.status(404).json({ success: false, message: 'Payment method not found' });
       }
+    }
+
+    // Handle Yonna payment
+    if (isYonnaPayment) {
+      // For Yonna payments, we need to process through the Yonna Forex service
+      const YonnaForexPaymentController = require('../controllers/YonnaForexPaymentController');
+      const yonnaController = new YonnaForexPaymentController();
+      
+      // Create a mock request object for Yonna controller
+      const yonnaReq = {
+        ...req,
+        body: {
+          amount: rental.agreedPrice,
+          currency: rental.currency || 'GMD',
+          description: `Rental payment for ${rental.rideService?.name || 'Rental Service'}`,
+          transactionId: `RENTAL-${rental.requestId}-${Date.now()}`,
+          orderId: rentalId
+        }
+      };
+
+      // Process through Yonna
+      return yonnaController.processPayment(yonnaReq, res);
     }
 
     // Generate app-level transaction id shared across all records
@@ -865,6 +960,13 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
 
     // Determine seller id (driver's user id)
     const sellerUserId = (rental as any)?.driver?.user?.id || (rental as any)?.driver?.userId || '';
+    
+    if (!sellerUserId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Driver information not found for this rental request' 
+      });
+    }
 
     // Persist all changes atomically
     const result = await prisma.$transaction(async (tx) => {

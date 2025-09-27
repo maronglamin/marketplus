@@ -78,7 +78,7 @@ export function PinVerification() {
 
       // Determine navigation based on verification status
       let targetScreen: keyof AuthStackParamList;
-      let params = {};
+      let params: any = {};
 
       if (isRegistered) {
         if (isDeviceVerified) {
@@ -91,6 +91,8 @@ export function PinVerification() {
       } else {
         console.log('User is not registered, going to UserRegistration');
         targetScreen = 'UserRegistration';
+        // Ensure phoneNumber is passed forward for registration
+        params = { phoneNumber };
       }
 
       // Perform navigation with a small delay to ensure UI updates

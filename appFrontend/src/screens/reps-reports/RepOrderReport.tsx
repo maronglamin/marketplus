@@ -62,7 +62,7 @@ export function RepOrderReport() {
         .map((activity: any) => ({
           id: activity.data.orderId,
           orderNumber: activity.data.orderNumber,
-          totalAmount: activity.data.amount,
+          totalAmount: Number(activity.data.amount) || 0,
           currencyCode: activity.data.currencyCode,
           status: activity.data.status, // Use actual status from backend
           createdAt: activity.createdAt,
@@ -85,7 +85,7 @@ export function RepOrderReport() {
         if (!acc[currency]) {
           acc[currency] = 0;
         }
-        acc[currency] += order.totalAmount;
+        acc[currency] += Number(order.totalAmount) || 0;
         return acc;
       }, {});
 

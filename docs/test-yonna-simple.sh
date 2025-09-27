@@ -4,7 +4,7 @@
 # This script tests the Yonna Forex API using the web login endpoint
 
 # Configuration
-BASE_URL="http://10.143.131.48:3000/api"
+BASE_URL="http://192.168.137.33:3000/api"
 PHONE_NUMBER="+2207690103"  # Use your actual phone number
 PIN="1234"  # Use your actual PIN
 

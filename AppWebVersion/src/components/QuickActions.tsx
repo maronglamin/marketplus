@@ -1,9 +1,6 @@
 import React from 'react';
 import {
   Package,
-  Heart,
-  Tag,
-  ShoppingCart,
   TrendingUp,
   Star,
   Clock,
@@ -14,49 +11,31 @@ import { Link } from 'react-router-dom';
 export function QuickActions() {
   const actions = [
     {
-      icon: <ShoppingCart className="w-6 h-6" />,
-      label: 'My Cart',
-      link: '/cart',
-      color: 'bg-blue-100 text-blue-600',
-    },
-    {
-      icon: <Package className="w-6 h-6" />,
+      icon: <Package className="w-10 h-10" />,
       label: 'My Orders',
       link: '/orders',
       color: 'bg-green-100 text-green-600',
     },
     {
-      icon: <Heart className="w-6 h-6" />,
-      label: 'Wishlist',
-      link: '/wishlist',
-      color: 'bg-red-100 text-red-600',
-    },
-    {
-      icon: <TrendingUp className="w-6 h-6" />,
+      icon: <TrendingUp className="w-10 h-10" />,
       label: 'Popular',
-      link: '/products?filter=popular',
+      link: '/products/popular',
       color: 'bg-orange-100 text-orange-600',
     },
     {
-      icon: <Star className="w-6 h-6" />,
+      icon: <Star className="w-10 h-10" />,
       label: 'All Products',
       link: '/products',
       color: 'bg-yellow-100 text-yellow-600',
     },
     {
-      icon: <Clock className="w-6 h-6" />,
+      icon: <Clock className="w-10 h-10" />,
       label: 'New Arrivals',
-      link: '/products?filter=new',
+      link: '/products/new',
       color: 'bg-purple-100 text-purple-600',
     },
     {
-      icon: <Tag className="w-6 h-6" />,
-      label: 'Deals',
-      link: '/deals',
-      color: 'bg-pink-100 text-pink-600',
-    },
-    {
-      icon: <Plus className="w-6 h-6" />,
+      icon: <Plus className="w-10 h-10" />,
       label: 'Sell Item',
       link: '/seller',
       color: 'bg-indigo-100 text-indigo-600',
@@ -69,14 +48,14 @@ export function QuickActions() {
         <h3 className="mb-4 text-lg font-medium text-gray-800">
           Quick Access
         </h3>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="flex gap-8 overflow-x-auto">
           {actions.map((action, index) => (
             <Link
               key={index}
               to={action.link}
-              className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-50 transition-colors group"
+              className="flex-none flex flex-col items-center p-4 rounded-xl hover:bg-gray-50 transition-colors group"
             >
-              <div className={`flex items-center justify-center w-12 h-12 mb-2 rounded-xl ${action.color} group-hover:scale-110 transition-transform`}>
+              <div className={`flex items-center justify-center w-16 h-16 mb-2 rounded-xl ${action.color} group-hover:scale-110 transition-transform`}>
                 {action.icon}
               </div>
               <span className="text-xs text-center text-gray-700 font-medium">

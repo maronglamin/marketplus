@@ -35,3 +35,15 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+/android
+/ios
+
+/dist
+/build
+/out
+/styles
+/utils
+/vendor
+/webpack.config.js
+/yarn.lock

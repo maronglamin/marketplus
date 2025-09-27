@@ -17,6 +17,8 @@ export interface YonnaForexPaymentResponse {
     transactionId: string;
     status: string;
     message: string;
+    paymentUrl?: string;
+    paymentHtml?: string;
   };
   message?: string;
   error?: string;

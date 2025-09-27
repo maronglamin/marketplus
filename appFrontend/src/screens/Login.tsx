@@ -175,6 +175,11 @@ export function Login() {
       return;
     }
 
+    if (!selectedCountry?.dial_code) {
+      Alert.alert('Error', 'Please select your country before continuing');
+      return;
+    }
+
     // The phone input should only contain digits now
     const formattedNumber = phoneInput.replace(/\D/g, '');
     
@@ -186,7 +191,11 @@ export function Login() {
       return;
     }
 
-    const fullNumber = `${selectedCountry?.dial_code}${formattedNumber}`;
+    // Always normalize to E.164 with leading +
+    const dial = selectedCountry.dial_code || '';
+    const normalizedDial = dial.startsWith('+') ? dial : `+${dial.replace(/\D/g, '')}`;
+    const localDigits = formattedNumber;
+    const fullNumber = `${normalizedDial}${localDigits}`;
     console.log('Phone input:', phoneInput);
     console.log('Selected country:', selectedCountry?.dial_code);
     console.log('Formatted number:', formattedNumber);
@@ -301,8 +310,7 @@ export function Login() {
                 <TouchableOpacity onPress={() => {
                   // Clear the input field completely for user to type
                   setPhoneInput('');
-                  setSelectedCountry(null);
-                  setAutoDetectedCountry(false);
+                  // Keep selected country; server expects full E.164 with +
                 }} style={styles.inputIconRight}>
                   <X size={20} color="#6B7280" />
                 </TouchableOpacity>

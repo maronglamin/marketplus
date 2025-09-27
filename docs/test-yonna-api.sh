@@ -4,7 +4,7 @@
 # This script tests the Yonna Forex API endpoints using curl
 
 # Configuration
-BASE_URL="http://10.143.131.48:3000/api"
+BASE_URL="http://192.168.137.33:3000/api"
 PHONE_NUMBER="+2207690103"
 OTP="2323"
 

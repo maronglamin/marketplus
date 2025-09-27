@@ -102,7 +102,7 @@ export function RepProductReport() {
         .map((activity: any) => ({
           id: activity.data.productId,
           title: activity.data.title,
-          price: activity.data.amount,
+          price: Number(activity.data.amount) || 0,
           currencyCode: activity.data.currencyCode,
           quantity: activity.data.quantity || 0,
           status: activity.data.status || 'ACTIVE',
@@ -115,7 +115,7 @@ export function RepProductReport() {
       setProducts(productActivities);
       console.log('Updated rep products state:', { 
         totalProducts: productActivities.length,
-        hasMore: response.hasMore
+        hasMore: response.nextCursor !== null
       });
     } catch (error: any) {
       console.error('Error loading rep products:', error);
@@ -208,7 +208,7 @@ export function RepProductReport() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-4xl mx-auto px-4 py-6 pb-20">
         {/* Header */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between">
@@ -253,7 +253,7 @@ export function RepProductReport() {
                 </div>
                 
                 <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-3">
                     {products
                       .filter(product => product && product.id && product.title)
                       .map((product) => {
@@ -261,8 +261,8 @@ export function RepProductReport() {
                         const imageUrl = product.productImage ? getImageUrl(product.productImage) : undefined;
 
                         return (
-                          <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                            <div className="flex items-start space-x-3 mb-3">
+                          <div key={product.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-shadow">
+                            <div className="flex items-center gap-3">
                               <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                                 {imageUrl ? (
                                   <img
@@ -279,33 +279,39 @@ export function RepProductReport() {
                                   </div>
                                 )}
                               </div>
-                              
+
                               <div className="flex-1 min-w-0">
-                                <h4 className="text-lg font-semibold text-gray-900 mb-1 line-clamp-2">
-                                  {product.title}
-                                </h4>
-                                <p className="text-xl font-bold text-blue-600 mb-2">
-                                  {formatCurrency(product.price, product.currencyCode)}
-                                </p>
-                                <div className="flex items-center text-sm text-gray-500 mb-2">
-                                  <User className="w-4 h-4 mr-1" />
-                                  <span>{product.salesRepName}</span>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <h4 className="text-base md:text-lg font-semibold text-gray-900 mb-1 line-clamp-2">
+                                      {product.title}
+                                    </h4>
+                                    <div className="flex items-center text-sm text-gray-500">
+                                      <User className="w-4 h-4 mr-1" />
+                                      <span className="truncate">{product.salesRepName}</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right flex-shrink-0">
+                                    <p className="text-lg md:text-xl font-bold text-blue-600">
+                                      {formatCurrency(product.price, product.currencyCode)}
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between">
-                              <div className={`flex items-center px-2 py-1 rounded-full text-xs font-medium ${quantityStatus.color}`}>
-                                <Box className="w-3 h-3 mr-1" />
-                                <span>{product.quantity} {quantityStatus.text}</span>
-                              </div>
-                              
-                              <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                product.status === 'ACTIVE' 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {product.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+
+                                <div className="mt-3 flex items-center justify-between">
+                                  <div className={`flex items-center px-2 py-1 rounded-full text-xs font-medium ${quantityStatus.color}`}>
+                                    <Box className="w-3 h-3 mr-1" />
+                                    <span>{product.quantity} {quantityStatus.text}</span>
+                                  </div>
+                                  <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                    product.status === 'ACTIVE'
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {product.status === 'ACTIVE' ? 'Active' : 'Inactive'}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>

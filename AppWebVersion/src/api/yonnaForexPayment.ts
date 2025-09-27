@@ -14,8 +14,13 @@ export interface YonnaForexPaymentResponse {
   success: boolean;
   data?: {
     transactionId: string;
+    appTransactionId?: string;
     status: string;
     message: string;
+    paymentUrl?: string;
+    qrCodeUrl?: string;
+    qrCodeBase64?: string;
+    paymentHtml?: string; // full HTML page with QR UI
   };
   message?: string;
   error?: string;

@@ -34,6 +34,7 @@ import { SettlementHistory } from './pages/SettlementHistory';
 import { ReportsScreen } from './pages/ReportsScreen';
 import { RepOrderReport } from './pages/RepOrderReport';
 import { RepProductReport } from './pages/RepProductReport';
+import RecentActivity from './pages/RecentActivity';
 
 function App() {
   return (
@@ -391,6 +392,19 @@ function App() {
                 <Header />
                 <main className="flex-1">
                   <RepProductReport />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          {/* Recent Activity Route */}
+          <Route path="/recent-activity" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <RecentActivity />
                 </main>
                 <BottomNavigation />
               </div>

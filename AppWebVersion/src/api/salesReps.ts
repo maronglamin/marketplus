@@ -114,7 +114,7 @@ export const salesRepService = {
     if (params.cursor) queryParams.append('cursor', params.cursor);
     if (params.type) queryParams.append('type', params.type);
     
-    const response = await api.get(`/sales-reps/recent-activity?${queryParams}`);
+    const response = await api.get(`/sales-reps/activity/recent?${queryParams}`);
     return response.data;
   },
 };

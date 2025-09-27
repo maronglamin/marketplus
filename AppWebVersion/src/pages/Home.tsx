@@ -18,7 +18,6 @@ export function Home() {
       <PopularProducts />
       <NewArrivals />
       <PromotionsBanner />
-      <RecentActivity />
     </div>
   );
 }

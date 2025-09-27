@@ -271,7 +271,33 @@ export const register = async (
   middleName?: string
 ): Promise<LoginResponse> => {
   try {
-    console.log('Registering user:', { phoneNumber, firstName, lastName, middleName });
+    // Normalize phone number to E.164 with leading + and validate
+    const toE164 = (value: string | null | undefined): string => {
+      const raw = (value || '').trim();
+      if (!raw) return '';
+      let candidate = raw;
+      if (candidate.startsWith('00')) candidate = '+' + candidate.slice(2);
+      if (!candidate.startsWith('+')) candidate = '+' + candidate.replace(/\D/g, '');
+      else candidate = candidate.replace(/[^\d+]/g, '');
+      return candidate;
+    };
+    const isValidE164 = (val: string) => /^\+[1-9]\d{6,14}$/.test(val);
+
+    let normalizedPhone = toE164(phoneNumber);
+    if (!isValidE164(normalizedPhone)) {
+      // Fallback to stored number from initiateLogin if available
+      const stored = await AsyncStorage.getItem('phoneNumber');
+      const fallback = toE164(stored || undefined);
+      if (isValidE164(fallback)) {
+        normalizedPhone = fallback;
+      }
+    }
+
+    if (!isValidE164(normalizedPhone)) {
+      throw new Error('Invalid phone number. Please go back and re-enter your number.');
+    }
+
+    console.log('Registering user:', { phoneNumber: normalizedPhone, firstName, lastName, middleName });
     
     // Validate names
     if (!firstName || firstName.trim().length < 2) {
@@ -290,14 +316,14 @@ export const register = async (
     }
 
     console.log('Making registration request with data:', {
-      phoneNumber,
+      phoneNumber: normalizedPhone,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName?.trim() || undefined
     });
 
     const response = await apiInstance.post('/auth/register', {
-      phoneNumber,
+      phoneNumber: normalizedPhone,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName?.trim() || undefined

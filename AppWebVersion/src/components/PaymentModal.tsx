@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Smartphone, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { paymentService, PaymentRequest } from '../api/paymentService';
+import YonnaQRPaymentModal from './YonnaQRPaymentModal';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export function PaymentModal({
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [paymentData, setPaymentData] = useState<any>(null);
+  const [showYonnaQR, setShowYonnaQR] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -67,17 +69,23 @@ export function PaymentModal({
       
       if (response.success && response.data) {
         setPaymentData(response.data);
-        setPaymentStatus('success');
-        
-        // Simulate payment processing delay
-        setTimeout(() => {
-          onPaymentSuccess({
-            ...response.data,
-            amount,
-            currency,
-            paymentMethod: paymentMethod.provider
-          });
-        }, 2000);
+
+        const isYonna = (gateway?.type === 'yonna_forex' || paymentMethod.type === 'MOBILE_MONEY');
+        if (isYonna && response.data.transactionId) {
+          // Keep page as-is, open QR modal and continue polling there
+          setPaymentStatus('processing');
+          setShowYonnaQR(true);
+        } else {
+          setPaymentStatus('success');
+          setTimeout(() => {
+            onPaymentSuccess({
+              ...response.data,
+              amount,
+              currency,
+              paymentMethod: paymentMethod.provider
+            });
+          }, 2000);
+        }
       } else {
         throw new Error(response.error || 'Payment failed');
       }
@@ -133,6 +141,7 @@ export function PaymentModal({
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="fixed inset-0 bg-black bg-opacity-25" onClick={onClose}></div>
@@ -215,6 +224,9 @@ export function PaymentModal({
                   {paymentData.transactionId && (
                     <p>Transaction ID: {paymentData.transactionId}</p>
                   )}
+                {paymentData.appTransactionId && (
+                  <p>App Transaction ID: {paymentData.appTransactionId}</p>
+                )}
                   <p>Status: {paymentData.status}</p>
                   <p>Message: {paymentData.message}</p>
                 </div>
@@ -255,5 +267,33 @@ export function PaymentModal({
         </div>
       </div>
     </div>
+    {paymentData && showYonnaQR && (
+      <YonnaQRPaymentModal
+        isOpen={showYonnaQR}
+        onClose={() => setShowYonnaQR(false)}
+        transactionId={paymentData.transactionId}
+        appTransactionId={paymentData.appTransactionId}
+        amount={amount}
+        currency={currency}
+        paymentUrl={paymentData.paymentUrl}
+        qrCodeUrl={paymentData.qrCodeUrl}
+        qrCodeBase64={paymentData.qrCodeBase64}
+        paymentHtml={paymentData.paymentHtml}
+        onCompleted={() => {
+          setShowYonnaQR(false);
+          onPaymentSuccess({
+            ...paymentData,
+            amount,
+            currency,
+            paymentMethod: paymentMethod.provider
+          });
+        }}
+        onFailed={(msg) => {
+          // keep modal open; optionally surface error
+          console.warn('Yonna payment failed:', msg);
+        }}
+      />
+    )}
+    </>
   );
 }

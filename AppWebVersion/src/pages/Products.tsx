@@ -27,7 +27,7 @@ export function Products() {
   const lastLoadTimeRef = useRef(0);
 
 
-  const loadProducts = useCallback(async (isLoadMore: boolean = false) => {
+  const loadProducts = useCallback(async (isLoadMore: boolean = false, searchOverride?: string) => {
     try {
       if (isLoadMore) {
         setLoadingMore(true);
@@ -56,7 +56,7 @@ export function Products() {
         page, 
         limit, 
         selectedCategoryId || undefined, 
-        debouncedSearchQuery || undefined
+        (searchOverride ?? debouncedSearchQuery) || undefined
       );
       const response = await Promise.race([productsPromise, timeoutPromise]) as any;
       
@@ -145,9 +145,10 @@ export function Products() {
     loadCategories();
   }, []);
 
-  // Initialize selected category from URL parameters
+  // Initialize selected category and search from URL parameters
   useEffect(() => {
     const categoryFromUrl = searchParams.get('category');
+    const searchFromUrl = searchParams.get('search');
     if (categoryFromUrl) {
       // Find the category by name and set both name and ID
       const category = categories.find(cat => cat.name === categoryFromUrl);
@@ -156,7 +157,18 @@ export function Products() {
         setSelectedCategoryId(category.id);
       }
     }
-  }, [searchParams, categories]);
+    if (searchFromUrl !== null) {
+      setSearchQuery(searchFromUrl);
+      // Trigger immediate debounce update so initial load uses URL param
+      setDebouncedSearchQuery(searchFromUrl);
+      // If user is available, immediately load with the URL search (seamless)
+      if (user) {
+        setCurrentPage(1);
+        setProducts([]);
+        loadProducts(false, searchFromUrl);
+      }
+    }
+  }, [searchParams, categories, user, loadProducts]);
 
   // Debounce search query
   useEffect(() => {

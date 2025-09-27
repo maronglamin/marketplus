@@ -37,6 +37,11 @@ export interface PaymentResponse {
     paymentIntentId?: string;
     status: string;
     message: string;
+    appTransactionId?: string;
+    paymentUrl?: string;
+    qrCodeUrl?: string;
+    qrCodeBase64?: string;
+    paymentHtml?: string;
   };
   error?: string;
 }
@@ -158,12 +163,18 @@ export const paymentService = {
         const response = await yonnaForexPaymentService.processPayment(paymentData);
         
         if (response.success && response.data) {
+          // Pass through all fields including paymentHtml/QR for web rendering
           return {
             success: true,
             data: {
               transactionId: response.data.transactionId,
               status: response.data.status,
-              message: response.data.message
+              message: response.data.message,
+              appTransactionId: (response.data as any).appTransactionId,
+              paymentUrl: (response.data as any).paymentUrl,
+              qrCodeUrl: (response.data as any).qrCodeUrl,
+              qrCodeBase64: (response.data as any).qrCodeBase64,
+              paymentHtml: (response.data as any).paymentHtml
             }
           };
         } else {

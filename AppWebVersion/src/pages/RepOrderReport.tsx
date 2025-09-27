@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -7,7 +7,10 @@ import {
   User, 
   Package,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Search,
+  Filter,
+  Download
 } from 'lucide-react';
 import { salesRepService } from '../api/salesReps';
 import { API_CONFIG } from '../config/api';
@@ -34,6 +37,9 @@ export function RepOrderReport() {
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [primaryCurrency, setPrimaryCurrency] = useState('USD');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
 
   useEffect(() => {
     loadRepOrders();
@@ -59,7 +65,7 @@ export function RepOrderReport() {
         .map((activity: any) => ({
           id: activity.data.orderId,
           orderNumber: activity.data.orderNumber,
-          totalAmount: activity.data.amount,
+          totalAmount: Number(activity.data.amount) || 0,
           currencyCode: activity.data.currencyCode,
           status: activity.data.status, // Use actual status from backend
           createdAt: activity.createdAt,
@@ -82,7 +88,7 @@ export function RepOrderReport() {
         if (!acc[currency]) {
           acc[currency] = 0;
         }
-        acc[currency] += order.totalAmount;
+        acc[currency] += Number(order.totalAmount) || 0;
         return acc;
       }, {});
 
@@ -102,6 +108,85 @@ export function RepOrderReport() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      if (dateFrom) {
+        const from = new Date(dateFrom);
+        if (new Date(order.createdAt) < new Date(from.setHours(0, 0, 0, 0))) return false;
+      }
+
+      if (dateTo) {
+        const to = new Date(dateTo);
+        if (new Date(order.createdAt) > new Date(to.setHours(23, 59, 59, 999))) return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const hay = [
+          order.orderNumber,
+          order.productTitle,
+          order.salesRepName,
+          order.customerName,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+
+      return true;
+    });
+  }, [orders, dateFrom, dateTo, searchQuery]);
+
+  const filteredCompletedOrders = useMemo(
+    () => filteredOrders.filter((order) => ['COMPLETED', 'DELIVERED', 'CONFIRMED', 'AUTHORIZED'].includes(order.status?.toUpperCase())),
+    [filteredOrders]
+  );
+
+  const filteredRevenueByCurrency = useMemo(() => {
+    return filteredCompletedOrders.reduce((acc: Record<string, number>, order) => {
+      const currency = order.currencyCode || 'USD';
+      acc[currency] = (acc[currency] || 0) + order.totalAmount;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [filteredCompletedOrders]);
+
+  const filteredPrimaryCurrency = useMemo(() => {
+    const keys = Object.keys(filteredRevenueByCurrency);
+    if (keys.length === 0) return primaryCurrency;
+    return keys.reduce((a, b) => (filteredRevenueByCurrency[a] > filteredRevenueByCurrency[b] ? a : b));
+  }, [filteredRevenueByCurrency, primaryCurrency]);
+
+  const filteredTotalRevenue = useMemo(
+    () => filteredRevenueByCurrency[filteredPrimaryCurrency] || 0,
+    [filteredRevenueByCurrency, filteredPrimaryCurrency]
+  );
+
+  const exportCsv = () => {
+    const headers = ['Order Number', 'Status', 'Date', 'Amount', 'Currency', 'Product Title', 'Rep Name'];
+    const rows = filteredOrders.map((o) => [
+      o.orderNumber,
+      getStatusText(o.status),
+      new Date(o.createdAt).toISOString(),
+      o.totalAmount.toString(),
+      o.currencyCode,
+      o.productTitle || '',
+      o.salesRepName,
+    ]);
+    const csv = [headers, ...rows]
+      .map((r) => r.map((v) => `"${(v ?? '').toString().replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `rep-orders-${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const getStatusColor = (status: string) => {
@@ -216,7 +301,7 @@ export function RepOrderReport() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-4xl mx-auto px-4 py-6 pb-20">
         {/* Header */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between">
@@ -230,6 +315,15 @@ export function RepOrderReport() {
               </button>
               <h1 className="text-2xl font-bold text-gray-900">Rep Orders Report</h1>
             </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={exportCsv}
+                className="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50"
+                title="Export filtered as CSV"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Export CSV</span>
+              </button>
             <button
               onClick={loadRepOrders}
               className="flex items-center text-blue-600 hover:text-blue-700"
@@ -239,21 +333,59 @@ export function RepOrderReport() {
             </button>
           </div>
         </div>
+        </div>
 
-        {/* Summary Card */}
-        <div className="bg-blue-600 rounded-xl p-6 mb-6 text-white">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold">Sales Rep Orders</h2>
-            <div className="bg-white bg-opacity-20 px-3 py-1 rounded-lg">
-              <span className="text-sm font-semibold">{primaryCurrency}</span>
+        {/* Summary & Filters */
+        }
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-xs text-gray-500">Total Orders (filtered)</p>
+              <p className="text-2xl font-bold text-gray-900">{filteredOrders.length}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-xs text-gray-500">Completed/Delivered/Confirmed</p>
+              <p className="text-2xl font-bold text-gray-900">{filteredCompletedOrders.length}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">Revenue</p>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{filteredPrimaryCurrency}</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(filteredTotalRevenue, filteredPrimaryCurrency)}</p>
             </div>
           </div>
-          <p className="text-3xl font-bold mb-2">
-            {formatCurrency(totalRevenue, primaryCurrency)}
-          </p>
-          <p className="text-blue-100">
-            {orders.length} total orders from sales reps
-          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="md:col-span-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search order #, product, rep, customer"
+                  className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              </div>
+            </div>
+            <div>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
         </div>
 
         {/* Orders List */}
@@ -266,40 +398,44 @@ export function RepOrderReport() {
               <h4 className="text-lg font-semibold text-gray-900 mb-2">No orders found</h4>
               <p className="text-gray-500">Orders from your sales reps will appear here</p>
             </div>
+          ) : filteredOrders.length === 0 ? (
+            <div className="text-center py-12">
+              <Filter className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">No matching orders</h4>
+              <p className="text-gray-500">Try adjusting your filters or search</p>
+            </div>
           ) : (
             <div className="space-y-4">
-              {orders.map((order) => (
-                <div key={order.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+              {filteredOrders.map((order) => (
+                <div key={order.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-shadow">
                   <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-start space-x-3 flex-1">
+                    <div className="flex items-start gap-3 flex-1">
                       {order.productImage ? (
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
                         <img
                           src={getImageUrl(order.productImage)}
                           alt={order.productTitle}
-                          className="w-15 h-15 rounded-lg object-cover bg-gray-100"
+                            className="w-full h-full object-cover"
                           onError={(e) => {
-                            e.currentTarget.src = 'https://via.placeholder.com/60x60?text=No+Image';
+                              e.currentTarget.src = 'https://via.placeholder.com/64x64?text=No+Image';
                           }}
                         />
+                        </div>
                       ) : (
-                        <div className="w-15 h-15 rounded-lg bg-gray-100 flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                           <Package className="w-6 h-6 text-gray-400" />
                         </div>
                       )}
                       
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                        <h4 className="text-base md:text-lg font-semibold text-gray-900 mb-1 line-clamp-2">
                           {order.productTitle || 'Product'}
                         </h4>
-                        <p className="text-sm text-gray-600 mb-1">
-                          Customer: {order.customerName}
-                        </p>
-                        <p className="text-xs text-gray-500 mb-1">
-                          {order.orderNumber}
-                        </p>
-                        <p className="text-xs text-blue-600 font-medium">
-                          Rep: {order.salesRepName}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-medium">#{order.orderNumber}</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium">Rep: {order.salesRepName}</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-50 text-gray-600 text-xs">{order.customerName}</span>
+                        </div>
                       </div>
                     </div>
                     
@@ -330,3 +466,4 @@ export function RepOrderReport() {
     </div>
   );
 }
+

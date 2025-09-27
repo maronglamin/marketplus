@@ -92,7 +92,7 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Select Payment Method</Text>
-        <Text style={styles.amountText}>Amount: ${amount.toFixed(2)}</Text>
+        <Text style={styles.amountText}>Amount: ${(amount || 0).toFixed(2)}</Text>
       </View>
 
       <ScrollView style={styles.methodsList} showsVerticalScrollIndicator={false}>

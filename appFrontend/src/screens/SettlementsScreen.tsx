@@ -589,13 +589,13 @@ export function SettlementsScreen() {
               <Text style={styles.emptyText}>
                 Sales representatives and their paid orders will appear here once you add them and they start making sales.
               </Text>
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={styles.debugButton}
                 onPress={testApiCalls}
               >
                 <Ionicons name="bug" size={16} color="#FFFFFF" />
                 <Text style={styles.debugButtonText}>Debug API Calls</Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </View>
             ) : (
               <View style={styles.salesRepSummaryList}>

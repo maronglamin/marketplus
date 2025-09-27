@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, StatusBar, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, StatusBar, RefreshControl, Alert, Modal } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,7 +12,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 import { api } from '../api/api';
 import { StripePayment } from '../components/StripePayment';
-import { PaymentMethodSelector } from '../components/PaymentMethodSelector';
+import PaymentMethodSelector from '../components/PaymentMethodSelector';
+import YonnaPaymentModal from '../components/YonnaPaymentModal';
+import { YonnaForexPaymentService } from '../services/YonnaForexPaymentService';
 import * as Haptics from 'expo-haptics';
 
 const STATUS_TABS = ['ALL','PENDING_QUOTE','QUOTED','ACCEPTED','PAID','REJECTED','CANCELLED'] as const;
@@ -44,6 +46,14 @@ export default function RentalRequestScreen() {
   const [showPaymentMethodSelector, setShowPaymentMethodSelector] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [selectedRentalForPayment, setSelectedRentalForPayment] = useState<any>(null);
+  const [showYonnaPayment, setShowYonnaPayment] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+  const [rentalsWithPendingPayments, setRentalsWithPendingPayments] = useState<Set<string>>(new Set());
+  
+  // Initialize Yonna Forex service
+  const yonnaForexService = new YonnaForexPaymentService();
 
   // Validate and refresh user data when component mounts
   useEffect(() => {
@@ -163,7 +173,11 @@ export default function RentalRequestScreen() {
       }
       setHasMore(Boolean(data?.hasMore));
       setPage(nextPage);
-      setRentals(prev => replace ? (data?.items || []) : [...prev, ...(data?.items || [])]);
+      const newRentals = replace ? (data?.items || []) : [...rentals, ...(data?.items || [])];
+      setRentals(newRentals);
+      
+      // Check payment status for all rentals
+      checkPaymentStatusForRentals(newRentals);
     } catch (e: any) {
       console.error('Failed to load rentals', e);
       if (e.message?.includes('401') || e.message?.includes('Unauthorized')) {
@@ -212,10 +226,28 @@ export default function RentalRequestScreen() {
       switch (paymentMethod.type) {
         case 'CREDIT_CARD':
         case 'DEBIT_CARD':
-          // Stripe payments are handled separately via onStripePayment
+          // Open Stripe payment modal
+          setShowStripePayment(true);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           break;
 
         case 'MOBILE_MONEY':
+          // Check if it's Yonna wallet
+          const providerName = (paymentMethod.provider || paymentMethod.metadata?.providerName || '').toString().toLowerCase();
+          const isYonna = providerName.includes('yonna');
+          if (isYonna) {
+            setShowYonnaPayment(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            break;
+          }
+          // Fallback for other mobile wallets
+          Alert.alert(
+            'Mobile Wallet Payment',
+            `Redirecting to ${paymentMethod.provider} payment gateway...`,
+            [{ text: 'OK' }]
+          );
+          break;
+
         case 'BANK_TRANSFER':
         case 'CRYPTO':
         case 'DIGITAL_WALLET':
@@ -274,6 +306,13 @@ export default function RentalRequestScreen() {
       });
       
       if (response.data.success) {
+        // Remove from pending payments
+        setRentalsWithPendingPayments(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(selectedRentalForPayment.id);
+          return newSet;
+        });
+        
         Alert.alert(
           'Payment Successful!',
           `Your payment of ${getCurrencySymbol(selectedRentalForPayment.currency)} ${selectedRentalForPayment.agreedPrice?.toLocaleString()} has been processed successfully.`,
@@ -309,7 +348,105 @@ export default function RentalRequestScreen() {
     setSelectedRentalForPayment(null);
   };
 
-  const handlePayRental = (rental: any) => {
+  // Check payment status for multiple rentals
+  const checkPaymentStatusForRentals = async (rentals: any[]) => {
+    const rentalsToCheck = rentals.filter(rental => rental.status === 'ACCEPTED' && rental.agreedPrice);
+    
+    for (const rental of rentalsToCheck) {
+      try {
+        const response = await api.get(`/api/rental-requests/${rental.id}/payment-status`);
+        if (response.data.hasPendingPayment) {
+          setRentalsWithPendingPayments(prev => new Set([...prev, rental.id]));
+        } else {
+          setRentalsWithPendingPayments(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(rental.id);
+            return newSet;
+          });
+        }
+      } catch (error) {
+        console.log(`Could not check payment status for rental ${rental.id}:`, error);
+      }
+    }
+  };
+
+  // Payment methods loading functions
+  const checkPaymentMethods = async () => {
+    try {
+      setLoadingPaymentMethods(true);
+      
+      // Ensure user is authenticated
+      if (!user?.id) {
+        console.log('User not authenticated, skipping payment method check');
+        return false;
+      }
+
+      console.log('RentalRequest: Checking payment methods for user:', user.id);
+      
+      // Fetch user's payment methods
+      const response = await api.get('/api/payment-methods');
+      const methods = response.data.data || [];
+      
+      console.log('RentalRequest: Payment methods loaded:', methods.length);
+      setPaymentMethods(methods);
+      
+      return methods.length > 0;
+    } catch (error) {
+      console.error('RentalRequest: Error loading payment methods:', error);
+      setPaymentMethods([]);
+      return false;
+    } finally {
+      setLoadingPaymentMethods(false);
+    }
+  };
+
+  const checkPaymentMethodsWithUserFeedback = async () => {
+    try {
+      setLoadingPaymentMethods(true);
+      
+      // Ensure user is authenticated
+      if (!user?.id) {
+        console.error('User not authenticated');
+        Alert.alert('Authentication Error', 'Please log in to continue.');
+        return false;
+      }
+
+      console.log('RentalRequest: Checking payment methods with user feedback');
+      
+      // Fetch user's payment methods
+      const response = await api.get('/api/payment-methods');
+      const methods = response.data.data || [];
+      
+      console.log('RentalRequest: Payment methods loaded:', methods.length);
+      setPaymentMethods(methods);
+      
+      if (methods.length === 0) {
+        Alert.alert(
+          'No Payment Methods',
+          'You need to add a payment method to make payments. Would you like to add one now?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Add Payment Method', 
+              onPress: () => navigation.navigate('PaymentMethods')
+            }
+          ]
+        );
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('RentalRequest: Error loading payment methods:', error);
+      Alert.alert('Error', 'Failed to load payment methods. Please try again.');
+      setPaymentMethods([]);
+      return false;
+    } finally {
+      setLoadingPaymentMethods(false);
+    }
+  };
+
+  const handlePayRental = async (rental: any) => {
     console.log('🎯 handlePayRental called for rental:', rental.id);
     console.log('🎯 Rental details:', {
       id: rental.id,
@@ -323,10 +460,29 @@ export default function RentalRequestScreen() {
       return;
     }
 
+    // Check if rental already has a pending payment
+    if (rentalsWithPendingPayments.has(rental.id)) {
+      Alert.alert(
+        'Payment Already in Progress',
+        'This rental already has a pending payment. Please wait for the current payment to complete before making another payment.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     setSelectedRentalForPayment(rental);
-    setShowPaymentMethodSelector(true);
-    console.log('🎯 Payment method selector should be visible now');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Mark this rental as having a pending payment
+    setRentalsWithPendingPayments(prev => new Set([...prev, rental.id]));
+    
+    // Check for payment methods first
+    const hasPaymentMethods = await checkPaymentMethodsWithUserFeedback();
+    
+    if (hasPaymentMethods) {
+      setShowPaymentMethodSelector(true);
+      console.log('🎯 Payment method selector should be visible now');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
   };
 
   return (
@@ -485,12 +641,23 @@ export default function RentalRequestScreen() {
               {rental.status === 'ACCEPTED' && rental.agreedPrice && (
                 <View style={styles.paymentSection}>
                   <TouchableOpacity
-                    style={styles.payButton}
+                    style={[
+                      styles.payButton,
+                      rentalsWithPendingPayments.has(rental.id) && styles.disabledPayButton
+                    ]}
                     onPress={() => handlePayRental(rental)}
+                    disabled={rentalsWithPendingPayments.has(rental.id)}
                   >
-                    <Ionicons name="card-outline" size={20} color="#FFFFFF" />
+                    <Ionicons 
+                      name={rentalsWithPendingPayments.has(rental.id) ? "time-outline" : "card-outline"} 
+                      size={20} 
+                      color="#FFFFFF" 
+                    />
                     <Text style={styles.payButtonText}>
-                      Pay {getCurrencySymbol(rental.currency)} {rental.agreedPrice.toLocaleString()}
+                      {rentalsWithPendingPayments.has(rental.id) 
+                        ? 'Payment in Progress...' 
+                        : `Pay ${getCurrencySymbol(rental.currency)} ${rental.agreedPrice.toLocaleString()}`
+                      }
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -506,25 +673,130 @@ export default function RentalRequestScreen() {
         </ScrollView>
       )}
 
-      {/* Payment Method Selector Modal */}
-      {selectedRentalForPayment && (
-        <PaymentMethodSelector
+      {/* Payment Method Selection Modal */}
+      {selectedRentalForPayment && showPaymentMethodSelector && (
+        <Modal
           visible={showPaymentMethodSelector}
-          onClose={() => {
-            // Keep selectedRentalForPayment so Stripe modal can open reliably after close
-            setShowPaymentMethodSelector(false);
-          }}
-          onSelectPaymentMethod={handlePaymentMethodSelect}
-          onStripePayment={() => {
-            console.log('🎯 onStripePayment callback triggered');
-            setShowPaymentMethodSelector(false);
-            setShowStripePayment(true);
-            console.log('🎯 Stripe modal state set to true');
-          }}
-          amount={selectedRentalForPayment.agreedPrice || 0}
-          currency={selectedRentalForPayment.currency || 'USD'}
-          title="Select Payment Method"
-        />
+          animationType="slide"
+          presentationStyle="pageSheet"
+        >
+          <SafeAreaView style={styles.paymentModalContainer}>
+            <View style={styles.paymentModalHeader}>
+              <Text style={styles.paymentModalTitle}>Select Payment Method</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowPaymentMethodSelector(false);
+                  setSelectedRentalForPayment(null);
+                }}
+                style={styles.paymentModalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.paymentAmountContainer}>
+              <Text style={styles.paymentAmountText}>
+                Amount: {getCurrencySymbol(selectedRentalForPayment.currency)} {selectedRentalForPayment.agreedPrice?.toLocaleString()}
+              </Text>
+            </View>
+
+            {loadingPaymentMethods ? (
+              <View style={styles.paymentLoadingContainer}>
+                <ActivityIndicator size="small" color="#3B82F6" />
+                <Text style={styles.paymentLoadingText}>Loading payment methods...</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.paymentMethodsList}>
+                {paymentMethods.map((method) => (
+                  <TouchableOpacity
+                    key={method.id}
+                    style={[
+                      styles.paymentMethodItem,
+                      selectedPaymentMethod === method.id && styles.selectedPaymentMethodItem,
+                      method.isDefault && styles.defaultPaymentMethodItem
+                    ]}
+                    onPress={() => setSelectedPaymentMethod(method.id)}
+                  >
+                    <View style={styles.paymentMethodItemIcon}>
+                      <Ionicons 
+                        name={method.type === 'CREDIT_CARD' ? 'card-outline' : 
+                             method.type === 'MOBILE_MONEY' ? 'phone-portrait-outline' :
+                             method.type === 'BANK_TRANSFER' ? 'business-outline' :
+                             method.type === 'CRYPTO' ? 'logo-bitcoin' : 'wallet-outline'} 
+                        size={24} 
+                        color="#2563EB" 
+                      />
+                    </View>
+                    <View style={styles.paymentMethodItemInfo}>
+                      <Text style={styles.paymentMethodItemName}>
+                        {method.accountName || method.provider || 'Payment Method'}
+                      </Text>
+                      <Text style={styles.paymentMethodItemType}>
+                        {method.type === 'CREDIT_CARD' ? 'Card' :
+                         method.type === 'MOBILE_MONEY' ? 'Mobile Money' :
+                         method.type === 'BANK_TRANSFER' ? 'Bank Transfer' :
+                         method.type === 'CRYPTO' ? 'Cryptocurrency' : 'Digital Wallet'}
+                      </Text>
+                      {method.provider && (
+                        <Text style={styles.paymentMethodProvider}>
+                          {method.provider}
+                        </Text>
+                      )}
+                      {method.isDefault && (
+                        <Text style={styles.defaultBadge}>Default</Text>
+                      )}
+                    </View>
+                    <View style={styles.paymentMethodItemRadio}>
+                      <Ionicons 
+                        name={selectedPaymentMethod === method.id ? 'radio-button-on' : 'radio-button-off'} 
+                        size={20} 
+                        color={selectedPaymentMethod === method.id ? '#2563EB' : '#9CA3AF'} 
+                      />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={styles.paymentModalFooter}>
+              <TouchableOpacity
+                style={[
+                  styles.proceedToCheckoutButton,
+                  !selectedPaymentMethod && styles.disabledButton
+                ]}
+                onPress={async () => {
+                  if (!selectedPaymentMethod) return;
+                  
+                  const method = paymentMethods.find(m => m.id === selectedPaymentMethod);
+                  if (!method) return;
+                  
+                  setShowPaymentMethodSelector(false);
+                  await handlePaymentMethodSelect(method);
+                }}
+                disabled={!selectedPaymentMethod}
+              >
+                <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.proceedToCheckoutButtonText}>
+                  Process Payment
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.addMorePaymentButton}
+                onPress={() => {
+                  setShowPaymentMethodSelector(false);
+                  navigation.navigate('PaymentMethods');
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.addMorePaymentButtonText}>
+                  Add More Payment Methods
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </Modal>
       )}
 
       {/* Stripe Payment Modal */}
@@ -549,6 +821,39 @@ export default function RentalRequestScreen() {
           transactionType="rental"
         />
       )}
+
+      {/* Yonna Forex Payment Modal */}
+      <YonnaPaymentModal
+        visible={showYonnaPayment}
+        amount={selectedRentalForPayment?.agreedPrice || 0}
+        currency={selectedRentalForPayment?.currency}
+        orderId={selectedRentalForPayment?.id}
+        orderNumber={selectedRentalForPayment?.requestId}
+        transactionType="rental"
+        onPaymentSuccess={async (transactionId: string) => {
+          setShowYonnaPayment(false);
+          setSelectedRentalForPayment(null);
+          // Remove from pending payments
+          if (selectedRentalForPayment?.id) {
+            setRentalsWithPendingPayments(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(selectedRentalForPayment.id);
+              return newSet;
+            });
+          }
+          await handleRefresh();
+          Alert.alert(
+            'Payment Successful',
+            `Your payment was processed successfully. Transaction ID: ${transactionId}`,
+            [{ text: 'OK' }]
+          );
+        }}
+        onPaymentError={(errorMsg: string) => {
+          Alert.alert('Payment Error', errorMsg || 'Payment failed. Please try again.');
+        }}
+        onClose={() => setShowYonnaPayment(false)}
+        onRefreshOrder={handleRefresh}
+      />
     </SafeAreaView>
   );
 }
@@ -622,6 +927,134 @@ const styles = StyleSheet.create({
     gap: 8
   },
   payButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  disabledPayButton: { 
+    backgroundColor: '#9CA3AF', 
+    opacity: 0.7 
+  },
+  
+  // Payment Modal Styles
+  paymentModalContainer: { flex: 1, backgroundColor: '#FFFFFF' },
+  paymentModalHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingVertical: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#E5E7EB' 
+  },
+  paymentModalTitle: { fontSize: 20, fontWeight: '700', color: '#111827' },
+  paymentModalCloseButton: { padding: 8 },
+  paymentAmountContainer: { 
+    paddingHorizontal: 20, 
+    paddingVertical: 16, 
+    backgroundColor: '#F8F9FA', 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#E5E7EB' 
+  },
+  paymentAmountText: { fontSize: 18, color: '#007AFF', fontWeight: '600' },
+  paymentLoadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 40 
+  },
+  paymentLoadingText: { marginTop: 12, fontSize: 16, color: '#6B7280' },
+  paymentMethodsList: { flex: 1, padding: 20 },
+  paymentMethodItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 16, 
+    marginBottom: 12, 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  selectedPaymentMethodItem: { 
+    borderColor: '#2563EB', 
+    backgroundColor: '#EFF6FF' 
+  },
+  defaultPaymentMethodItem: { 
+    borderColor: '#10B981' 
+  },
+  paymentMethodItemIcon: { 
+    width: 48, 
+    height: 48, 
+    borderRadius: 24, 
+    backgroundColor: '#F8F9FA', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 16 
+  },
+  paymentMethodItemInfo: { flex: 1 },
+  paymentMethodItemName: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: '#111827', 
+    marginBottom: 4 
+  },
+  paymentMethodItemType: { 
+    fontSize: 14, 
+    color: '#6B7280' 
+  },
+  paymentMethodProvider: { 
+    fontSize: 12, 
+    color: '#9CA3AF', 
+    marginTop: 2 
+  },
+  defaultBadge: { 
+    fontSize: 12, 
+    color: '#10B981', 
+    fontWeight: '600', 
+    marginTop: 4 
+  },
+  paymentMethodItemRadio: { marginLeft: 12 },
+  paymentModalFooter: { 
+    padding: 20, 
+    borderTopWidth: 1, 
+    borderTopColor: '#E5E7EB' 
+  },
+  proceedToCheckoutButton: { 
+    backgroundColor: '#2563EB', 
+    paddingVertical: 16, 
+    paddingHorizontal: 24, 
+    borderRadius: 12, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: 12 
+  },
+  proceedToCheckoutButtonText: { 
+    color: '#FFFFFF', 
+    fontSize: 16, 
+    fontWeight: '600', 
+    marginLeft: 8 
+  },
+  addMorePaymentButton: { 
+    backgroundColor: '#6B7280', 
+    paddingVertical: 16, 
+    paddingHorizontal: 24, 
+    borderRadius: 12, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
+  addMorePaymentButtonText: { 
+    color: '#FFFFFF', 
+    fontSize: 16, 
+    fontWeight: '600', 
+    marginLeft: 8 
+  },
+  disabledButton: { 
+    backgroundColor: '#E5E7EB', 
+    opacity: 0.6 
+  },
 });
 
 

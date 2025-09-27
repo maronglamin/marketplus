@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export interface YonnaForexWebhookPayload {
-  transactionId: string;
+  appTransactionId: string;
   status: 'pending' | 'success' | 'completed' | 'failed' | 'cancelled';
   amount: number;
   currency: string;
@@ -28,10 +28,10 @@ export class YonnaForexWebhookController {
       console.log('Yonna Forex webhook received:', payload);
 
       // Validate required fields
-      if (!payload.transactionId || !payload.status) {
+      if (!payload.appTransactionId || !payload.status) {
         res.status(400).json({
           success: false,
-          message: 'Missing required fields: transactionId and status'
+          message: 'Missing required fields: appTransactionId and status'
         });
         return;
       }
@@ -50,10 +50,10 @@ export class YonnaForexWebhookController {
       }
 
       // Find the transaction in your database
-      const transaction = await this.findTransactionByYonnaId(payload.transactionId);
+      const transaction = await this.findTransactionByYonnaId(payload.appTransactionId);
       
       if (!transaction) {
-        console.error('Transaction not found:', payload.transactionId);
+        console.error('Transaction not found:', payload.appTransactionId);
         res.status(404).json({
           success: false,
           message: 'Transaction not found'
@@ -358,7 +358,7 @@ export class YonnaForexWebhookController {
     console.log('Webhook event received:', {
       source: 'yonna_forex',
       event: payload.status,
-      transactionId: payload.transactionId,
+      appTransactionId: payload.appTransactionId,
       amount: payload.amount,
       currency: payload.currency,
       timestamp: new Date().toISOString()

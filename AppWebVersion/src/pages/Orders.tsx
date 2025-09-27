@@ -46,6 +46,11 @@ export function Orders() {
     endDate: new Date(),
   });
   const [exporting, setExporting] = useState(false);
+  const [tempStart, setTempStart] = useState<string>('');
+  const [tempEnd, setTempEnd] = useState<string>('');
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorModalTitle, setErrorModalTitle] = useState('');
+  const [errorModalMessage, setErrorModalMessage] = useState('');
   
   // Image URL helper function (same as Products page)
   const getImageUrl = (image: string | null) => {
@@ -176,29 +181,144 @@ export function Orders() {
       });
 
       if (filteredOrders.length === 0) {
-        alert('No orders found for the selected date range.');
+        setErrorModalTitle('No Data to Export');
+        setErrorModalMessage('No orders were found for the selected date range. Please adjust the dates and try again.');
+        setShowErrorModal(true);
         return;
       }
+      // Client-side PDF generation (HTML → Print to PDF), modeled after mobile invoice style
+      const startDate = exportDateRange.startDate.toISOString().slice(0, 10);
+      const endDate = exportDateRange.endDate.toISOString().slice(0, 10);
 
-      const startDate = exportDateRange.startDate.toISOString();
-      const endDate = exportDateRange.endDate.toISOString();
-      
-      const blob = await orderService.exportOrdersPDF(startDate, endDate, activeTab);
-      
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `orders-${activeTab}-${startDate.split('T')[0]}-to-${endDate.split('T')[0]}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      alert('PDF exported successfully!');
+      // Totals by currency
+      const currencyTotals = filteredOrders.reduce((acc: Record<string, number>, o) => {
+        const cur = (o as any).currencyCode || 'USD';
+        acc[cur] = (acc[cur] || 0) + computeOrderTotal(o);
+        return acc;
+      }, {} as Record<string, number>);
+
+      const htmlHead = `
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>SNAP • Orders Report (${startDate} to ${endDate})</title>
+          <style>
+            body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color: #111827; margin: 24px; }
+            .header { text-align:center; margin-bottom: 24px; }
+            .brand { font-size: 28px; letter-spacing: 1.5px; font-weight: 800; color:#2563EB; }
+            .report-title { font-size: 16px; font-weight: 700; margin-top: 4px; }
+            .sub { color:#6B7280; font-size: 12px; margin-top: 2px; }
+            .section { margin-bottom: 16px; }
+            .card { border:1px solid #E5E7EB; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+            .row { display:flex; justify-content:space-between; align-items:center; }
+            .muted { color:#6B7280; font-size:12px; }
+            .order-no { font-weight:600; }
+            table { width:100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { text-align:left; padding:8px; border-bottom:1px solid #F3F4F6; font-size: 12px; }
+            th { background:#F9FAFB; font-weight:600; }
+            .totals { margin-top: 8px; display:flex; justify-content:flex-end; gap:16px; font-size: 13px; }
+            .summary { border:1px solid #E5E7EB; border-radius:12px; padding:16px; margin-bottom: 18px; background:#F9FAFB; }
+            .summary-row { display:flex; gap:12px; flex-wrap: wrap; }
+            .kpi { flex:1 1 180px; background:#FFFFFF; border:1px solid #E5E7EB; border-radius:10px; padding:12px; text-align:center; }
+            .kpi-label { font-size: 11px; color:#6B7280; }
+            .kpi-value { font-size: 18px; font-weight: 800; margin-top: 2px; }
+            .footer { margin-top: 24px; text-align:right; font-weight:700; }
+            .badge { display:inline-flex; align-items:center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; border:1px solid #E5E7EB; }
+          </style>
+        </head>`;
+
+      const ordersHtml = filteredOrders.map((order) => {
+        const itemsRows = (order.items || []).map((item) => {
+          const unit = formatPrice(item.unitPrice as any, order.currencyCode);
+          const total = formatPrice(item.totalPrice as any, order.currencyCode);
+          const title = item.product?.title || 'Product';
+          const qty = Number(item.quantity) || 0;
+          return `<tr><td>${title}</td><td class="muted">${qty}</td><td>${unit}</td><td>${total}</td></tr>`;
+        }).join('');
+
+        const orderTotalAmount = computeOrderTotal(order);
+        // Update currency totals (ensuring numeric)
+        const ccy = (order as any).currencyCode || 'USD';
+        currencyTotals[ccy] = (currencyTotals[ccy] || 0) + Number(orderTotalAmount || 0);
+        const orderTotal = formatPrice(orderTotalAmount, order.currencyCode);
+        const created = formatDate(order.createdAt);
+        const customer = (order as any).customer?.name ? ` • Customer: ${(order as any).customer?.name}` : '';
+        const payment = order.paymentStatus ? `<span class="badge">Payment: ${order.paymentStatus}</span>` : '';
+
+        return `
+          <div class="card">
+            <div class="row">
+              <div>
+                <div class="order-no">#${order.orderNumber}</div>
+                <div class="muted">${created}${customer}</div>
+              </div>
+              <div>${payment}</div>
+            </div>
+            <table>
+              <thead>
+                <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
+              </thead>
+              <tbody>
+                ${itemsRows || '<tr><td colspan="4" class="muted">No items</td></tr>'}
+              </tbody>
+            </table>
+            <div class="totals"><div>Total:</div><div>${orderTotal}</div></div>
+          </div>
+        `;
+      }).join('');
+
+      const html = `<!DOCTYPE html><html>${htmlHead}<body>
+        <div class="header">
+          <div class="brand">SNAP</div>
+          <div class="report-title">Orders Report</div>
+          <div class="sub">${startDate} to ${endDate} • ${activeTab.replace('-', ' ')}</div>
+        </div>
+
+        <div class="summary">
+          <div class="summary-row">
+            <div class="kpi">
+              <div class="kpi-label">Orders</div>
+              <div class="kpi-value">${filteredOrders.length}</div>
+            </div>
+            ${Object.entries(currencyTotals).map(([ccy, total]) => {
+              try {
+                const formatted = new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy }).format(Number(total) || 0);
+                return `<div class=\"kpi\"><div class=\"kpi-label\">Total (${ccy})</div><div class=\"kpi-value\">${formatted}</div></div>`;
+              } catch (e) {
+                const fallback = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(total) || 0);
+                return `<div class=\"kpi\"><div class=\"kpi-label\">Total (${ccy})</div><div class=\"kpi-value\">${fallback}</div></div>`;
+              }
+            }).join('')}
+          </div>
+          <div class="muted" style="text-align:center; margin-top:8px;">Range: ${startDate} → ${endDate}</div>
+        </div>
+
+        ${ordersHtml}
+
+        <div class="footer">Generated by SNAP</div>
+      </body></html>`;
+
+      const win = window.open('', '_blank');
+      if (!win) {
+        setErrorModalTitle('Popup Blocked');
+        setErrorModalMessage('Please allow popups for this site to export the PDF.');
+        setShowErrorModal(true);
+        return;
+      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      // Give the browser a moment to render before printing
+      setTimeout(() => win.print(), 300);
     } catch (error: any) {
       console.error('Export error:', error);
-      alert('Failed to generate PDF. Please try again.');
+      setErrorModalTitle('Export Failed');
+      setErrorModalMessage(
+        error?.response?.status === 404
+          ? 'The export service was not found on the server (404). Please ensure the backend export endpoint is available.'
+          : 'We could not generate the PDF at this time. Please try again later.'
+      );
+      setShowErrorModal(true);
     } finally {
       setExporting(false);
     }
@@ -370,7 +490,11 @@ export function Orders() {
             
             <div className="flex items-center space-x-3">
               <button
-                onClick={() => setShowDatePicker(true)}
+                onClick={() => {
+                  setTempStart(exportDateRange.startDate.toISOString().slice(0, 10));
+                  setTempEnd(exportDateRange.endDate.toISOString().slice(0, 10));
+                  setShowDatePicker(true);
+                }}
                 className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
                 disabled={exporting}
               >
@@ -445,6 +569,84 @@ export function Orders() {
             Export Range: {exportDateRange.startDate.toLocaleDateString()} - {exportDateRange.endDate.toLocaleDateString()}
           </p>
         </div>
+
+        {/* Error Modal */}
+        {showErrorModal && (
+          <div className="fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowErrorModal(false)} />
+            <div className="absolute inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 top-28 md:w-[520px] bg-white rounded-xl shadow-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">{errorModalTitle || 'Error'}</h3>
+              </div>
+              <div className="px-6 py-5">
+                <p className="text-sm text-gray-700">{errorModalMessage}</p>
+              </div>
+              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end">
+                <button
+                  onClick={() => setShowErrorModal(false)}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {/* Date Range Modal */}
+      {showDatePicker && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowDatePicker(false)} />
+          <div className="absolute inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 top-24 md:w-[520px] bg-white rounded-xl shadow-lg">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Select Date Range</h3>
+              <button onClick={() => setShowDatePicker(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={tempStart}
+                    onChange={(e) => setTempStart(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={tempEnd}
+                    onChange={(e) => setTempEnd(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">PDF will include orders within the selected range only.</p>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowDatePicker(false)}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const start = tempStart ? new Date(tempStart) : exportDateRange.startDate;
+                  const end = tempEnd ? new Date(tempEnd) : exportDateRange.endDate;
+                  setExportDateRange({ startDate: start, endDate: end });
+                  setShowDatePicker(false);
+                }}
+                className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* Orders List */}
         {error ? (

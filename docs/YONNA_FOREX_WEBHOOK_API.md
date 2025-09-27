@@ -54,7 +54,7 @@ const header = `sha256=${signature}`;
 
 ```json
 {
-  "transactionId": "YF_1234567890_ABC123",
+  "appTransactionId": "APP_1234567890_ABC123",
   "status": "success",
   "amount": 100.00,
   "currency": "GMD",
@@ -69,7 +69,7 @@ const header = `sha256=${signature}`;
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `transactionId` | string | Yes | The transaction ID we provided when initiating the payment |
+| `appTransactionId` | string | Yes | The app-side transaction ID we provided when initiating the payment |
 | `status` | string | Yes | Payment status: `pending`, `completed`, `failed`, `cancelled` |
 | `amount` | number | Yes | Payment amount |
 | `currency` | string | Yes | Currency code (e.g., "GMD", "USD") |
@@ -103,7 +103,7 @@ const header = `sha256=${signature}`;
 ```json
 {
   "success": false,
-  "message": "Missing required fields: transactionId and status"
+  "message": "Missing required fields: appTransactionId and status"
 }
 ```
 
@@ -164,7 +164,7 @@ curl -X POST ${API_BASE_URL}/api/payments/yonna-forex/webhook \
   -H "Content-Type: application/json" \
   -H "X-Yonna-Signature: sha256=..." \
   -d '{
-    "transactionId": "YF_TEST_123456789",
+    "appTransactionId": "APP_TEST_123456789",
     "status": "success",
     "amount": 10.00,
     "currency": "GMD",
@@ -180,7 +180,7 @@ curl -X POST https://cloudnexus.biz/api/payments/yonna-forex/webhook \
   -H "Content-Type: application/json" \
   -H "X-Yonna-Signature: sha256=..." \
   -d '{
-    "transactionId": "YF_TEST_123456789",
+    "appTransactionId": "APP_TEST_123456789",
     "status": "success",
     "amount": 10.00,
     "currency": "GMD",
@@ -259,9 +259,9 @@ class YonnaForexWebhook {
     this.webhookSecret = webhookSecret;
   }
 
-  async sendWebhook(transactionId, status, amount, currency, phoneNumber, message = null) {
+  async sendWebhook(appTransactionId, status, amount, currency, phoneNumber, message = null) {
     const payload = {
-      transactionId,
+      appTransactionId,
       status,
       amount,
       currency,
@@ -306,7 +306,7 @@ const webhook = new YonnaForexWebhook(
 
 // Send completion notification
 await webhook.sendWebhook(
-  'YF_1234567890_ABC123',
+  'APP_1234567890_ABC123',
   'completed',
   100.00,
   'GMD',

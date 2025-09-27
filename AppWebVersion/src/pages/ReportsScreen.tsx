@@ -10,9 +10,11 @@ import {
   List, 
   Wallet, 
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react';
 import { salesRepService, type SalesRep, type ParentSellerAnalytics } from '../api/salesReps';
+import { settlementService, type AvailableRevenueResponse } from '../api/settlementService';
 
 interface Analytics {
   totalStats: {
@@ -67,6 +69,9 @@ export function ReportsScreen() {
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
+  const [showSalesModal, setShowSalesModal] = useState(false);
+  const [availableRevenue, setAvailableRevenue] = useState<AvailableRevenueResponse | null>(null);
+  const [availableLoading, setAvailableLoading] = useState(false);
 
   useEffect(() => {
     loadAnalytics();
@@ -121,23 +126,23 @@ export function ReportsScreen() {
 
   const handleViewDetailedReport = (reportType: string) => {
     if (reportType === 'Activity') {
-      // Navigate to orders page for now (can be enhanced later)
-      navigate('/orders');
+      navigate('/recent-activity');
       return;
     }
     if (reportType === 'Sales') {
-      // Navigate to settlement history for sales data
-      navigate('/settlement-history');
+      setShowSalesModal(true);
+      // Load available revenue for settlement view
+      void loadAvailableRevenue();
       return;
     }
     if (reportType === 'Orders') {
-      // Navigate to orders page
-      navigate('/orders');
+      // Navigate to Rep Orders Report
+      navigate('/rep-order-report');
       return;
     }
     if (reportType === 'Products') {
-      // Navigate to products page
-      navigate('/products');
+      // Navigate to Rep Products Report
+      navigate('/rep-product-report');
       return;
     }
     if (reportType === 'Settlement') {
@@ -180,10 +185,23 @@ export function ReportsScreen() {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const loadAvailableRevenue = async () => {
+    try {
+      setAvailableLoading(true);
+      const res = await settlementService.getAvailableRevenue();
+      setAvailableRevenue(res);
+    } catch (error) {
+      console.error('Failed to load available revenue', error);
+      setAvailableRevenue(null);
+    } finally {
+      setAvailableLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 py-6">
+        <div className="max-w-4xl mx-auto px-4 py-6 pb-20">
           <div className="flex items-center justify-center min-h-96">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -196,8 +214,9 @@ export function ReportsScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="relative">
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between">
@@ -295,7 +314,7 @@ export function ReportsScreen() {
             >
               <BarChart3 className="w-8 h-8 text-blue-600 mx-auto mb-2" />
               <h4 className="font-semibold text-gray-900 mb-1">Sales Report</h4>
-              <p className="text-sm text-gray-600">Detailed sales analysis</p>
+              <p className="text-sm text-gray-600">Settlement availability by reps</p>
             </button>
 
             <button
@@ -328,7 +347,7 @@ export function ReportsScreen() {
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="bg-white rounded-xl shadow-sm p-6 pb-20">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
             <button
@@ -370,6 +389,80 @@ export function ReportsScreen() {
           </div>
         </div>
       </div>
+      </div>
+
+      {showSalesModal && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowSalesModal(false)}></div>
+          <div className="absolute inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 top-16 md:top-24 md:w-[640px] bg-white rounded-xl shadow-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Sales Report</h3>
+              <button onClick={() => setShowSalesModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-6 max-h-[70vh] overflow-auto">
+              {/* Parent seller available revenue */}
+              <div>
+                <div className="text-sm font-semibold text-gray-900 mb-2">Available for Settlement</div>
+                {availableLoading ? (
+                  <div className="text-sm text-gray-500">Loading...</div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2">
+                    {(availableRevenue?.parentRevenue?.revenues || []).map((rev) => (
+                      <div key={`parent-${rev.currency}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                        <div className="text-sm text-gray-700">Parent Seller • {rev.currency}</div>
+                        <div className="text-sm font-semibold text-gray-900">{formatCurrency(rev.amount, rev.currency)}</div>
+                      </div>
+                    ))}
+                    {!availableRevenue?.parentRevenue?.revenues?.length && (
+                      <div className="text-sm text-gray-500">No available revenue for settlement.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Sales reps available revenue */}
+              <div>
+                <div className="text-sm font-semibold text-gray-900 mb-2">Sales Reps</div>
+                {availableLoading ? (
+                  <div className="text-sm text-gray-500">Loading...</div>
+                ) : (
+                  <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg">
+                    {(availableRevenue?.salesRepRevenue?.salesReps || []).length ? (
+                      availableRevenue!.salesRepRevenue!.salesReps.map((rep) => (
+                        <div key={rep.salesRepId} className="p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium text-gray-900">{rep.name}</div>
+                          </div>
+                          <div className="mt-2 grid grid-cols-1 gap-2">
+                            {rep.revenues.map((rev) => (
+                              <div key={`${rep.salesRepId}-${rev.currency}`} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                                <div className="text-xs text-gray-600">{rev.currency}</div>
+                                <div className="text-sm font-semibold text-gray-900">{formatCurrency(rev.amount, rev.currency)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-4 text-sm text-gray-500">No sales representative revenue available.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-end">
+              <button
+                onClick={() => setShowSalesModal(false)}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

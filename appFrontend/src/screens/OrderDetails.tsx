@@ -98,6 +98,9 @@ export function OrderDetails() {
   const route = useRoute();
   const { orderId } = route.params as { orderId: string };
   
+  console.log('OrderDetails route params:', route.params);
+  console.log('OrderDetails orderId:', orderId);
+  
   const { user, token, refreshUser } = useAuth();
   const [freshUser, setFreshUser] = useState<any>(null);
   
@@ -602,6 +605,7 @@ export function OrderDetails() {
   }, [paymentMethods, selectedPaymentMethod]);
 
   useEffect(() => {
+    console.log('OrderDetails useEffect triggered with orderId:', orderId);
     loadOrderDetails();
   }, [orderId]);
 
@@ -662,6 +666,7 @@ export function OrderDetails() {
       setLoading(true);
       setError(null);
       
+      console.log('Loading order details for orderId:', orderId);
       const response = await api.get(`/api/orders/${orderId}`);
       const orderData = response.data;
       
@@ -681,8 +686,14 @@ export function OrderDetails() {
 
       // Check for existing external transactions
       await checkExistingTransactions();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading order details:', error);
+      console.error('API Error details:', {
+        orderId,
+        status: error.response?.status,
+        message: error.response?.data?.message,
+        url: error.config?.url
+      });
       setError('Failed to load order details');
     } finally {
       setLoading(false);
@@ -2959,7 +2970,8 @@ export function OrderDetails() {
         visible={showYonnaPayment}
         amount={order?.totalAmount || 0}
         currency={order?.currencyCode}
-        orderId={order?.orderNumber}
+        orderId={order?.id}
+        orderNumber={order?.orderNumber}
         onPaymentSuccess={async (transactionId: string) => {
           setShowYonnaPayment(false);
           await loadOrderDetails();
@@ -2973,6 +2985,7 @@ export function OrderDetails() {
           Alert.alert('Payment Error', errorMsg || 'Payment failed. Please try again.');
         }}
         onClose={() => setShowYonnaPayment(false)}
+        onRefreshOrder={loadOrderDetails}
       />
     </SafeAreaView>
   );

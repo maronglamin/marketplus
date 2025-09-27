@@ -12,10 +12,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  AppState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import YonnaForexPaymentService, { SupportedCurrency } from '../services/YonnaForexPaymentService';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,6 +30,9 @@ interface YonnaPaymentModalProps {
   onPaymentSuccess: (transactionId: string) => void;
   onPaymentError: (error: string) => void;
   onClose: () => void;
+  orderNumber?: string; // Add order number for navigation
+  onRefreshOrder?: () => void; // Add refresh callback
+  transactionType?: 'order' | 'rental' | 'ride'; // Add transaction type to distinguish between orders, rentals, and rides
 }
 
 const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
@@ -37,19 +43,25 @@ const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
   onPaymentSuccess,
   onPaymentError,
   onClose,
+  orderNumber,
+  onRefreshOrder,
+  transactionType = 'order',
 }) => {
   const { user } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const [currencies, setCurrencies] = useState<SupportedCurrency[]>([]);
   const [selectedCurrency, setSelectedCurrency] = useState('GMD'); // Fixed to GMD only
   const [userPhoneNumber, setUserPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingCurrencies, setIsLoadingCurrencies] = useState(true);
   const [currentStep, setCurrentStep] = useState<'form' | 'summary' | 'processing'>('form');
+  const [hasRedirectedToYonna, setHasRedirectedToYonna] = useState(false);
 
   const paymentService = new YonnaForexPaymentService();
   const normalizedAmount = Number(amount) || 0;
 
   useEffect(() => {
+    console.log('🎯 YonnaPaymentModal useEffect triggered:', { visible, currency, orderId, transactionType });
     if (visible) {
       // Use the real currency from the order
       const orderCurrency = currency || 'GMD';
@@ -57,10 +69,55 @@ const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
       loadCurrencies();
       loadUserPhoneNumber();
       setCurrentStep('form');
+      setHasRedirectedToYonna(false);
       
       console.log('Yonna Payment Modal opened with currency:', orderCurrency);
     }
   }, [visible, user, currency]);
+
+  // Listen for app state changes to detect when user returns from Yonna app
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: string) => {
+      if (nextAppState === 'active' && hasRedirectedToYonna && visible) {
+        // User returned to app after being redirected to Yonna
+        console.log('User returned to app from Yonna redirect');
+        
+        // Refresh order/rental details to get latest status
+        if (onRefreshOrder) {
+          console.log('Refreshing order/rental details...');
+          onRefreshOrder();
+        }
+        
+        // Navigate based on transaction type
+        if (orderId) {
+          if (transactionType === 'rental') {
+            console.log('Navigating to RentalRequest screen for rental payment');
+            setTimeout(() => {
+              navigation.navigate('RentalRequest');
+              onClose(); // Close the modal
+            }, 500); // Small delay to ensure smooth navigation
+          } else if (transactionType === 'ride') {
+            console.log('Navigating to CustomerRides screen for ride payment');
+            setTimeout(() => {
+              navigation.navigate('CustomerRides');
+              onClose(); // Close the modal
+            }, 500); // Small delay to ensure smooth navigation
+          } else {
+            console.log('Navigating to OrderDetails with orderId:', orderId);
+            setTimeout(() => {
+              navigation.navigate('OrderDetails', { orderId: orderId });
+              onClose(); // Close the modal
+            }, 500); // Small delay to ensure smooth navigation
+          }
+        } else {
+          console.warn('No orderId available for navigation');
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
+  }, [hasRedirectedToYonna, visible, orderId, navigation, onClose, onRefreshOrder]);
 
   const loadUserPhoneNumber = () => {
     if (user?.phoneNumber) {
@@ -151,7 +208,50 @@ const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
       const result = await paymentService.processPayment(paymentRequest);
 
       if (result.success) {
-        onPaymentSuccess(result.data?.transactionId || '');
+        // If the backend provides a paymentUrl/deeplink, open Yonna app immediately
+        const deeplink = result.data?.paymentUrl;
+        if (deeplink) {
+          try {
+            const { Linking, Platform } = require('react-native');
+            console.log('Opening Yonna app with deeplink:', deeplink);
+            
+            // First check if Yonna app is installed
+            const yonnaScheme = 'yonna://';
+            const canOpenYonna = await Linking.canOpenURL(yonnaScheme);
+            
+            if (canOpenYonna) {
+              // Yonna app is installed, open the web URL which should redirect to the app
+              setHasRedirectedToYonna(true);
+              await Linking.openURL(deeplink);
+            } else {
+              // Yonna app not installed, redirect to store
+              const storeUrl = Platform.OS === 'ios' 
+                ? 'https://apps.apple.com/us/app/yonna-wallet/id6459883610'
+                : 'https://play.google.com/store/apps/details?id=com.yonnaforex.android';
+              
+              console.log('Yonna app not installed, redirecting to store:', storeUrl);
+              setHasRedirectedToYonna(true);
+              await Linking.openURL(storeUrl);
+            }
+            
+          } catch (e) {
+            console.warn('Failed to open Yonna deeplink, trying app store:', e);
+            // If everything fails, try app store
+            try {
+              const { Linking, Platform } = require('react-native');
+              const storeUrl = Platform.OS === 'ios' 
+                ? 'https://apps.apple.com/us/app/yonna-wallet/id6459883610'
+                : 'https://play.google.com/store/apps/details?id=com.yonnaforex.android';
+              await Linking.openURL(storeUrl);
+            } catch (storeError) {
+              console.error('Failed to open app store:', storeError);
+            }
+          }
+        }
+
+        // Don't call onPaymentSuccess immediately - let the user complete payment in Yonna app first
+        // The payment will be completed via webhook when user finishes in Yonna app
+        // onPaymentSuccess(result.data?.transactionId || '');
       } else {
         onPaymentError(result.message || 'Payment failed');
       }
@@ -191,7 +291,7 @@ const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
       <View style={styles.inputGroup}>
         <Text style={styles.label}>Description</Text>
         <Text style={styles.descriptionDisplay}>
-          Payment for Order #{orderId} via Yonna Forex Wallet
+          Payment for {transactionType === 'rental' ? 'Rental' : transactionType === 'ride' ? 'Ride' : 'Order'} #{orderId} via Yonna Forex Wallet
         </Text>
       </View>
 
@@ -199,10 +299,10 @@ const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
       {selectedCurrency !== 'GMD' ? (
         <View style={styles.currencyWarning}>
           <Ionicons name="warning" size={20} color="#F59E0B" />
-          <Text style={styles.currencyWarningText}>
-            Note: Yonna Forex Wallet typically supports GMD currency. 
-            Your order is in {selectedCurrency}. Payment will be processed, but please verify with support if needed.
-          </Text>
+        <Text style={styles.currencyWarningText}>
+          Note: Yonna Forex Wallet typically supports GMD currency. 
+          Your {transactionType === 'rental' ? 'rental' : transactionType === 'ride' ? 'ride' : 'order'} is in {selectedCurrency}. Payment not will be processed, but please verify with customer service if needed.
+        </Text>
         </View>
       ) : (
         <View style={styles.currencyNotice}>
@@ -269,7 +369,7 @@ const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
           
           <View style={[styles.summaryItem, styles.descriptionItem]}>
             <Text style={styles.summaryLabel}>Description</Text>
-            <Text style={[styles.summaryValue, styles.descriptionText]}>Payment for Order #{orderId} via Yonna Forex Wallet</Text>
+            <Text style={[styles.summaryValue, styles.descriptionText]}>Payment for {transactionType === 'rental' ? 'Rental' : transactionType === 'ride' ? 'Ride' : 'Order'} #{orderId} via Yonna Forex Wallet</Text>
           </View>
 
         </View>
@@ -326,6 +426,8 @@ const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
     </View>
   );
 
+  console.log('🎯 YonnaPaymentModal render:', { visible, amount, currency, orderId, transactionType });
+  
   return (
     <Modal
       visible={visible}

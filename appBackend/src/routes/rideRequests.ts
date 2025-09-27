@@ -236,11 +236,38 @@ router.post('/:requestId/process-payment', async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Missing required fields: paymentIntentId, paymentMethod, amount' });
     }
 
-    // Get the ride request
+    // Get the ride request first
     const rideRequest = await RideRequestService.getRideRequestByRequestId(requestId);
     if (!rideRequest) {
       console.error('Ride request not found:', requestId);
       return res.status(404).json({ error: 'Ride request not found' });
+    }
+
+    // Check if this is a Yonna payment
+    const isYonnaPayment = paymentMethod === 'YONNA_FOREX' || paymentMethod === 'yonna-forex';
+
+    // Handle Yonna payment
+    if (isYonnaPayment) {
+      console.log('💰 Processing Yonna payment for ride request:', requestId);
+      
+      // For Yonna payments, we need to process through the Yonna Forex service
+      const YonnaForexPaymentController = require('../controllers/YonnaForexPaymentController');
+      const yonnaController = new YonnaForexPaymentController();
+      
+      // Create a mock request object for Yonna controller
+      const yonnaReq = {
+        ...req,
+        body: {
+          amount: amount,
+          currency: rideRequest.currency || 'GMD',
+          description: `Ride payment for ${requestId}`,
+          transactionId: `RIDE-${requestId}-${Date.now()}`,
+          orderId: requestId // Pass requestId as orderId for Yonna controller
+        }
+      };
+
+      // Process through Yonna
+      return yonnaController.processPayment(yonnaReq, res);
     }
 
     console.log('Found ride request:', {

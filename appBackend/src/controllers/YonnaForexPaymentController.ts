@@ -70,49 +70,104 @@ export class YonnaForexPaymentController {
       // Use the full phone number as stored in the database
       const phoneNumber = user.phoneNumber;
 
-      // Get order details if orderId is provided
-      let sellerId = userId; // Default to customer if no order
-      let actualOrderId = null; // Store the actual order UUID
+      // Get order, rental, or ride request details if orderId is provided
+      let sellerId = userId; // Default to customer if no order/rental/ride
+      let actualOrderId = null; // Store the actual order/rental/ride UUID
+      let isRental = false;
+      let isRide = false;
+      
       if (orderId) {
-        // Try to find order by ID (UUID) first, then by orderNumber
-        let order = await prisma.orders.findUnique({
+        // First try to find as rental request
+        let rental = await prisma.rentalRequest.findUnique({
           where: { id: orderId },
-          select: { 
-            id: true,
-            sellerId: true,
-            userId: true 
+          include: {
+            driver: { 
+              include: { 
+                user: { select: { id: true } } 
+              } 
+            }
           }
         });
         
-        // If not found by ID, try by orderNumber
-        if (!order) {
-          order = await prisma.orders.findUnique({
-            where: { orderNumber: orderId },
-            select: { 
-              id: true,
-              sellerId: true,
-              userId: true 
-            }
-          });
-        }
-        
-        if (order) {
-          sellerId = order.sellerId;
-          actualOrderId = order.id; // Store the actual order UUID
+        if (rental) {
+          isRental = true;
+          sellerId = rental.driver?.user?.id || rental.driver?.userId || '';
+          actualOrderId = rental.id;
           // Verify the customer matches the authenticated user
-          if (order.userId !== userId) {
+          if (rental.customerId !== userId) {
             res.status(403).json({
               success: false,
-              message: 'You are not authorized to pay for this order'
+              message: 'You are not authorized to pay for this rental'
             });
             return;
           }
         } else {
-          res.status(404).json({
-            success: false,
-            message: 'Order not found'
+          // Try to find as ride request
+          let rideRequest = await prisma.rideRequest.findUnique({
+            where: { requestId: orderId },
+            include: {
+              driver: { 
+                include: { 
+                  user: { select: { id: true } } 
+                } 
+              }
+            }
           });
-          return;
+          
+          if (rideRequest) {
+            isRide = true;
+            sellerId = rideRequest.driver?.user?.id || rideRequest.driver?.userId || '';
+            actualOrderId = rideRequest.id;
+            // Verify the customer matches the authenticated user
+            if (rideRequest.customerId !== userId) {
+              res.status(403).json({
+                success: false,
+                message: 'You are not authorized to pay for this ride'
+              });
+              return;
+            }
+          } else {
+            // Try to find as order by ID (UUID) first, then by orderNumber
+            let order = await prisma.orders.findUnique({
+              where: { id: orderId },
+              select: { 
+                id: true,
+                sellerId: true,
+                userId: true 
+              }
+            });
+            
+            // If not found by ID, try by orderNumber
+            if (!order) {
+              order = await prisma.orders.findUnique({
+                where: { orderNumber: orderId },
+                select: { 
+                  id: true,
+                  sellerId: true,
+                  userId: true 
+                }
+              });
+            }
+            
+            if (order) {
+              sellerId = order.sellerId;
+              actualOrderId = order.id; // Store the actual order UUID
+              // Verify the customer matches the authenticated user
+              if (order.userId !== userId) {
+                res.status(403).json({
+                  success: false,
+                  message: 'You are not authorized to pay for this order'
+                });
+                return;
+              }
+            } else {
+              res.status(404).json({
+                success: false,
+                message: 'Order, rental, or ride request not found'
+              });
+              return;
+            }
+          }
         }
       }
 
@@ -151,7 +206,11 @@ export class YonnaForexPaymentController {
         fee: 0, // Constant fee of 0 as per requirement
         transactionId: finalTransactionId,
         countryCode: '+220', // Default country code for Yonna Forex
-        description: orderId ? `Payment for Order #${orderId} via Yonna Forex Wallet` : `Payment via Yonna Forex Wallet`
+        description: orderId ? 
+          (isRental ? `Payment for Rental #${orderId} via Yonna Forex Wallet` : 
+           isRide ? `Payment for Ride #${orderId} via Yonna Forex Wallet` :
+           `Payment for Order #${orderId} via Yonna Forex Wallet`) : 
+          `Payment via Yonna Forex Wallet`
       };
 
       const result = await this.paymentService.processPayment(paymentRequest);
@@ -159,51 +218,74 @@ export class YonnaForexPaymentController {
       if (result.success) {
         // Create external transaction record for tracking
         try {
-          await prisma.externalTransaction.create({
-            data: {
-              appTransactionId: appTransactionId,
-              orderId: actualOrderId,
-              gatewayTransactionId: finalTransactionId,
-              gatewayProvider: 'yonna_forex',
-              amount: originalAmount,
-              currencyCode: currencyCode,
-              status: 'PENDING',
-              paidThroughGateway: true,
-              customerId: userId,
-              sellerId: sellerId,
-              gatewayResponse: {
-                yonnaTransactionId: finalTransactionId,
-                phoneNumber: phoneNumber,
-                description: description,
-                serviceFeeAmount: serviceFeeAmount,
-                serviceFeePercentage: serviceFeePercentage,
-                serviceFeeConfig: serviceFeeConfig?.name || 'service_fee_yonna_wallet'
-              }
+          // Create external transaction record
+          const transactionData: any = {
+            appTransactionId: appTransactionId,
+            gatewayTransactionId: finalTransactionId,
+            gatewayProvider: 'yonna_forex',
+            appService: isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
+            amount: originalAmount,
+            currencyCode: currencyCode,
+            status: 'PENDING',
+            paidThroughGateway: true,
+            customerId: userId,
+            sellerId: sellerId,
+            gatewayResponse: {
+              yonnaTransactionId: finalTransactionId,
+              phoneNumber: phoneNumber,
+              description: description,
+              serviceFeeAmount: serviceFeeAmount,
+              serviceFeePercentage: serviceFeePercentage,
+              serviceFeeConfig: serviceFeeConfig?.name || 'service_fee_yonna_wallet'
             }
+          };
+
+          // Add order, rental, or ride reference
+          if (isRental) {
+            transactionData.rentalRequestId = actualOrderId;
+          } else if (isRide) {
+            transactionData.rideRequestId = actualOrderId;
+          } else {
+            transactionData.orderId = actualOrderId;
+          }
+
+          await prisma.externalTransaction.create({
+            data: transactionData
           });
 
           // Create service fee transaction if applicable
           if (serviceFeeAmount > 0) {
             const serviceFeeTransactionId = `SVC_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-            await prisma.externalTransaction.create({
-              data: {
-                appTransactionId: serviceFeeTransactionId,
-                orderId: actualOrderId,
-                gatewayTransactionId: `${finalTransactionId}`,
-                gatewayProvider: 'yonna_forex',
-                amount: serviceFeeAmount,
-                currencyCode: currencyCode,
-                status: 'PENDING',
-                transactionType: 'SERVICE_FEE',
-                customerId: userId,
-                sellerId: sellerId,
-                gatewayResponse: {
-                  parentTransactionId: finalTransactionId,
-                  serviceFeePercentage: serviceFeePercentage,
-                  serviceFeeConfig: serviceFeeConfig?.name || 'service_fee_yonna_wallet',
-                  description: `Service fee for Yonna Forex payment ${finalTransactionId}`
-                }
+            const serviceFeeData: any = {
+              appTransactionId: serviceFeeTransactionId,
+              gatewayTransactionId: `${finalTransactionId}`,
+              gatewayProvider: 'yonna_forex',
+              appService: isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
+              amount: serviceFeeAmount,
+              currencyCode: currencyCode,
+              status: 'PENDING',
+              transactionType: 'SERVICE_FEE',
+              customerId: userId,
+              sellerId: sellerId,
+              gatewayResponse: {
+                parentTransactionId: finalTransactionId,
+                serviceFeePercentage: serviceFeePercentage,
+                serviceFeeConfig: serviceFeeConfig?.name || 'service_fee_yonna_wallet',
+                description: `Service fee for Yonna Forex payment ${finalTransactionId}`
               }
+            };
+
+            // Add order, rental, or ride reference
+            if (isRental) {
+              serviceFeeData.rentalRequestId = actualOrderId;
+            } else if (isRide) {
+              serviceFeeData.rideRequestId = actualOrderId;
+            } else {
+              serviceFeeData.orderId = actualOrderId;
+            }
+
+            await prisma.externalTransaction.create({
+              data: serviceFeeData
             });
           }
 
@@ -228,6 +310,10 @@ export class YonnaForexPaymentController {
             appTransactionId: appTransactionId,
             status: result.status,
             message: result.message,
+            // If the provider returned an HTML QR page, include it for the web client to render
+            ...(result as any).paymentHtml ? { paymentHtml: (result as any).paymentHtml } : {},
+            // If the provider returned a deeplink URL, include it for mobile app redirect
+            ...(result as any).paymentUrl ? { paymentUrl: (result as any).paymentUrl } : {},
             amount: originalAmount,
             currency: currencyCode,
             serviceFee: {
