@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 // Centralized environment configuration
 export const ENV_CONFIG = {
   // API Configuration
-  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.137.33:3000',
+  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.137.196:3000',
   API_TIMEOUT: 30000,
   
   // Local IP for development (used for diagnostics only)

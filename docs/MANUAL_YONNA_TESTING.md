@@ -15,14 +15,14 @@ This is the simplest way to test your Yonna Forex API using just your browser an
 ### Test 1: Check if Backend is Running
 Open your browser and go to:
 ```
-http://192.168.137.33:3000/api/health
+http://192.168.137.196:3000/api/health
 ```
 **Expected**: You should see `{"status":"ok",...}`
 
 ### Test 2: Test Currencies (No Auth Required)
 Go to:
 ```
-http://192.168.137.33:3000/api/payments/yonna-forex/currencies
+http://192.168.137.196:3000/api/payments/yonna-forex/currencies
 ```
 **Expected**: You should see currency data or an error message
 
@@ -30,7 +30,7 @@ http://192.168.137.33:3000/api/payments/yonna-forex/currencies
 
 ### Get a Token (Replace with your phone number and PIN)
 ```bash
-curl -X POST http://192.168.137.33:3000/api/auth/login-web \
+curl -X POST http://192.168.137.196:3000/api/auth/login-web \
   -H "Content-Type: application/json" \
   -d '{"phoneNumber": "+2207690103", "pin": "1234"}'
 ```
@@ -39,13 +39,13 @@ curl -X POST http://192.168.137.33:3000/api/auth/login-web \
 
 ### Test Currencies (Replace YOUR_TOKEN)
 ```bash
-curl -X GET http://192.168.137.33:3000/api/payments/yonna-forex/currencies \
+curl -X GET http://192.168.137.196:3000/api/payments/yonna-forex/currencies \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ### Test Payment (Replace YOUR_TOKEN)
 ```bash
-curl -X POST http://192.168.137.33:3000/api/payments/yonna-forex/process \
+curl -X POST http://192.168.137.196:3000/api/payments/yonna-forex/process \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -80,16 +80,16 @@ While running the tests, watch your backend terminal for:
 ### "Network error" or "Connection refused"
 - Backend is not running
 - Wrong IP address
-- Check: `curl http://192.168.137.33:3000/api/health`
+- Check: `curl http://192.168.137.196:3000/api/health`
 
 ## Quick Health Check Commands
 
 ```bash
 # Check if backend is running
-curl http://192.168.137.33:3000/api/health
+curl http://192.168.137.196:3000/api/health
 
 # Check if Yonna endpoints exist
-curl http://192.168.137.33:3000/api/payments/yonna-forex/currencies
+curl http://192.168.137.196:3000/api/payments/yonna-forex/currencies
 
 # Check your IP address
 ifconfig | grep "inet " | grep -v 127.0.0.1

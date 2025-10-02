@@ -3,7 +3,7 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'SNAP',
-  slug: 'snap',
+  slug: 'marketplace',
   version: '1.0.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
@@ -39,7 +39,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png'
   },
   extra: {
-    localIp: process.env.LOCAL_IP || '192.168.137.33',
+    localIp: process.env.LOCAL_IP || '192.168.137.196',
     stripePublishableKey: 'pk_test_51G7XqgIFQtDBTvihaeU6FZCsQuHg1NQIkdd8CTGL0ZulPMIjQZUmFSW80gOzDpGe5UezYoqkc55WmQhpyYtZdLmk00QmAVRon0',
     googlePlacesApiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo',
     eas: {

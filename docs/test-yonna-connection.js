@@ -8,7 +8,7 @@
 
 const axios = require('axios');
 
-const API_BASE_URL = 'http://192.168.137.33:3000';
+const API_BASE_URL = 'http://192.168.137.196:3000';
 
 async function testYonnaForexAPI() {
   console.log('🔍 Testing Yonna Forex API Connection...\n');

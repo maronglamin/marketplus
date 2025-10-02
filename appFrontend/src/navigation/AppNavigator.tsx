@@ -56,6 +56,7 @@ import { CustomerRideService } from '../screens/CustomerRideService';
 import { RideTracking } from '../screens/RideTracking';
 import { TokenNotificationCard } from '../components/TokenNotificationCard';
 import { View } from 'react-native';
+import PrivacyPolicy from '../screens/PrivacyPolicy';
 import RentalRequestScreen from '../screens/RentalRequest';
 import RentalDetailScreen from '../screens/RentalDetail';
 import RentalChatScreen from '../screens/RentalChat';
@@ -256,6 +257,7 @@ export type AppStackParamList = {
       };
     };
   };
+  PrivacyPolicy: undefined;
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -346,6 +348,7 @@ export function AppNavigator() {
         <Stack.Screen name="AssetRental" component={AssetRentalScreen} />
         <Stack.Screen name="VehicleDetails" component={VehicleDetailsScreen} />
         <Stack.Screen name="RideTracking" component={RideTracking} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
       </Stack.Navigator>
     </View>
   );

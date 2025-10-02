@@ -260,7 +260,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
         <!DOCTYPE html>
         <html>
         <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
           <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo&libraries=geometry"></script>
           <style>
             body { 
@@ -294,6 +294,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               user-select: none;
             }
             .status-indicator {
+              pointer-events: none;
               position: absolute;
               top: 20px;
               left: 20px;
@@ -307,6 +308,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             }
             .driver-marker {
+              pointer-events: none;
               position: absolute;
               width: 50px;
               height: 50px;
@@ -328,6 +330,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               100% { transform: scale(1); }
             }
             .location-loading {
+              pointer-events: none;
               position: absolute;
               top: 50%;
               left: 50%;
@@ -353,6 +356,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
             let map;
             let currentMarker;
             let destinationMarker;
+            let pickupMarker;
             let routePath;
             let animatedPath;
             let animationInterval;
@@ -1380,6 +1384,9 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
         mixedContentMode="compatibility"
         originWhitelist={['*']}
         androidLayerType="hardware"
+        overScrollMode="never"
+        nestedScrollEnabled={false}
+        javaScriptCanOpenWindowsAutomatically
         scrollEnabled={false}
         bounces={false}
         showsHorizontalScrollIndicator={false}

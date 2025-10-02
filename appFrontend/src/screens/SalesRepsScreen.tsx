@@ -304,7 +304,7 @@ export function SalesRepsScreen() {
                 />
               </View>
 
-              <View style={styles.formGroup}>
+              <View style={[styles.formGroup, styles.zIndexHigh]}>
                 <Text style={styles.label}>Phone Number *</Text>
                 <View style={styles.phoneInputContainer}>
                   <View style={styles.countrySelectorContainer}>
@@ -676,6 +676,7 @@ const styles = StyleSheet.create({
   modalBody: {
     flex: 1,
     padding: 16,
+    overflow: 'visible',
   },
   formGroup: {
     marginBottom: 20,
@@ -814,11 +815,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     height: 48,
+    overflow: 'visible',
   },
   countrySelectorContainer: {
     position: 'relative',
     marginRight: 8,
     zIndex: 10000,
+    overflow: 'visible',
   },
   countrySelector: {
     flexDirection: 'row',
@@ -896,5 +899,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     minWidth: 60,
     textAlign: 'right',
+  },
+  zIndexHigh: {
+    zIndex: 10000,
+    elevation: 12,
   },
 })

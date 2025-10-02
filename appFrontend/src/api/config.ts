@@ -16,15 +16,9 @@ const getApiUrl = async (): Promise<string> => {
   await AsyncStorage.removeItem('apiUrl');
 
   // Handle different environments and platforms
-  let defaultUrl: string;
-  
-  if (__DEV__) {
-    // Development environment - use centralized config
-    defaultUrl = `${ENV_CONFIG.API_BASE_URL}/api`;
-  } else {
-    // Production environment
-    defaultUrl = 'https://api.snap.com/api';
-  }
+  // Always derive from centralized config; append /api once
+  const base = (ENV_CONFIG.API_BASE_URL || '').replace(/\/$/, '');
+  const defaultUrl = `${base}/api`;
 
   console.log('Using API URL:', defaultUrl);
   cachedApiUrl = defaultUrl;
