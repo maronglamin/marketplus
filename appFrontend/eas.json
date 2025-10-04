@@ -10,11 +10,19 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "http://139.59.134.50:3000"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "http://139.59.134.50:3000"
+      },
       "android": {
         "buildType": "app-bundle",
         "credentialsSource": "local"
