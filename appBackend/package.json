@@ -9,6 +9,7 @@
     "build": "tsc || true",
     "lint": "eslint . --ext .ts",
     "test": "jest",
+    "seed:locations": "node ./scripts/seed-locations.js",
     "check-deps": "node scripts/check-dependencies.js --check",
     "update-deps": "node scripts/check-dependencies.js --update",
     "validate-yonna-env": "node scripts/validate-yonna-env.js",
