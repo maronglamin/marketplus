@@ -65,6 +65,28 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       metadata
     } = req.body;
 
+    // Ensure we have a valid locationId; fallback to a default location record
+    let resolvedLocationId = locationId || null;
+    if (!resolvedLocationId) {
+      const defaultLocation = await prisma.location.findFirst({
+        where: { isActive: true },
+        orderBy: { createdAt: 'asc' }
+      });
+      if (defaultLocation) {
+        resolvedLocationId = defaultLocation.id;
+      } else {
+        // Create a bare minimum default location if none exists
+        const createdLocation = await prisma.location.create({
+          data: {
+            countryCode: 'GM',
+            region: 'Default',
+            city: 'Default City',
+          }
+        });
+        resolvedLocationId = createdLocation.id;
+      }
+    }
+
     // Create the product
     const product = await prisma.product.create({
       data: {
@@ -75,7 +97,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
         quantity,
         categoryId: categoryId || null, // Allow null for uncategorized products
         condition: condition as ProductCondition,
-        locationId: locationId || 'default-location',
+        locationId: resolvedLocationId,
         status: status as ProductStatus,
         sellerId: req.user.id,
         images: {
