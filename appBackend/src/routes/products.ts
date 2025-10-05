@@ -65,26 +65,23 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       metadata
     } = req.body;
 
-    // Ensure we have a valid locationId; fallback to a default location record
-    let resolvedLocationId = locationId || null;
-    if (!resolvedLocationId) {
-      const defaultLocation = await prisma.location.findFirst({
-        where: { isActive: true },
-        orderBy: { createdAt: 'asc' }
+    // Always use the first active Location (or create a default one) to avoid FK violations
+    let resolvedLocationId: string | null = null;
+    const firstLocation = await prisma.location.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'asc' }
+    });
+    if (firstLocation) {
+      resolvedLocationId = firstLocation.id;
+    } else {
+      const createdLocation = await prisma.location.create({
+        data: {
+          countryCode: 'GM',
+          region: 'Default',
+          city: 'Default City',
+        }
       });
-      if (defaultLocation) {
-        resolvedLocationId = defaultLocation.id;
-      } else {
-        // Create a bare minimum default location if none exists
-        const createdLocation = await prisma.location.create({
-          data: {
-            countryCode: 'GM',
-            region: 'Default',
-            city: 'Default City',
-          }
-        });
-        resolvedLocationId = createdLocation.id;
-      }
+      resolvedLocationId = createdLocation.id;
     }
 
     // Create the product
