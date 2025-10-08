@@ -26,6 +26,7 @@ import { PaymentGatewayModal } from './PaymentGatewayModal';
 import { StripePaymentModal } from './StripePaymentModal';
 import { paymentMethodService, PaymentMethod } from '../api/paymentMethods';
 import { PaymentGateway } from '../api/paymentService';
+import { getImageUrl } from '../config/api';
 
 interface OrderDetailsModalProps {
   order: Order | null;
@@ -79,12 +80,12 @@ export function OrderDetailsModal({
   const [selectedGateway, setSelectedGateway] = useState<PaymentGateway | null>(null);
 
   // Image URL helper function (same as Products page)
-  const getImageUrl = (image: string | null) => {
-    if (!image) return 'https://via.placeholder.com/300x300?text=No+Image';
-    if (image.startsWith('http')) return image;
-    const baseUrl = API_CONFIG.BASE_URL.replace('/api', '');
-    return `${baseUrl}${image}`;
-  };
+  // const getImageUrl = (image: string | null) => {
+  //   if (!image) return 'https://via.placeholder.com/300x300?text=No+Image';
+  //   if (image.startsWith('http')) return image;
+  //   const baseUrl = API_CONFIG.BASE_URL.replace('/api', '');
+  //   return `${baseUrl}${image}`;
+  // };
 
   useEffect(() => {
     if (order) {

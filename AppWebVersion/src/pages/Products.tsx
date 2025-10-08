@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Search, Grid, List, ShoppingCart, Heart, Star, ArrowRight } from 'lucide-react';
 import { productService, categoryService, CustomerProduct, Category } from '../api/products';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, getImageUrl } from '../config/api';
 import { useAuth } from '../contexts/AuthContext';
 
 export function Products() {
@@ -322,13 +322,6 @@ export function Products() {
     });
     
     return `${symbol}${formattedPrice}`;
-  };
-
-  const getImageUrl = (image: string | null) => {
-    if (!image) return 'https://via.placeholder.com/300x300?text=No+Image';
-    if (image.startsWith('http')) return image;
-    const baseUrl = API_CONFIG.BASE_URL.replace('/api', '');
-    return `${baseUrl}${image}`;
   };
 
   const getStockStatus = (stock: number) => {

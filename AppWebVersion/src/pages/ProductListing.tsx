@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Star, Eye, ShoppingCart, Plus, Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { getImageUrl } from '../config/api';
 
 interface Product {
   id: number;

@@ -10,7 +10,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { salesRepService } from '../api/salesReps';
-import { API_CONFIG } from '../config/api';
+import { getImageUrl } from '../config/api';
 
 interface RepProduct {
   id: string;
@@ -36,11 +36,7 @@ export function RepProductReport() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getImageUrl = (imagePath: string | null | undefined): string => {
-    if (!imagePath) return '';
-    if (imagePath.startsWith('http')) return imagePath;
-    return `${API_CONFIG.BASE_URL.replace('/api', '')}${imagePath}`;
-  };
+  // use centralized image URL helper
 
   // Group products by time
   const groupedProducts = useMemo(() => {

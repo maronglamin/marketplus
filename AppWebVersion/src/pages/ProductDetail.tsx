@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Star, Heart, ShoppingCart, Minus, Plus, Shield, Truck, ArrowLeft, RefreshCw, AlertCircle } from 'lucide-react';
 import { productService } from '../api/products';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, getImageUrl } from '../config/api';
 
 interface ProductDetail {
   id: string;
@@ -81,14 +81,6 @@ export function ProductDetail() {
     });
     
     return `${symbol}${formattedPrice}`;
-  };
-
-  const getImageUrl = (image: string) => {
-    if (!image) return 'https://via.placeholder.com/400x300?text=No+Image';
-    if (image.startsWith('http')) return image;
-    // Remove /api from BASE_URL since images are served directly from the backend
-    const baseUrl = API_CONFIG.BASE_URL.replace('/api', '');
-    return `${baseUrl}${image}`;
   };
 
   const incrementQuantity = () => {

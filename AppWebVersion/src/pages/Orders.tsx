@@ -19,7 +19,7 @@ import { orderService, type Order, type OrdersResponse } from '../api/orders';
 import { useAuth } from '../contexts/AuthContext';
 import { OrderDetailsModal } from '../components/OrderDetailsModal';
 import { getApi } from '../api/config';
-import { API_CONFIG } from '../config/api';
+import { API_CONFIG, getImageUrl } from '../config/api';
 
 type TabType = 'my-orders' | 'customer-orders';
 
@@ -51,14 +51,6 @@ export function Orders() {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [errorModalTitle, setErrorModalTitle] = useState('');
   const [errorModalMessage, setErrorModalMessage] = useState('');
-  
-  // Image URL helper function (same as Products page)
-  const getImageUrl = (image: string | null) => {
-    if (!image) return 'https://via.placeholder.com/300x300?text=No+Image';
-    if (image.startsWith('http')) return image;
-    const baseUrl = API_CONFIG.BASE_URL.replace('/api', '');
-    return `${baseUrl}${image}`;
-  };
   
   // Order details modal
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
