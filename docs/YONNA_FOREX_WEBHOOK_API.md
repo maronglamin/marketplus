@@ -176,7 +176,7 @@ curl -X POST ${API_BASE_URL}/api/payments/yonna-forex/webhook \
 
 **Using Static URL (Fallback):**
 ```bash
-curl -X POST https://cloudnexus.biz/api/payments/yonna-forex/webhook \
+curl -X POST http://api.cloudnexus.biz/api/payments/yonna-forex/webhook \
   -H "Content-Type: application/json" \
   -H "X-Yonna-Signature: sha256=..." \
   -d '{

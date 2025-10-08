@@ -32,7 +32,7 @@ console.log('==================================\n');
 
 // Test payload
 const testPayload = {
-  transactionId: 'YF_TEST_123456789',
+  appTransactionId: 'APP_TEST_123456789',
   status: 'completed',
   amount: 10.00,
   currency: 'GMD',
@@ -59,7 +59,7 @@ console.log('Signature Valid:', isValid ? '✅ YES' : '❌ NO');
 
 console.log('\nCurl Command:');
 console.log('-------------');
-console.log(`curl -X POST https://cloudnexus.biz/api/payments/yonna-forex/webhook \\`);
+console.log(`curl -X POST http://api.cloudnexus.biz/api/payments/yonna-forex/webhook \\`);
 console.log(`  -H "Content-Type: application/json" \\`);
 console.log(`  -H "X-Yonna-Signature: ${fullSignature}" \\`);
 console.log(`  -d '${payloadString}'`);

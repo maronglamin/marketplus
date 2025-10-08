@@ -89,7 +89,7 @@ interface ProductData {
   quantity: number;
   categoryId: string;
   condition: 'NEW' | 'EXCELLENT' | 'VERY_GOOD' | 'REFURBISHED';
-  locationId: string;
+  locationId?: string; // optional; backend will assign default
   status: 'ACTIVE';  // Default status for new products
   images: {
     imageUrl: string;
@@ -184,7 +184,6 @@ export function ProductConfirmation({ onSubmit, product }: ProductConfirmationPr
         quantity: product.quantity,
         categoryId: product.category || '',
         condition: product.condition as 'NEW' | 'EXCELLENT' | 'VERY_GOOD' | 'REFURBISHED',
-        locationId: product.locationId || '',
         status: 'ACTIVE',
         images: product.images.map((image: ProductImage, index: number) => ({
           imageUrl: image.uri, // We'll update this after upload

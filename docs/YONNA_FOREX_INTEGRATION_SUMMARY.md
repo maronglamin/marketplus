@@ -115,7 +115,7 @@ curl -X POST ${API_BASE_URL}/api/payments/yonna-forex/test-webhook \
 
 **Using Static URL (Fallback):**
 ```bash
-curl -X POST https://cloudnexus.biz/api/payments/yonna-forex/test-webhook \
+curl -X POST http://api.cloudnexus.biz/api/payments/yonna-forex/test-webhook \
   -H "Content-Type: application/json" \
   -H "X-Yonna-Signature: sha256=APP_WEBHOOK_SECRET_KEY" \
   -d '{
@@ -167,7 +167,7 @@ Stop retrying after 5 attempts or if we return a 4xx status code.
 For technical support or questions:
 - **Email**: tech-support@cloudnexus.biz
 - **Phone**: +220-XXX-XXXX
-- **Documentation**: https://cloudnexus.biz/docs/yonna-forex-webhook
+- **Documentation**: http://api.cloudnexus.biz/docs/yonna-forex-webhook
 
 ## Example Implementation
 

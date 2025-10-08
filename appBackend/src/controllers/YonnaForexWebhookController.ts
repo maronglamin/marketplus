@@ -50,9 +50,9 @@ export class YonnaForexWebhookController {
       }
 
       // Find the transaction in your database
-      const transaction = await this.findTransactionByYonnaId(payload.appTransactionId);
+      const located = await this.findTransactionByYonnaId(payload.appTransactionId);
       
-      if (!transaction) {
+      if (!located) {
         console.error('Transaction not found:', payload.appTransactionId);
         res.status(404).json({
           success: false,
@@ -62,10 +62,10 @@ export class YonnaForexWebhookController {
       }
 
       // Update transaction status
-      await this.updateTransactionStatus(transaction.id, payload);
+      await this.updateTransactionStatus(located, payload);
 
       // Send notification to user (if needed)
-      const userId = (transaction as any).customerId || (transaction as any).customer?.id || (transaction as any).User_orders_userIdToUser?.id;
+      const userId = located.userId || null;
       if (userId) {
         await this.notifyUser(userId, payload);
       }
@@ -112,7 +112,7 @@ export class YonnaForexWebhookController {
   /**
    * Find transaction by Yonna Forex transaction ID
    */
-  private async findTransactionByYonnaId(yonnaTransactionId: string) {
+  private async findTransactionByYonnaId(yonnaTransactionId: string): Promise<{ type: 'external' | 'order', id: string, userId?: string } | null> {
     // This assumes you have a transactions table with a yonnaTransactionId field
     // Adjust the query based on your actual database schema
     // TODO: Uncomment when prisma is properly imported
@@ -128,19 +128,36 @@ export class YonnaForexWebhookController {
     */
     
     try {
-      // Look for external transaction record first
-      const externalTransaction = await prisma.externalTransaction.findFirst({
+      // Look for external transaction record by appTransactionId first
+      const externalByApp = await prisma.externalTransaction.findFirst({
+        where: { 
+          appTransactionId: yonnaTransactionId,
+          gatewayProvider: 'yonna_forex'
+        },
+        select: {
+          id: true,
+          customerId: true
+        }
+      });
+
+      if (externalByApp) {
+        return { type: 'external', id: externalByApp.id, userId: externalByApp.customerId };
+      }
+
+      // Fallback: look by gatewayTransactionId
+      const externalByGateway = await prisma.externalTransaction.findFirst({
         where: { 
           gatewayTransactionId: yonnaTransactionId,
           gatewayProvider: 'yonna_forex'
         },
-        include: {
-          customer: true
+        select: {
+          id: true,
+          customerId: true
         }
       });
 
-      if (externalTransaction) {
-        return externalTransaction;
+      if (externalByGateway) {
+        return { type: 'external', id: externalByGateway.id, userId: externalByGateway.customerId };
       }
 
       // If not found in external transactions, look in orders table
@@ -148,12 +165,17 @@ export class YonnaForexWebhookController {
         where: { 
           paymentReference: yonnaTransactionId
         },
-        include: {
-          User_orders_userIdToUser: true
+        select: {
+          id: true,
+          userId: true
         }
       });
 
-      return orderTransaction;
+      if (orderTransaction) {
+        return { type: 'order', id: orderTransaction.id, userId: orderTransaction.userId };
+      }
+      
+      return null;
     } catch (error) {
       console.error('Error finding transaction:', error);
       return null;
@@ -163,7 +185,7 @@ export class YonnaForexWebhookController {
   /**
    * Update transaction status in database
    */
-  private async updateTransactionStatus(transactionId: string, payload: YonnaForexWebhookPayload) {
+  private async updateTransactionStatus(located: { type: 'external' | 'order', id: string }, payload: YonnaForexWebhookPayload) {
 
     // TODO: Uncomment when prisma is properly imported
     /*
@@ -184,9 +206,7 @@ export class YonnaForexWebhookController {
     
     try {
       // Check if this is an external transaction or order
-      const isExternalTransaction = transactionId.startsWith('TXN-');
-      
-      if (isExternalTransaction) {
+      if (located.type === 'external') {
         // Update external transaction status
         const externalStatusMap: { [key: string]: string } = {
           'success': 'COMPLETED',
@@ -199,12 +219,12 @@ export class YonnaForexWebhookController {
         const newStatus = externalStatusMap[payload.status] || 'PENDING';
         
         await prisma.externalTransaction.update({
-          where: { id: transactionId },
+          where: { id: located.id },
           data: {
             status: newStatus as any,
             updatedAt: new Date(),
             gatewayResponse: {
-              ...((await prisma.externalTransaction.findUnique({ where: { id: transactionId } }))?.gatewayResponse as any || {}),
+              ...((await prisma.externalTransaction.findUnique({ where: { id: located.id } }))?.gatewayResponse as any || {}),
               lastWebhookStatus: payload.status,
               lastWebhookUpdate: new Date().toISOString()
             }
@@ -217,7 +237,7 @@ export class YonnaForexWebhookController {
             transactionType: 'SERVICE_FEE',
             gatewayResponse: {
               path: ['parentTransactionId'],
-              equals: ((await prisma.externalTransaction.findUnique({ where: { id: transactionId } }))?.gatewayTransactionId || '')
+              equals: ((await prisma.externalTransaction.findUnique({ where: { id: located.id } }))?.gatewayTransactionId || '')
             }
           }
         });
@@ -239,7 +259,7 @@ export class YonnaForexWebhookController {
           console.log('Service fee transaction updated:', serviceFeeTransaction.id, 'to status:', newStatus);
         }
         
-        console.log('External transaction updated:', transactionId, 'to status:', newStatus);
+        console.log('External transaction updated:', located.id, 'to status:', newStatus);
       } else {
         // Update order status
         const orderStatusMap: { [key: string]: string } = {
@@ -262,7 +282,7 @@ export class YonnaForexWebhookController {
         const newPaymentStatus = paymentStatusMap[payload.status] || 'PENDING';
         
         await prisma.orders.update({
-          where: { id: transactionId },
+          where: { id: located.id },
           data: {
             status: newOrderStatus as any,
             paymentStatus: newPaymentStatus as any,
@@ -270,7 +290,7 @@ export class YonnaForexWebhookController {
           }
         });
         
-        console.log('Order updated:', transactionId, 'to order status:', newOrderStatus, 'payment status:', newPaymentStatus);
+        console.log('Order updated:', located.id, 'to order status:', newOrderStatus, 'payment status:', newPaymentStatus);
       }
     } catch (error) {
       console.error('Error updating transaction:', error);

@@ -64,7 +64,7 @@ VALUES ('Yonna Forex Wallet', 'yonna_forex', true);
 #### Test API Endpoints
 ```bash
 # Test payment processing
-curl -X POST https://cloudnexus.biz/api/payments/yonna-forex/process \
+curl -X POST http://api.cloudnexus.biz/api/payments/yonna-forex/process \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -74,7 +74,7 @@ curl -X POST https://cloudnexus.biz/api/payments/yonna-forex/process \
   }'
 
 # Test currency support
-curl -X GET https://cloudnexus.biz/api/payments/yonna-forex/currencies
+curl -X GET http://api.cloudnexus.biz/api/payments/yonna-forex/currencies
 ```
 
 ### 5. Production Deployment

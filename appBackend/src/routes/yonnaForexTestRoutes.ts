@@ -13,7 +13,7 @@ const webhookController = new YonnaForexWebhookController();
 router.post('/test-webhook', (req, res) => {
   // Create a test payload
   const testPayload = {
-    transactionId: req.body.transactionId || 'YF_TEST_' + Date.now(),
+    appTransactionId: req.body.appTransactionId || 'APP_TEST_' + Date.now(),
     status: req.body.status || 'completed',
     amount: req.body.amount || 100.00,
     currency: req.body.currency || 'GMD',

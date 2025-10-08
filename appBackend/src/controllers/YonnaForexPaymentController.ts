@@ -206,6 +206,7 @@ export class YonnaForexPaymentController {
         fee: 0, // Constant fee of 0 as per requirement
         transactionId: finalTransactionId,
         countryCode: '+220', // Default country code for Yonna Forex
+        appTransactionId: appTransactionId,
         description: orderId ? 
           (isRental ? `Payment for Rental #${orderId} via Yonna Forex Wallet` : 
            isRide ? `Payment for Ride #${orderId} via Yonna Forex Wallet` :

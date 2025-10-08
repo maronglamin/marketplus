@@ -19,6 +19,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.snap.app',
+    infoPlist: {
+      NSAppTransportSecurity: {
+        NSExceptionDomains: {
+          '139.59.134.50': {
+            NSTemporaryExceptionAllowsInsecureHTTPLoads: true,
+            NSIncludesSubdomains: true,
+          },
+        },
+      },
+    },
     config: {
       googleMapsApiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo'
     }

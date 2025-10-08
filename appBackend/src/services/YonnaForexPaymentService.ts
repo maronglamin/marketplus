@@ -10,6 +10,7 @@ export interface YonnaForexPaymentRequest {
   countryCode: string;
   description?: string;
   orderId?: string;
+  appTransactionId?: string;
 }
 
 export interface YonnaForexPaymentResponse {
@@ -47,7 +48,7 @@ export class YonnaForexPaymentService {
    */
   async processPayment(paymentRequest: YonnaForexPaymentRequest): Promise<YonnaForexPaymentResponse> {
     try {
-      const { amount, phone, currency, fee, transactionId, countryCode } = paymentRequest;
+      const { amount, phone, currency, fee, transactionId, countryCode, appTransactionId } = paymentRequest;
 
       // Normalize phone to include country code exactly once
       const trimmedPhone = (phone || '').replace(/\s+/g, '');
@@ -75,7 +76,8 @@ export class YonnaForexPaymentService {
         transactionId: transactionId || `YF_${timestamp}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
         description: '', // Always empty as per working example
         fee,
-        currency
+        currency,
+        appTransactionId: appTransactionId
       };
 
       // Prepare the request payload structure
