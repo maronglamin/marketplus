@@ -8,7 +8,9 @@ const prisma = new PrismaClient();
 // Rate limiting configuration
 const MAX_ATTEMPTS = 5;
 const ATTEMPT_WINDOW = 30 * 60 * 1000; // 30 minutes
-const OTP_EXPIRY = 15 * 60 * 1000; // 15 minutes
+// Expiry configuration
+const VERIFICATION_OTP_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30 days
+const PIN_RESET_OTP_EXPIRY = 15 * 60 * 1000; // 15 minutes
 const MAX_OTP_PER_PHONE = 5; // Maximum number of active OTPs per phone number
 
 // Validate environment variables
@@ -81,7 +83,9 @@ export const createOTP = async (
   }
 
   const code = type === 'VERIFICATION' ? generateOTP() : generatePIN();
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY);
+  const expiresAt = new Date(
+    Date.now() + (type === 'VERIFICATION' ? VERIFICATION_OTP_EXPIRY : PIN_RESET_OTP_EXPIRY)
+  );
 
   // Hash the OTP before storing
   const hashedCode = crypto
