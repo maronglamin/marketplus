@@ -261,6 +261,86 @@ export class YonnaForexWebhookController {
         }
         
         console.log('External transaction updated:', located.id, 'to status:', newStatus);
+
+        // Propagate status to related domain records (orders, rentals, rides)
+        try {
+          const ext = await prisma.externalTransaction.findUnique({
+            where: { id: located.id },
+            select: {
+              orderId: true,
+              rentalRequestId: true,
+              rideRequestId: true
+            }
+          });
+
+          if (ext?.orderId) {
+            // Map to orders
+            const orderStatusMap: { [key: string]: string } = {
+              'success': 'COMPLETED',
+              'completed': 'COMPLETED',
+              'failed': 'CANCELLED',
+              'cancelled': 'CANCELLED',
+              'pending': 'PENDING'
+            };
+            const paymentStatusMap: { [key: string]: string } = {
+              'success': 'PAID',
+              'completed': 'PAID',
+              'failed': 'FAILED',
+              'cancelled': 'CANCELLED',
+              'pending': 'PENDING'
+            };
+
+            await prisma.orders.update({
+              where: { id: ext.orderId },
+              data: {
+                status: (orderStatusMap[normalized] || 'PENDING') as any,
+                paymentStatus: (paymentStatusMap[normalized] || 'PENDING') as any,
+                updatedAt: new Date()
+              }
+            });
+          }
+
+          if (ext?.rentalRequestId) {
+            // Map to rentals (RentalRequest.status)
+            const rentalStatus = normalized === 'success' || normalized === 'completed'
+              ? 'PAID'
+              : normalized === 'failed' || normalized === 'cancelled'
+              ? 'CANCELLED'
+              : null; // do not downgrade on pending
+
+            if (rentalStatus) {
+              await prisma.rentalRequest.update({
+                where: { id: ext.rentalRequestId },
+                data: { status: rentalStatus as any, updatedAt: new Date() }
+              });
+            }
+          }
+
+          if (ext?.rideRequestId) {
+            // Map to rides (Ride.paymentStatus) when ride exists
+            const ride = await prisma.ride.findUnique({
+              where: { rideRequestId: ext.rideRequestId },
+              select: { id: true }
+            });
+
+            if (ride) {
+              const ridePaymentStatus = normalized === 'success' || normalized === 'completed'
+                ? 'PAID'
+                : normalized === 'failed'
+                ? 'FAILED'
+                : normalized === 'cancelled'
+                ? 'CANCELLED'
+                : 'PENDING';
+
+              await prisma.ride.update({
+                where: { id: ride.id },
+                data: { paymentStatus: ridePaymentStatus as any, updatedAt: new Date() }
+              });
+            }
+          }
+        } catch (propError) {
+          console.error('Error propagating webhook status to domain records:', propError);
+        }
       } else {
         // Update order status
         const orderStatusMap: { [key: string]: string } = {
