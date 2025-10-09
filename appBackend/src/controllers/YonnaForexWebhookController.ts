@@ -206,17 +206,18 @@ export class YonnaForexWebhookController {
     
     try {
       // Check if this is an external transaction or order
+      const normalized = String(payload.status).toLowerCase();
       if (located.type === 'external') {
         // Update external transaction status
         const externalStatusMap: { [key: string]: string } = {
-          'success': 'COMPLETED',
-          'completed': 'COMPLETED',
+          'success': 'SUCCESS',
+          'completed': 'SUCCESS',
           'failed': 'FAILED',
           'cancelled': 'CANCELLED',
           'pending': 'PENDING'
         };
 
-        const newStatus = externalStatusMap[payload.status] || 'PENDING';
+        const newStatus = externalStatusMap[normalized] || 'PENDING';
         
         await prisma.externalTransaction.update({
           where: { id: located.id },
@@ -278,8 +279,8 @@ export class YonnaForexWebhookController {
           'pending': 'PENDING'
         };
 
-        const newOrderStatus = orderStatusMap[payload.status] || 'PENDING';
-        const newPaymentStatus = paymentStatusMap[payload.status] || 'PENDING';
+        const newOrderStatus = orderStatusMap[normalized] || 'PENDING';
+        const newPaymentStatus = paymentStatusMap[normalized] || 'PENDING';
         
         await prisma.orders.update({
           where: { id: located.id },
@@ -333,8 +334,10 @@ export class YonnaForexWebhookController {
       // Prepare notification content
       let title = 'Payment Update';
       let body = '';
+      const normalizedForNotification = String(payload.status).toLowerCase();
       
-      switch (payload.status) {
+      switch (normalizedForNotification) {
+        case 'success':
         case 'completed':
           title = 'Payment Successful';
           body = `Your payment of ${payload.currency} ${payload.amount} has been completed successfully.`;
