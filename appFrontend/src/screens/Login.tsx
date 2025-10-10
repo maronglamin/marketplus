@@ -25,6 +25,7 @@ import type { AuthStackParamList } from '../navigation/AuthNavigator'
 import countryData from '../utils/countryData'; // You will need to create this file with country code/name/flag
 import * as Localization from 'expo-localization';
 import { getUserLocationFromGPS } from '../utils/locationService';
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 type LoginNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'Login'>
 
@@ -41,6 +42,8 @@ export function Login() {
   const [imageError, setImageError] = useState(false)
   const [detectingCountry, setDetectingCountry] = useState(false)
   const [autoDetectedCountry, setAutoDetectedCountry] = useState(false)
+  const [apiBaseUrl, setApiBaseUrl] = useState<string>('')
+  const [apiHealth, setApiHealth] = useState<{ ok: boolean | null; message?: string }>({ ok: null })
 
   // Initialize API and device info on component mount
   useEffect(() => {
@@ -152,6 +155,38 @@ export function Login() {
   }, []);
 
   // Remove the auto-detection useEffect completely - it's causing the duplication issue
+
+  // Runtime API diagnostics: read resolved API URL and ping /health
+  useEffect(() => {
+    const runDiagnostics = async () => {
+      try {
+        const storedUrl = await AsyncStorage.getItem('apiUrl')
+        if (storedUrl) {
+          setApiBaseUrl(storedUrl)
+          try {
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(), 8000)
+            const res = await fetch(`${storedUrl}/health`, {
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+              signal: controller.signal,
+            })
+            clearTimeout(timeout)
+            if (res.ok) {
+              setApiHealth({ ok: true })
+            } else {
+              setApiHealth({ ok: false, message: `HTTP ${res.status}` })
+            }
+          } catch (e: any) {
+            setApiHealth({ ok: false, message: e?.message || 'Network error' })
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    runDiagnostics()
+  }, [])
 
   const formatPhoneNumber = (number: string) => {
     // Remove any non-digit characters
@@ -280,6 +315,12 @@ export function Login() {
           <Text style={styles.subtitle}>
             Enter your phone number to continue
           </Text>
+
+          {!!apiBaseUrl && (
+            <Text style={styles.helperText}>
+              API: {apiBaseUrl} {apiHealth.ok === null ? '(checking...)' : apiHealth.ok ? '(healthy)' : `(unreachable${apiHealth.message ? ': ' + apiHealth.message : ''})`}
+            </Text>
+          )}
 
                       <View style={styles.inputContainer}>
               <TouchableOpacity onPress={() => countrySheetRef.current?.present()} style={styles.inputIconLeft}>

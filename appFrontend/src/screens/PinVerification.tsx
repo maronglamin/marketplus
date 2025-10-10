@@ -76,22 +76,21 @@ export function PinVerification() {
       await AsyncStorage.setItem('token', response.token);
       console.log('Token stored successfully');
 
-      // Determine navigation based on verification status
+      // Force PIN reset flow after verification for registered users
       let targetScreen: keyof AuthStackParamList;
       let params: any = {};
 
       if (isRegistered) {
-        if (isDeviceVerified) {
-          console.log('User is registered and device is verified, going to LoginPin');
-          targetScreen = 'LoginPin';
-        } else {
-          console.log('User is registered but device is not verified, going to App');
-          targetScreen = 'App';
-        }
+        console.log('Registered user verified, forcing NewPin flow');
+        targetScreen = 'NewPin';
+        params = {
+          currentPin: '0000', // placeholder; current PIN not needed for reset flow
+          isPinReset: true,
+          pinResetOTPId: response.pinResetOTPId
+        };
       } else {
         console.log('User is not registered, going to UserRegistration');
         targetScreen = 'UserRegistration';
-        // Ensure phoneNumber is passed forward for registration
         params = { phoneNumber };
       }
 

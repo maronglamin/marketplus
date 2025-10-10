@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { AppStackParamList } from '../navigation/AppNavigator'
-import { branchService, type Branch } from '../services/branchService'
+import { AppStackParamList } from '../../navigation/AppNavigator'
+import { branchService, type Branch } from '../../services/branchService'
 
 type BranchesScreenNavigationProp = NativeStackNavigationProp<AppStackParamList, 'BranchesScreen'>
 
