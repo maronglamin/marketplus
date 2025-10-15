@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  ImageBackground,
   StatusBar,
   Platform,
   TextInput,
@@ -72,6 +73,7 @@ export function Home() {
   // Notifications state
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -152,6 +154,24 @@ export function Home() {
       setUnreadNotificationsCount(0);
     } finally {
       setIsLoadingNotifications(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    try {
+      setIsRefreshing(true);
+      await Promise.all([
+        loadFreshUserData(),
+        checkRiderApplicationStatus(),
+        loadRecentDestinations(),
+        loadCategories(),
+        getUserLocation(),
+        loadUnreadNotificationsCount(),
+      ]);
+    } catch (e) {
+      // no-op; errors handled within individual loaders
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -684,7 +704,11 @@ export function Home() {
           </View>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+        >
           {/* Search Bar */}
           <View style={styles.searchContainer}>
             <View style={styles.searchBar}>
@@ -730,24 +754,40 @@ export function Home() {
               <TouchableOpacity 
                 style={styles.rideButton}
                 onPress={() => navigation.navigate('CustomerRideService')}
+                activeOpacity={0.9}
               >
-                <Ionicons name="car-outline" size={36} color="#1E40AF" />
-                <Text style={styles.rideButtonTitle}>Book a Ride</Text>
-                <Text style={styles.rideButtonSubtitle}>Fast and reliable rides near you</Text>
-                <View style={styles.rideButtonAction}>
-                  <Text style={styles.rideButtonActionText}>Find a Ride</Text>
-                </View>
+                <ImageBackground 
+                  source={require('../../assets/ride-image.jpeg')}
+                  style={{ width: '100%', height: 160, justifyContent: 'flex-end' }}
+                  imageStyle={{ borderRadius: 12 }}
+                >
+                  <View style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 16, alignItems: 'center', borderRadius: 12 }}>
+                    <Text style={[styles.rideButtonTitle, { color: '#FFFFFF', textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }]}>Book a Ride</Text>
+                    <Text style={[styles.rideButtonSubtitle, { color: '#F8FAFC', textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1 }]}>Fast and reliable rides near you</Text>
+                    <View style={styles.rideButtonAction}>
+                      <Text style={styles.rideButtonActionText}>Find a Ride</Text>
+                    </View>
+                  </View>
+                </ImageBackground>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.shopButton}
                 onPress={() => navigation.navigate('FeaturedProducts')}
+                activeOpacity={0.9}
               >
-                <Ionicons name="bag-outline" size={36} color="#3B82F6" />
-                <Text style={styles.shopButtonTitle}>Shop Online</Text>
-                <Text style={styles.shopButtonSubtitle}>Buy and sell from trusted sellers</Text>
-                <View style={styles.shopButtonAction}>
-                  <Text style={styles.shopButtonActionText}>Start Shopping</Text>
-                </View>
+                <ImageBackground 
+                  source={require('../../assets/ecommerce-image.jpeg')}
+                  style={{ width: '100%', height: 160, justifyContent: 'flex-end' }}
+                  imageStyle={{ borderRadius: 12 }}
+                >
+                  <View style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 16, alignItems: 'center', borderRadius: 12 }}>
+                    <Text style={[styles.shopButtonTitle, { color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }]}>Shop Online</Text>
+                    <Text style={[styles.shopButtonSubtitle, { color: '#F8FAFC', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1 }]}>Buy and sell from trusted sellers</Text>
+                    <View style={styles.shopButtonAction}>
+                      <Text style={styles.shopButtonActionText}>Start Shopping</Text>
+                    </View>
+                  </View>
+                </ImageBackground>
               </TouchableOpacity>
             </View>
           </View>
@@ -1404,6 +1444,52 @@ const styles = StyleSheet.create({
   shopButtonActionText: {
     fontSize: 14,
     fontWeight: '500',
+    color: '#FFFFFF',
+  },
+  // Image Card styles for welcome section
+  imageCardWrapper: {
+    flex: 1,
+    backgroundColor: '#E6F3FF',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  imageCard: {
+    width: '100%',
+    height: 160,
+    justifyContent: 'flex-end',
+  },
+  imageCardImage: {
+    borderRadius: 12,
+  },
+  imageCardOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    padding: 16,
+    alignItems: 'center',
+  },
+  imageCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  imageCardSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  imageCardButton: {
+    backgroundColor: '#1E40AF',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 12,
+  },
+  imageCardButtonAlt: {
+    backgroundColor: '#3B82F6',
+  },
+  imageCardButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
     color: '#FFFFFF',
   },
   searchContainer: {

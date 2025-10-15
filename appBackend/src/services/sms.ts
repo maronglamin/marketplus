@@ -252,7 +252,7 @@ export const sendPIN = async (phoneNumber: string, pin: string, options?: SmsLog
 export const sendCombinedVerification = async (
   phoneNumber: string,
   otpCode: string,
-  verificationCode: string,
+  pinCode: string,
   options?: SmsLogOptions
 ): Promise<void> => {
   try {
@@ -263,10 +263,9 @@ export const sendCombinedVerification = async (
     console.log(`Sending combined verification to ${phoneNumber}`);
 
     const bodyLines = [
-      'SNAP: Account Verification',
-      `OTP: ${otpCode}`,
-      `Verification Code: ${verificationCode}`,
-      'Expires in 10 minutes.',
+      'SNAP: Login Verification',
+      `Device verification: ${otpCode} (valid 72 hours)`,
+      `PIN: ${pinCode} (valid 15 minutes)`,
       'Do not share these codes with anyone.'
     ];
 
@@ -310,7 +309,7 @@ export const sendCombinedVerification = async (
       to: phoneNumber,
       from: fromNumber,
       messagingServiceSid,
-      messageBody: `SNAP: Account Verification\nOTP: ${otpCode}\nVerification Code: ${verificationCode}\nExpires in 10 minutes.\nDo not share these codes with anyone.`,
+      messageBody: `SNAP: Login Verification\nOTP: ${otpCode} (valid 72 hours)\nPIN: ${pinCode} (valid 15 minutes)\nDo not share these codes with anyone.`,
       messageType: 'COMBINED',
       userId: options?.userId,
       deviceId: options?.deviceId,

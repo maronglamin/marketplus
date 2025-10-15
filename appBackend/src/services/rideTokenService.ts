@@ -29,9 +29,16 @@ export class RideTokenService {
     // Set expiration to 30 minutes from now
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
-    // Create the token
-    const rideToken = await prisma.rideToken.create({
-      data: {
+    // Create or update the token (one token per ride enforced by unique rideId)
+    const rideToken = await prisma.rideToken.upsert({
+      where: { rideId },
+      update: {
+        token,
+        expiresAt,
+        isUsed: false,
+        usedAt: null,
+      },
+      create: {
         rideId,
         token,
         expiresAt,

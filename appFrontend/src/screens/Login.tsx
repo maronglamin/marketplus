@@ -280,8 +280,9 @@ export function Login() {
           translucent
         />
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.container}
+          keyboardVerticalOffset={Platform.select({ ios: 80, android: 0 })}
         >
         <View style={styles.header}>
           <TouchableOpacity
@@ -364,6 +365,8 @@ export function Login() {
           )}
         </View>
 
+        </KeyboardAvoidingView>
+
         <View style={styles.footer}>
           <TouchableOpacity
             style={[styles.button, !phoneInput && styles.buttonDisabled]}
@@ -375,7 +378,6 @@ export function Login() {
             </Text>
           </TouchableOpacity>
         </View>
-
         {/* Country Picker Bottom Sheet */}
         <BottomSheetModal
           ref={countrySheetRef}
@@ -443,7 +445,6 @@ export function Login() {
             </View>
           </BottomSheetView>
         </BottomSheetModal>
-      </KeyboardAvoidingView>
     </SafeAreaView>
     </TouchableWithoutFeedback>
   )

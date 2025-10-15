@@ -93,7 +93,7 @@ export function SellerKycForm() {
           <View style={styles.placeholder} />
         </View>
 
-        <ScrollView style={styles.content}>
+        <ScrollView style={styles.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
           {rejectionReason && (
             <View style={styles.rejectionContainer}>
               <View style={styles.rejectionHeader}>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -10,6 +10,9 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
+  KeyboardAvoidingView,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native'
 import { getImageUrl } from '../config/env'
 import { Camera, Image as ImageIcon, X } from 'lucide-react-native'
@@ -32,6 +35,16 @@ export function ProductManagement() {
   const navigation = useNavigation<ProductManagementNavigationProp>()
   const [images, setImages] = useState<string[]>([])
   const [category, setCategory] = useState('')
+  const [keyboardVisible, setKeyboardVisible] = useState(false)
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true))
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false))
+    return () => {
+      showSub.remove()
+      hideSub.remove()
+    }
+  }, [])
 
   const categories = [
     'Electronics',
@@ -76,91 +89,121 @@ export function ProductManagement() {
           <Text style={styles.title}>Add New Product</Text>
         </View>
 
-        <ScrollView style={styles.content}>
-          <View style={styles.section}>
-            <Text style={styles.label}>Product Name</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter product name"
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.select({ ios: 80, android: 0 })}
+          style={{ flex: 1 }}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <ScrollView
+              style={styles.content}
+              contentContainerStyle={styles.contentContainer}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="always"
+              overScrollMode="never"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.section}>
+                <Text style={styles.label}>Product Name</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter product name"
+                  placeholderTextColor="#9CA3AF"
+                  blurOnSubmit
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                />
+              </View>
 
-          <View style={styles.section}>
-            <Text style={styles.label}>Product Images</Text>
-            <View style={styles.imageGrid}>
-              {images.map((image, index) => (
-                <View key={index} style={styles.imageContainer}>
-                  <Image source={{ uri: getImageUrl(image) }} style={styles.image} />
-                  <TouchableOpacity
-                    style={styles.removeImageButton}
-                    onPress={() => removeImage(index)}
-                  >
-                    <X size={12} color="#FFFFFF" />
-                  </TouchableOpacity>
+              <View style={styles.section}>
+                <Text style={styles.label}>Product Images</Text>
+                <View style={styles.imageGrid}>
+                  {images.map((image, index) => (
+                    <View key={index} style={styles.imageContainer}>
+                      <Image source={{ uri: getImageUrl(image) }} style={styles.image} />
+                      <TouchableOpacity
+                        style={styles.removeImageButton}
+                        onPress={() => removeImage(index)}
+                      >
+                        <X size={12} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {images.length < 5 && (
+                    <TouchableOpacity
+                      style={styles.addImageButton}
+                      onPress={addImage}
+                    >
+                      <Camera size={32} color="#9CA3AF" />
+                    </TouchableOpacity>
+                  )}
                 </View>
-              ))}
-              {images.length < 5 && (
-                <TouchableOpacity
-                  style={styles.addImageButton}
-                  onPress={addImage}
-                >
-                  <Camera size={32} color="#9CA3AF" />
-                </TouchableOpacity>
-              )}
-            </View>
-            <Text style={styles.helperText}>Add up to 5 images</Text>
-          </View>
+                <Text style={styles.helperText}>Add up to 5 images</Text>
+              </View>
 
-          <View style={styles.section}>
-            <Text style={styles.label}>Category</Text>
-            <View style={styles.selectContainer}>
-              <TextInput
-                style={styles.select}
-                value={category}
-                onChangeText={setCategory}
-                placeholder="Select a category"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-          </View>
+              <View style={styles.section}>
+                <Text style={styles.label}>Category</Text>
+                <View style={styles.selectContainer}>
+                  <TextInput
+                    style={styles.select}
+                    value={category}
+                    onChangeText={setCategory}
+                    placeholder="Select a category"
+                    placeholderTextColor="#9CA3AF"
+                    blurOnSubmit
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                </View>
+              </View>
 
-          <View style={styles.row}>
-            <View style={[styles.section, styles.halfWidth]}>
-              <Text style={styles.label}>Price ($)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="0.00"
-                keyboardType="decimal-pad"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-            <View style={[styles.section, styles.halfWidth]}>
-              <Text style={styles.label}>Stock</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="0"
-                keyboardType="number-pad"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-          </View>
+              <View style={styles.row}>
+                <View style={[styles.section, styles.halfWidth]}>
+                  <Text style={styles.label}>Price ($)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0.00"
+                    keyboardType="decimal-pad"
+                    placeholderTextColor="#9CA3AF"
+                    blurOnSubmit
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                </View>
+                <View style={[styles.section, styles.halfWidth]}>
+                  <Text style={styles.label}>Stock</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0"
+                    keyboardType="number-pad"
+                    placeholderTextColor="#9CA3AF"
+                    blurOnSubmit
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                </View>
+              </View>
 
-          <View style={styles.section}>
-            <Text style={styles.label}>Description</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              placeholder="Enter product description"
-              placeholderTextColor="#9CA3AF"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </View>
-        </ScrollView>
+              <View style={styles.section}>
+                <Text style={styles.label}>Description</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Enter product description"
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                  blurOnSubmit
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                />
+              </View>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
 
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.saveButton}>
+        <View style={[styles.footer, keyboardVisible && { opacity: 0.001 }]}> 
+          <TouchableOpacity style={styles.saveButton} disabled={keyboardVisible}>
             <Text style={styles.saveButtonText}>Save Product</Text>
           </TouchableOpacity>
         </View>
@@ -199,6 +242,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  contentContainer: {
+    paddingBottom: 120,
   },
   section: {
     marginBottom: 16,
@@ -283,6 +329,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   saveButton: {
     backgroundColor: '#2563EB',

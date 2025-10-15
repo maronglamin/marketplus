@@ -103,7 +103,8 @@ export function SellerKycBusiness() {
         translucent={Platform.OS === 'android'}
       />
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.select({ ios: 80, android: 0 })}
         style={styles.container}
       >
         <View style={styles.header}>
@@ -122,6 +123,7 @@ export function SellerKycBusiness() {
             style={styles.content}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.formContainer}>
@@ -207,14 +209,15 @@ export function SellerKycBusiness() {
           </ScrollView>
         </TouchableWithoutFeedback>
 
-        <View style={styles.buttonContainer}>
-          <Button
-            label="Next"
-            onPress={handleNext}
-            style={styles.nextButton}
-          />
-        </View>
       </KeyboardAvoidingView>
+
+      <View style={styles.buttonContainer}>
+        <Button
+          label="Next"
+          onPress={handleNext}
+          style={styles.nextButton}
+        />
+      </View>
     </SafeAreaView>
   );
 }

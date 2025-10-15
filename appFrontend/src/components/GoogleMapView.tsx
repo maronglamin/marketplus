@@ -285,6 +285,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               position: absolute;
               top: 0;
               left: 0;
+              pointer-events: auto;
               touch-action: pan-x pan-y;
               -webkit-touch-callout: none;
               -webkit-user-select: none;
@@ -360,9 +361,66 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
             let routePath;
             let animatedPath;
             let animationInterval;
+            let animationFrameId;
             let currentLocation = { lat: ${initialLocation.lat}, lng: ${initialLocation.lng} };
             let requestMarkers = [];
             let requestInfoWindows = [];
+            let isUserInteracting = false;
+            let lastInteractionTime = 0;
+            const INTERACTION_COOLDOWN_MS = 2000;
+            // Message queue to buffer RN messages before map is ready (Android WebView timing fix)
+            const pendingMessages = [];
+            let isMapReady = false;
+
+            function stopAnimationFrame() {
+              if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+              }
+            }
+
+            function startAnimationFrame(stepFn, stepEveryMs) {
+              stopAnimationFrame();
+              let lastTs = 0;
+              const tick = (ts) => {
+                if (!lastTs) lastTs = ts;
+                const elapsed = ts - lastTs;
+                if (elapsed >= stepEveryMs) {
+                  stepFn();
+                  lastTs = ts;
+                }
+                animationFrameId = requestAnimationFrame(tick);
+              };
+              animationFrameId = requestAnimationFrame(tick);
+            }
+
+            function markInteraction() {
+              isUserInteracting = true;
+              lastInteractionTime = Date.now();
+              setTimeout(() => {
+                isUserInteracting = false;
+              }, INTERACTION_COOLDOWN_MS);
+            }
+
+            function interactionActive() {
+              return isUserInteracting || (Date.now() - lastInteractionTime) < INTERACTION_COOLDOWN_MS;
+            }
+
+            function safeFitBounds(bounds) {
+              if (interactionActive()) {
+                console.log('⏭️ Skipping fitBounds during user interaction');
+                return;
+              }
+              map.fitBounds(bounds);
+            }
+
+            function safeSetCenter(location) {
+              if (interactionActive()) {
+                console.log('⏭️ Skipping setCenter during user interaction');
+                return;
+              }
+              map.setCenter(location);
+            }
             
             // Simple polyline decoder fallback for Android
             function decodePolyline(polyline) {
@@ -505,8 +563,19 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               });
               
               // Add map drag listener to test panning
+              map.addListener('dragstart', function() {
+                markInteraction();
+                console.log('🖐️ Drag started');
+              });
+              map.addListener('drag', function() {
+                markInteraction();
+              });
               map.addListener('dragend', function() {
+                markInteraction();
                 console.log('🗺️ Map dragged to center:', map.getCenter().lat(), map.getCenter().lng());
+              });
+              map.addListener('idle', function() {
+                lastInteractionTime = Date.now();
               });
               
               // Add zoom listener to test zooming
@@ -530,6 +599,16 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                   type: 'mapReady'
                 }));
               }
+
+              // Mark ready and drain any pending messages that arrived before init
+              isMapReady = true;
+              if (pendingMessages.length > 0) {
+                try {
+                  pendingMessages.splice(0).forEach((msg) => handleMapMessage(msg));
+                } catch (err) {
+                  console.error('❌ Error draining pending messages:', err);
+                }
+              }
             }
             
             function updateDestination(destination, routeData) {
@@ -546,6 +625,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               if (animationInterval) {
                 clearInterval(animationInterval);
               }
+              stopAnimationFrame();
               
               // Add destination marker
               destinationMarker = new google.maps.Marker({
@@ -588,7 +668,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               const bounds = new google.maps.LatLngBounds();
               bounds.extend(currentMarker.getPosition());
               bounds.extend(destination);
-              map.fitBounds(bounds);
+              safeFitBounds(bounds);
             }
             
             function showRoute(pickup, destination, routeData) {
@@ -602,6 +682,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               if (routePath) routePath.setMap(null);
               if (animatedPath) animatedPath.setMap(null);
               if (animationInterval) clearInterval(animationInterval);
+              stopAnimationFrame();
               
               // Add current location marker (blue) - ALWAYS SHOW
               pickupMarker = new google.maps.Marker({
@@ -666,7 +747,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                   // Fit map to show the entire route
                   const bounds = new google.maps.LatLngBounds();
                   routePoints.forEach(point => bounds.extend(point));
-                  map.fitBounds(bounds);
+              safeFitBounds(bounds);
                   console.log('✅ Map fitted to route bounds');
                   
                 } catch (error) {
@@ -690,6 +771,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               if (animationInterval) {
                 clearInterval(animationInterval);
               }
+              stopAnimationFrame();
               if (animatedPath) {
                 animatedPath.setMap(null);
               }
@@ -714,21 +796,20 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               });
               animatedPath.setMap(map);
               
-              // Android-optimized animation with reduced frequency
+              // Android-optimized animation with reduced frequency using requestAnimationFrame
               let currentIndex = 0;
-              const animationSpeed = 100; // Increased to 100ms for better performance
+              const animationSpeed = 100; // ms per step
               const stepSize = Math.max(1, Math.floor(routePoints.length / 50)); // Limit to 50 steps max
               
-              console.log('🎬 Starting Android-optimized animation with speed:', animationSpeed, 'ms per step, step size:', stepSize);
+              console.log('🎬 Starting Android-optimized rAF animation with speed:', animationSpeed, 'ms per step, step size:', stepSize);
               
-              animationInterval = setInterval(() => {
+              startAnimationFrame(() => {
                 if (currentIndex <= routePoints.length) {
                   const currentPath = routePoints.slice(0, currentIndex);
                   animatedPath.setPath(currentPath);
                   currentIndex += stepSize;
                 } else {
                   console.log('🎬 Animation complete, restarting');
-                  // Restart animation after a delay
                   setTimeout(() => {
                     currentIndex = 0;
                     animatedPath.setPath([]);
@@ -761,7 +842,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               const bounds = new google.maps.LatLngBounds();
               bounds.extend(pickup);
               bounds.extend(destination);
-              map.fitBounds(bounds);
+              safeFitBounds(bounds);
               console.log('✅ Map fitted to direct route bounds');
             }
             
@@ -998,24 +1079,20 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                   const stepSize = Math.max(1, Math.floor(routePoints.length / 30)); // Limit steps for performance
                   console.log('🎯 Starting animation with', routePoints.length, 'points, step size:', stepSize);
                   
-                  const animateRoute = () => {
+                  // rAF-based route animation
+                  startAnimationFrame(() => {
                     if (i < routePoints.length) {
                       const currentPath = routePoints.slice(0, i + stepSize);
                       animatedPolyline.setPath(currentPath);
                       i += stepSize;
-                      setTimeout(animateRoute, 80); // Slower animation for better performance
                     } else {
                       console.log('🎯 Animation completed, restarting...');
-                      // When animation completes, restart it
                       setTimeout(() => {
                         animatedPolyline.setPath([]);
                         i = 0;
-                        animateRoute();
                       }, 2000);
                     }
-                  };
-                  
-                  animateRoute();
+                  }, 80);
                   
                   // Fit map to show the entire route with padding
                   const bounds = new google.maps.LatLngBounds();
@@ -1024,7 +1101,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                   bounds.extend(destination);
                   
                   // Add padding for better view
-                  map.fitBounds(bounds);
+                  safeFitBounds(bounds);
                   
                   // Add some zoom padding
                   setTimeout(() => {
@@ -1112,7 +1189,8 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               // Android-optimized direct route animation
               let progress = 0;
               const steps = 25; // Reduced steps for better performance
-              const animateDirectRoute = () => {
+              // rAF-based direct route animation
+              startAnimationFrame(() => {
                 const newPath = [];
                 for (let i = 0; i <= progress; i++) {
                   const ratio = i / steps;
@@ -1121,20 +1199,13 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                   newPath.push({ lat, lng });
                 }
                 animatedDirectRoute.setPath(newPath);
-                
                 progress++;
-                if (progress <= steps) {
-                  setTimeout(animateDirectRoute, 100); // Slower animation for better performance
-                } else {
-                  // Restart animation
+                if (progress > steps) {
                   setTimeout(() => {
                     progress = 0;
-                    animateDirectRoute();
                   }, 2000);
                 }
-              };
-              
-              animateDirectRoute();
+              }, 100);
             }
             
             function clearRoute() {
@@ -1153,6 +1224,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               if (animationInterval) {
                 clearInterval(animationInterval);
               }
+              stopAnimationFrame();
             }
             
             // Real-time ride tracking functions
@@ -1294,7 +1366,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                     currentMarker.setPosition(currentLocation);
                   }
                   
-                  map.setCenter(currentLocation);
+                safeSetCenter(currentLocation);
                   map.setZoom(15);
                   break;
               }
@@ -1307,7 +1379,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               window.addEventListener('load', initMap);
             }
             
-            // Ensure map is interactive on Android
+            // Ensure map is interactive on Android and attach robust message listeners
             document.addEventListener('DOMContentLoaded', function() {
               // Force touch events to work properly on Android
               const mapElement = document.getElementById('map');
@@ -1323,7 +1395,35 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                 mapElement.style.position = 'absolute';
                 mapElement.style.top = '0';
                 mapElement.style.left = '0';
+                // Force GPU compositing for smoother animations on Android WebView
+                mapElement.style.transform = 'translateZ(0)';
+                mapElement.style.willChange = 'transform';
+                mapElement.style.contain = 'layout paint size';
+
+                // Mark interaction on pointer/touch to avoid forced recentering
+                mapElement.addEventListener('pointerdown', markInteraction, { passive: true });
+                mapElement.addEventListener('pointerup', markInteraction, { passive: true });
+                mapElement.addEventListener('touchstart', markInteraction, { passive: true });
+                mapElement.addEventListener('touchend', markInteraction, { passive: true });
               }
+
+              // Add dual listeners for messages (Android sometimes dispatches on document)
+              function onAnyMessage(event) {
+                try {
+                  const raw = event && (event.data !== undefined ? event.data : event);
+                  const payload = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                  if (!payload || typeof payload !== 'object') return;
+                  if (!isMapReady) {
+                    pendingMessages.push(payload);
+                  } else {
+                    handleMapMessage(payload);
+                  }
+                } catch (e) {
+                  console.error('❌ Error parsing incoming message:', e);
+                }
+              }
+              window.addEventListener('message', onAnyMessage);
+              document.addEventListener('message', onAnyMessage);
             });
           </script>
         </body>

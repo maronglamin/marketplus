@@ -1,6 +1,5 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -1171,10 +1170,6 @@ enum EntityType {
   SYSTEM_CONFIG_SYSTEM_OPERATOR
   SYSTEM_CONFIG_SETTLEMENT_GROUP
   SYSTEM_CONFIG_PAYMENT_GATEWAYS
-  ECOMMERCE
-  ECOMMERCE_SALES_OUTLETS
-  ECOMMERCE_BRANCH_DETAILS
-  ECOMMERCE_PRINCIPAL_BUSINESS
   SNAP_RIDE
   SNAP_RIDE_RIDER_APPLICATIONS
   SNAP_RIDE_DRIVER_MANAGEMENT
@@ -1186,8 +1181,6 @@ enum EntityType {
   SNAP_RENTAL_REQUEST
   ANALYTICS
   ANALYTICS_REVENUE
-  AUTHENTICATION
-  AUTHENTICATION_DEVICE_AUTHENTICATION
 }
 
 enum ProductCondition {

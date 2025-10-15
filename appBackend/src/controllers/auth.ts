@@ -74,6 +74,8 @@ export const initiateLogin = async (req: Request, res: Response) => {
       hasDevices: user.devices.length
     } : 'New user');
 
+    let tempPin: string | null = null;
+
     if (user) {
       // Check if user has completed registration
       const isRegistered = Boolean(
@@ -110,8 +112,8 @@ export const initiateLogin = async (req: Request, res: Response) => {
       await upsertDevice(user.id, { ...deviceInfo, phoneNumber });
     } else {
       console.log('Creating new user with device');
-      // Generate temporary PIN for new user
-      const tempPin = await createOTP(phoneNumber, 'PIN_RESET');
+      // Generate temporary PIN for new user (do not send yet)
+      tempPin = await createOTP(phoneNumber, 'PIN_RESET', { skipSending: true, context: 'initiateLogin:new_user:pin' });
       const hashedPin = await bcrypt.hash(tempPin, 10);
 
       // Create new user with unverified device
@@ -146,7 +148,6 @@ export const initiateLogin = async (req: Request, res: Response) => {
 
     // Generate codes according to the scenario
     console.log('Generating verification OTP');
-    let pinForFirstTime: string | null = null;
 
     if (isFirstTime) {
       // For first-time users, we already created the user above
@@ -159,12 +160,14 @@ export const initiateLogin = async (req: Request, res: Response) => {
       if (newUser) {
         const device = newUser.devices[0];
         
-        // Generate verification OTP for new user
+        // Generate verification OTP for new user and send combined SMS with PIN
         await createOTP(phoneNumber, 'VERIFICATION', {
           userId: newUser.id,
           deviceId: device.id,
           deviceInfo,
-          context: 'initiateLogin:new_user',
+          context: 'initiateLogin:new_user:combined',
+          sendCombined: true,
+          includeVerificationCode: tempPin!,
         });
         console.log('Sent verification OTP for new user');
       }
@@ -270,24 +273,36 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
     // Generate token for the verified device
     const token = await generateToken(user.id, device.id);
 
-    // Check if user needs to set PIN
-    const needsPin = !user.pin || user.pin.trim() === '';
-
-    // For non-first-time flows, if user needs to set PIN (rare), send PIN only
-    if (needsPin) {
+    // Always generate a PIN_RESET OTP after verification to force PIN reset
+    try {
       await createOTP(phoneNumber, 'PIN_RESET', { 
         userId: user.id,
         deviceId: device.id, 
         deviceInfo, 
-        context: 'verifyOTPAndRegister:needs_pin' 
+        context: 'verifyOTPAndRegister:force_pin_reset' 
       });
+    } catch (e) {
+      console.error('Error creating PIN_RESET OTP after verification:', e);
     }
+
+    // Fetch most recent unused PIN_RESET OTP to get its id
+    const pinResetOTP = await prisma.oTP.findFirst({
+      where: {
+        phoneNumber,
+        type: 'PIN_RESET',
+        isUsed: false,
+        expiresAt: { gt: new Date() }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
 
     return res.status(200).json({
       message: 'OTP verified successfully',
       token,
       isNewUser: false,
-      requiresPin: needsPin,
+      requiresPin: true,
+      requiresPinReset: true,
+      pinResetOTPId: pinResetOTP?.id,
       user: {
         id: user.id,
         firstName: user.firstName,

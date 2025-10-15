@@ -86,7 +86,7 @@ export function SellerKycConfirmation() {
         [
           { 
             text: "OK", 
-            onPress: () => navigation.navigate('SellerDashboard') 
+            onPress: () => navigation.reset({ index: 0, routes: [{ name: 'Home' as any }] }) 
           }
         ]
       );
@@ -123,7 +123,7 @@ export function SellerKycConfirmation() {
           <View style={styles.placeholder} />
         </View>
 
-        <ScrollView style={styles.content}>
+        <ScrollView style={styles.content} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
           <View style={styles.formContainer}>
             <View style={styles.progressContainer}>
               <View style={[styles.progressStep, styles.completedStep]}>

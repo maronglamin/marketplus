@@ -18,7 +18,7 @@ export type AuthStackParamList = {
   };
   UserRegistration: undefined;
   LoginPin: undefined;
-  ChangePin: undefined;
+  ChangePin: { isFirstTime?: boolean } | undefined;
   NewPin: { 
     currentPin: string; 
     isFirstTime?: boolean; 

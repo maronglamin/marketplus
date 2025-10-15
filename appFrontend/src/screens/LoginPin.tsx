@@ -76,12 +76,12 @@ export function LoginPin() {
           }],
         })
       } else if (response.isFirstLogin) {
-        // Navigate to PIN change flow
+        // First login: go directly to NewPin to set a new PIN (skip asking current again)
         navigation.reset({
           index: 0,
           routes: [{ 
-            name: 'ChangePin',
-            params: { isFirstTime: true }
+            name: 'NewPin',
+            params: { currentPin: pinString, isFirstTime: true }
           }],
         })
       } else {

@@ -76,18 +76,35 @@ export function PinVerification() {
       await AsyncStorage.setItem('token', response.token);
       console.log('Token stored successfully');
 
-      // Force PIN reset flow after verification for registered users
+      // Decide next step based on server flags.
+      // Goal:
+      // - If user is registered and just needs to enter PIN -> LoginPin
+      // - If server requires PIN reset -> NewPin (reset)
+      // - If first login -> ChangePin (set new PIN)
+      // - If new user -> registration
       let targetScreen: keyof AuthStackParamList;
       let params: any = {};
 
       if (isRegistered) {
-        console.log('Registered user verified, forcing NewPin flow');
-        targetScreen = 'NewPin';
-        params = {
-          currentPin: '0000', // placeholder; current PIN not needed for reset flow
-          isPinReset: true,
-          pinResetOTPId: response.pinResetOTPId
-        };
+        if ((response as any)?.requiresPinReset) {
+          console.log('Registered user requires PIN reset, navigating to NewPin');
+          targetScreen = 'NewPin';
+          params = {
+            currentPin: '0000',
+            isPinReset: true,
+            pinResetOTPId: (response as any)?.pinResetOTPId,
+          };
+        } else if ((response as any)?.isFirstLogin) {
+          console.log('Registered user first login, navigating to NewPin');
+          targetScreen = 'NewPin';
+          params = { currentPin: '0000', isFirstTime: true };
+        } else if (isDeviceVerified) {
+          console.log('Registered user verified, navigating to LoginPin');
+          targetScreen = 'LoginPin';
+        } else {
+          console.log('Registered user defaulting to LoginPin');
+          targetScreen = 'LoginPin';
+        }
       } else {
         console.log('User is not registered, going to UserRegistration');
         targetScreen = 'UserRegistration';
