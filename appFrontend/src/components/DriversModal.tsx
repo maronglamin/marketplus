@@ -8,6 +8,9 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  SafeAreaView,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -102,31 +105,145 @@ export default function DriversModal({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
       statusBarTranslucent={true}
+      transparent={Platform.OS === 'android'}
     >
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color="#374151" />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>
-              {scheduleData?.startDate && scheduleData?.endDate ? 'Available Asset Owners' : 'Asset Owners'}
-            </Text>
-            {selectedService && (
-              <Text style={styles.headerSubtitle}>
-                {scheduleData?.startDate && scheduleData?.endDate 
-                  ? `${selectedService.name} - Available for your dates`
-                  : selectedService.name
-                }
-              </Text>
-            )}
-          </View>
-          <View style={styles.placeholder} />
-        </View>
+      {Platform.OS === 'android' ? (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <SafeAreaView style={styles.container}>
+              {/* Header */}
+              <View style={styles.header}>
+                <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                  <Ionicons name="close" size={24} color="#374151" />
+                </TouchableOpacity>
+                <View style={styles.headerContent}>
+                  <Text style={styles.headerTitle}>
+                    {scheduleData?.startDate && scheduleData?.endDate ? 'Available Asset Owners' : 'Asset Owners'}
+                  </Text>
+                  {selectedService && (
+                    <Text style={styles.headerSubtitle}>
+                      {scheduleData?.startDate && scheduleData?.endDate 
+                        ? `${selectedService.name} - Available for your dates`
+                        : selectedService.name
+                      }
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.placeholder} />
+              </View>
 
-        {/* Content */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+              {/* Content */}
+              <ScrollView
+                style={styles.content}
+                contentContainerStyle={styles.contentContainer}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+              >
+                {isLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#3B82F6" />
+                    <Text style={styles.loadingText}>
+                      {scheduleData?.startDate && scheduleData?.endDate ? 'Loading available drivers...' : 'Loading drivers...'}
+                    </Text>
+                  </View>
+                ) : drivers.length > 0 ? (
+                  <View style={styles.driversContainer}>
+                    {drivers.map((driver) => (
+                      <TouchableOpacity
+                        key={driver.id}
+                        style={styles.driverCard}
+                        onPress={() => handleDriverSelect(driver)}
+                      >
+                        {/* Driver Avatar */}
+                        <View style={styles.driverAvatar}>
+                          <Ionicons name="person" size={24} color="#6B7280" />
+                        </View>
+
+                        {/* Owner / Asset Info */}
+                        <View style={styles.driverInfo}>
+                          <View style={styles.driverHeader}>
+                            <Text style={styles.driverName}>{driver.riderApplication.firstName || driver.user.firstName} {driver.riderApplication.lastName || driver.user.lastName}</Text>
+                            <View style={styles.verificationBadge}>
+                              <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                              <Text style={styles.verificationText}>Verified</Text>
+                            </View>
+                          </View>
+
+                          {/* Address */}
+                          {driver.riderApplication.address ? (
+                            <View style={styles.addressRow}>
+                              <Ionicons name="location" size={14} color="#6B7280" />
+                              <Text style={styles.addressText}>{driver.riderApplication.address}</Text>
+                            </View>
+                          ) : null}
+
+                          {/* Vehicle */}
+                          <View style={styles.vehicleRow}>
+                            <Ionicons name="car" size={14} color="#6B7280" />
+                            <Text style={styles.vehicleInfoText}>Vehicle Model: {driver.riderApplication.vehicleModel}</Text>
+                          </View>
+                          <View style={styles.plateRow}>
+                            <Ionicons name="pricetag" size={14} color="#6B7280" />
+                            <Text style={styles.plateText}>Vehicle Plate: {driver.riderApplication.licensePlate}</Text>
+                          </View>
+                        </View>
+
+                        {/* Selection Arrow */}
+                        <View style={styles.arrowContainer}>
+                          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="people-outline" size={64} color="#9CA3AF" />
+                    <Text style={styles.emptyTitle}>
+                      {scheduleData?.startDate && scheduleData?.endDate ? 'No Available Drivers' : 'No Drivers Available'}
+                    </Text>
+                    <Text style={styles.emptyText}>
+                      {scheduleData?.startDate && scheduleData?.endDate 
+                        ? 'There are currently no drivers available for your selected dates. Please try different dates or another service.'
+                        : 'There are currently no drivers available for this service. Please try another service or check back later.'
+                      }
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            </SafeAreaView>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+            <View style={styles.headerContent}>
+              <Text style={styles.headerTitle}>
+                {scheduleData?.startDate && scheduleData?.endDate ? 'Available Asset Owners' : 'Asset Owners'}
+              </Text>
+              {selectedService && (
+                <Text style={styles.headerSubtitle}>
+                  {scheduleData?.startDate && scheduleData?.endDate 
+                    ? `${selectedService.name} - Available for your dates`
+                    : selectedService.name
+                  }
+                </Text>
+              )}
+            </View>
+            <View style={styles.placeholder} />
+          </View>
+
+          {/* Content */}
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#3B82F6" />
@@ -197,8 +314,9 @@ export default function DriversModal({
               </Text>
             </View>
           )}
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </View>
+      )}
              {selectedDriver && selectedService && (
          <VehicleDetailsModal
            isVisible={showVehicleDetails}
@@ -213,6 +331,19 @@ export default function DriversModal({
 }
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '90%',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
+    paddingTop: StatusBar.currentHeight || 0,
+  },
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
@@ -250,6 +381,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  contentContainer: {
+    paddingBottom: 24,
+    flexGrow: 1,
   },
   loadingContainer: {
     alignItems: 'center',

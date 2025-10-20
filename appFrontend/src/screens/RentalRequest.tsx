@@ -252,7 +252,7 @@ export default function RentalRequestScreen() {
         case 'CRYPTO':
         case 'DIGITAL_WALLET':
           // Call the rental payment endpoint with the selected payment method
-          const response = await api.post(`/api/rental-requests/${selectedRentalForPayment.id}/payment`, {
+          const response = await api.post(`/api/rentals/${selectedRentalForPayment.id}/payment`, {
             paymentMethodId: paymentMethod.id,
             paymentIntentId: null // We'll handle this differently for stored payment methods
           });
@@ -300,7 +300,7 @@ export default function RentalRequestScreen() {
       }
 
       // Call the rental payment endpoint
-      const response = await api.post(`/api/rental-requests/${selectedRentalForPayment.id}/payment`, {
+      const response = await api.post(`/api/rentals/${selectedRentalForPayment.id}/payment`, {
         paymentMethodId: 'stripe', // For Stripe payments
         paymentIntentId: paymentIntentId
       });
@@ -354,7 +354,7 @@ export default function RentalRequestScreen() {
     
     for (const rental of rentalsToCheck) {
       try {
-        const response = await api.get(`/api/rental-requests/${rental.id}/payment-status`);
+        const response = await api.get(`/api/rentals/${rental.id}/payment-status`);
         if (response.data.hasPendingPayment) {
           setRentalsWithPendingPayments(prev => new Set([...prev, rental.id]));
         } else {

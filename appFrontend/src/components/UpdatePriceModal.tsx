@@ -105,8 +105,8 @@ export default function UpdatePriceModal({
     <Modal
       visible={isVisible}
       animationType="slide"
-      presentationStyle="pageSheet"
       onRequestClose={handleClose}
+      {...(Platform.OS === 'ios' ? { presentationStyle: 'pageSheet' as const } : {})}
     >
       <SafeAreaView style={styles.container}>
         {/* Header */}
@@ -166,7 +166,7 @@ export default function UpdatePriceModal({
                     value={agreedPrice}
                     onChangeText={setAgreedPrice}
                     keyboardType="decimal-pad"
-                    autoFocus
+                    autoFocus={Platform.OS === 'ios'}
                     editable={!isSubmitting}
                   />
                 </View>

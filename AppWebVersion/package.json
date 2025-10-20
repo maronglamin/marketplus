@@ -21,7 +21,7 @@
   "scripts": {
     "start": "cross-env PORT=8000 react-scripts start",
     "build": "react-scripts build",
-    "build:prod": "cross-env REACT_APP_API_URL=http://snap.cloudnexus.biz:3000/api react-scripts build",
+    "build:prod": "cross-env REACT_APP_API_URL=http://127.0.0.1:3000/api react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

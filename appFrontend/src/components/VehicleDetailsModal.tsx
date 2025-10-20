@@ -11,6 +11,9 @@ import {
   Modal,
   Dimensions,
   FlatList,
+  Platform,
+  SafeAreaView,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -50,9 +53,10 @@ export default function VehicleDetailsModal({
   selectedService, 
   scheduleData 
 }: VehicleDetailsModalProps) {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { user, refreshUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [footerHeight, setFooterHeight] = useState(0);
   const [vehicleImages, setVehicleImages] = useState<{
     interior: Array<{ id: string; fileUrl: string; fileName: string; uploadedAt: string; documentType?: string }>;
     exterior: Array<{ id: string; fileUrl: string; fileName: string; uploadedAt: string; documentType?: string }>;
@@ -109,12 +113,6 @@ export default function VehicleDetailsModal({
     try {
       setIsLoading(true);
       
-      // Validate required fields before making the API call
-      if (!user?.id) {
-        Alert.alert('Error', 'User authentication is required. Please log in again.');
-        return;
-      }
-      
       // Refresh user data to ensure we have the latest information
       try {
         await refreshUser();
@@ -137,15 +135,13 @@ export default function VehicleDetailsModal({
         return;
       }
       
-      // Get user ID from JWT token to ensure consistency
+      // Get user ID from JWT token (fallback to context user ID if token is unavailable)
       const tokenUserId = await getUserIdFromToken();
-      if (!tokenUserId) {
-        Alert.alert('Error', 'Unable to get user ID from token. Please log in again.');
+      const customerId = tokenUserId || user?.id || null;
+      if (!customerId) {
+        Alert.alert('Error', 'User authentication is required. Please log in again.');
         return;
       }
-      
-      // Use the user ID from the JWT token instead of user context
-      const customerId = tokenUserId;
       
       // Validate that we have a valid UUID format
       if (!customerId || customerId === 'undefined' || customerId === 'null') {
@@ -156,7 +152,7 @@ export default function VehicleDetailsModal({
       // Log the comparison for debugging
       console.log('JWT Token User ID:', tokenUserId);
       console.log('User Context ID:', user?.id);
-      console.log('Using JWT Token ID for rental booking');
+      console.log('Using customerId for rental booking:', customerId);
       
       const payload = {
         customerId: customerId,
@@ -176,8 +172,7 @@ export default function VehicleDetailsModal({
       console.log('Authenticated user:', user);
       console.log('ScheduleData user:', scheduleData.user);
       console.log('CustomerId type:', typeof customerId, 'Value:', customerId);
-      console.log('Expected JWT userId: ce077982-11e0-4f94-8d7a-b9cf9c8d600a');
-      console.log('CustomerId matches JWT:', customerId === 'ce077982-11e0-4f94-8d7a-b9cf9c8d600a');
+      // Note: removed hardcoded expected userId comparison
       console.log('============================');
       await rentalApi.createRental(payload);
       
@@ -244,6 +239,8 @@ export default function VehicleDetailsModal({
           horizontal
           showsHorizontalScrollIndicator={false}
           pagingEnabled
+          nestedScrollEnabled
+          removeClippedSubviews={false}
           onMomentumScrollEnd={(event) => {
             const index = Math.round(event.nativeEvent.contentOffset.x / width);
             setActiveIndex(index);
@@ -296,7 +293,10 @@ export default function VehicleDetailsModal({
       onRequestClose={onClose}
       statusBarTranslucent={true}
     >
-      <View style={styles.container}>
+      <SafeAreaView style={[
+        styles.container,
+        Platform.OS === 'android' ? { paddingTop: StatusBar.currentHeight || 0 } : null
+      ]}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
@@ -308,7 +308,16 @@ export default function VehicleDetailsModal({
           <View style={styles.placeholder} />
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={[
+            styles.contentContainer,
+            footerHeight ? { paddingBottom: footerHeight + 16 } : null
+          ]}
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Availability Status */}
           <View style={styles.availabilityCard}>
             <View style={styles.availabilityHeader}>
@@ -420,12 +429,14 @@ export default function VehicleDetailsModal({
             </View>
           </View>
 
-          {/* Bottom spacing for scroll */}
-          <View style={styles.bottomSpacing} />
+          {/* Bottom spacing removed; dynamic padding ensures visibility under footer */}
         </ScrollView>
 
         {/* Book Button */}
-        <View style={styles.footer}>
+        <View
+          style={styles.footer}
+          onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+        >
           <TouchableOpacity
             style={[
               styles.bookButton, 
@@ -444,7 +455,7 @@ export default function VehicleDetailsModal({
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -482,6 +493,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  contentContainer: {
+    paddingBottom: 24,
+    flexGrow: 1,
   },
   availabilityCard: {
     backgroundColor: '#FFFFFF',
@@ -670,9 +685,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: '#1F2937',
-  },
-  bottomSpacing: {
-    height: 100,
   },
   footer: {
     backgroundColor: '#FFFFFF',

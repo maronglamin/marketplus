@@ -317,11 +317,11 @@ export function Login() {
             Enter your phone number to continue
           </Text>
 
-          {!!apiBaseUrl && (
+          {/* {!!apiBaseUrl && (
             <Text style={styles.helperText}>
               API: {apiBaseUrl} {apiHealth.ok === null ? '(checking...)' : apiHealth.ok ? '(healthy)' : `(unreachable${apiHealth.message ? ': ' + apiHealth.message : ''})`}
             </Text>
-          )}
+          )} */}
 
                       <View style={styles.inputContainer}>
               <TouchableOpacity onPress={() => countrySheetRef.current?.present()} style={styles.inputIconLeft}>

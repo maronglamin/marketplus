@@ -349,6 +349,7 @@ export default function RentalChatScreen() {
           <TextInput
             style={styles.messageInput}
             placeholder="Type your message..."
+            placeholderTextColor="#9CA3AF"
             value={message}
             onChangeText={setMessage}
             multiline
@@ -614,6 +615,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     maxHeight: 100,
     textAlignVertical: 'top',
+    color: '#1F2937',
   },
   sendButton: {
     width: 44,

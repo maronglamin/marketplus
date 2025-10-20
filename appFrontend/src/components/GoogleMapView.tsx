@@ -260,10 +260,10 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
         <!DOCTYPE html>
         <html>
         <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
           <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo&libraries=geometry"></script>
           <style>
-            body { 
+            html, body { 
               margin: 0; 
               padding: 0; 
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -271,7 +271,8 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               position: fixed;
               width: 100%;
               height: 100%;
-              touch-action: manipulation;
+              /* Allow pinch-zoom and pan gestures */
+              touch-action: auto;
               -webkit-touch-callout: none;
               -webkit-user-select: none;
               -khtml-user-select: none;
@@ -286,13 +287,18 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               top: 0;
               left: 0;
               pointer-events: auto;
-              touch-action: pan-x pan-y;
+              /* Allow both panning and pinch-zoom on Android WebView */
+              touch-action: auto;
               -webkit-touch-callout: none;
               -webkit-user-select: none;
               -khtml-user-select: none;
               -moz-user-select: none;
               -ms-user-select: none;
               user-select: none;
+            }
+            /* Ensure all map children respect multi-touch gestures */
+            #map * {
+              touch-action: pan-x pan-y pinch-zoom;
             }
             .status-indicator {
               pointer-events: none;
@@ -531,7 +537,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                 fullscreenControl: false,
                 gestureHandling: 'greedy',
                 draggable: true,
-                scrollwheel: false,
+                scrollwheel: true,
                 disableDoubleClickZoom: false,
                 clickableIcons: true,
                 keyboardShortcuts: false,
@@ -560,6 +566,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               // Add map click listener to test interactivity
               map.addListener('click', function(event) {
                 console.log('🗺️ Map clicked at:', event.latLng.lat(), event.latLng.lng());
+                markInteraction();
               });
               
               // Add map drag listener to test panning
@@ -581,6 +588,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               // Add zoom listener to test zooming
               map.addListener('zoom_changed', function() {
                 console.log('🗺️ Map zoomed to:', map.getZoom());
+                markInteraction();
               });
               
               // Listen for messages from React Native
@@ -1384,7 +1392,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               // Force touch events to work properly on Android
               const mapElement = document.getElementById('map');
               if (mapElement) {
-                mapElement.style.touchAction = 'pan-x pan-y';
+                mapElement.style.touchAction = 'pan-x pan-y pinch-zoom';
                 mapElement.style.webkitTouchCallout = 'none';
                 mapElement.style.webkitUserSelect = 'none';
                 mapElement.style.userSelect = 'none';
@@ -1485,9 +1493,9 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
         originWhitelist={['*']}
         androidLayerType="hardware"
         overScrollMode="never"
-        nestedScrollEnabled={false}
+        nestedScrollEnabled={true}
         javaScriptCanOpenWindowsAutomatically
-        scrollEnabled={false}
+        scrollEnabled={true}
         bounces={false}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}

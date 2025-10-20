@@ -92,6 +92,13 @@ app.use((req, _res, next) => {
   next();
 });
 
+// allow cors for admin server orgin
+app.use(cors({
+  origin: ["http://207.154.220.128"],
+  methods: ["GET", "POST"],
+  credentials: true,
+}));
+
 // Rate limiting - More generous limits to prevent customer frustration
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

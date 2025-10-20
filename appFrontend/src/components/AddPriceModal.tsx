@@ -103,7 +103,7 @@ export default function AddPriceModal({
     <Modal
       visible={isVisible}
       animationType="slide"
-      presentationStyle="pageSheet"
+      presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined}
       onRequestClose={handleClose}
     >
       <SafeAreaView style={styles.container}>
@@ -164,7 +164,7 @@ export default function AddPriceModal({
                     value={proposedPrice}
                     onChangeText={setProposedPrice}
                     keyboardType="decimal-pad"
-                    autoFocus
+                    autoFocus={Platform.OS === 'ios'}
                     editable={!isSubmitting}
                   />
                 </View>
@@ -174,7 +174,7 @@ export default function AddPriceModal({
                 <Text style={styles.tipsTitle}>💡 Tips for pricing:</Text>
                 <Text style={styles.tipText}>• Consider daily rental rates in your area</Text>
                 <Text style={styles.tipText}>• Factor in vehicle type and condition</Text>
-j              </View>
+              </View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>

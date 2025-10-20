@@ -766,6 +766,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0,
   },
   header: {
     flexDirection: 'row',
@@ -1007,6 +1008,7 @@ const styles = StyleSheet.create({
   },
   chatModalContent: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0,
   },
   chatHeader: {
     flexDirection: 'row',
@@ -1119,6 +1121,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     maxHeight: 100,
     textAlignVertical: 'top',
+    color: '#1F2937',
   },
   sendButton: {
     width: 44,

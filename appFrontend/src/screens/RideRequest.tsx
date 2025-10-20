@@ -1159,7 +1159,7 @@ export function RideRequest() {
   }, []);
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} pointerEvents="box-none">
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" translucent />
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -1197,7 +1197,7 @@ export function RideRequest() {
           </View>
 
           {/* Google Maps - Full Screen */}
-          <View style={styles.fullScreenMapContainer}>
+          <View style={styles.fullScreenMapContainer} pointerEvents="auto">
             <GoogleMapView
               ref={mapRef}
               currentLocation={currentLocation || {
@@ -1212,11 +1212,14 @@ export function RideRequest() {
               onLocationUpdate={handleLocationUpdate}
               onLocationError={handleLocationError}
               style={styles.map}
+              // Ensure the WebView receives touch events beneath overlays
+              // @ts-ignore
+              pointerEvents="auto"
             />
             
             {/* Location Loading Overlay */}
             {loadingLocation && (
-              <View style={styles.locationLoadingOverlay}>
+              <View style={styles.locationLoadingOverlay} pointerEvents="none">
                 <View style={styles.locationLoadingCard}>
                   <ActivityIndicator size="large" color="#3B82F6" />
                   <Text style={styles.locationLoadingText}>Getting your location...</Text>
@@ -1227,7 +1230,7 @@ export function RideRequest() {
 
             {/* Tracking Status Indicator */}
             {trackingMode && showTrackingInfo && (
-              <View style={styles.trackingStatusOverlay}>
+              <View style={styles.trackingStatusOverlay} pointerEvents="box-none">
                 <View style={styles.trackingStatusCard}>
                   <View style={styles.trackingStatusHeader}>
                     <View style={styles.trackingIconContainer}>
@@ -1261,7 +1264,7 @@ export function RideRequest() {
 
           {/* Route Summary - Professional Design */}
           {destinationLocation && routeData && !showRideOptions && (
-            <View style={styles.routeSummaryContainer}>
+            <View style={styles.routeSummaryContainer} pointerEvents="box-none">
               <View style={styles.routeSummaryCard}>
                 <TouchableOpacity 
                   style={styles.routeSummaryHeader}
@@ -1462,7 +1465,7 @@ export function RideRequest() {
           )}
 
           {/* Location Input */}
-          <View style={styles.locationContainer}>
+          <View style={styles.locationContainer} pointerEvents="box-none">
             <View style={styles.locationInput}>
               <View style={styles.locationRow}>
                 <View style={styles.locationColumn}>
@@ -1511,7 +1514,7 @@ export function RideRequest() {
 
             {/* Suggestions Dropdown */}
             {showSuggestions && suggestions.length > 0 && (
-              <View style={styles.suggestionsContainer}>
+              <View style={styles.suggestionsContainer} pointerEvents="auto">
                 <ScrollView style={styles.suggestionsList} keyboardShouldPersistTaps="handled">
                   {searching && (
                     <View style={styles.searchingItem}>

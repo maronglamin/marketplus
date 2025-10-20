@@ -5,58 +5,25 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/build.gradle" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/debug.keystore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/proguard-rules.pro" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/debug/AndroidManifest.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/AndroidManifest.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/java/com/marketplace/app/MainActivity.kt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/java/com/marketplace/app/MainApplication.kt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/drawable-hdpi/splashscreen_logo.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/drawable-mdpi/splashscreen_logo.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/drawable-xhdpi/splashscreen_logo.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/drawable-xxhdpi/splashscreen_logo.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/drawable-xxxhdpi/splashscreen_logo.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/drawable/ic_launcher_background.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/drawable/rn_edit_text_material.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-hdpi/ic_launcher.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-mdpi/ic_launcher.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-xhdpi/ic_launcher.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values-night/colors.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values/colors.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values/strings.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values/styles.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/build.gradle" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/gradle.properties" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/gradle/wrapper/gradle-wrapper.jar" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/gradle/wrapper/gradle-wrapper.properties" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/gradlew" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/gradlew.bat" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/settings.gradle" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/api/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/api/auth.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/config/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/config/api.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appBackend/src/app.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/app.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/.env" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/.env" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/appFrontend/app.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.config.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/app.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/metro.config.js" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/metro.config.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/package-lock.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/scripts/update-ip.sh" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/scripts/update-ip.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/tsconfig.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/tsconfig.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/package-lock.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/eas.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/eas.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/AddPriceModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/AddPriceModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/DriversModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/DriversModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/GoogleMapView.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/GoogleMapView.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/UpdatePriceModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/UpdatePriceModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/VehicleDetailsModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/VehicleDetailsModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/config/env.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/config/env.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/AssetRental.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/AssetRental.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/Login.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/Login.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/RentalChat.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/RentalChat.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/RentalRequest.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/RentalRequest.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/RideRequest.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/RideRequest.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -104,7 +71,7 @@
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
     "com.google.services.firebase.aqiPopupShown": "true",
-    "git-widget-placeholder": "TestingFirebase",
+    "git-widget-placeholder": "Oct01StableBuild",
     "kotlin-language-version-configured": "true",
     "last_opened_file_path": "/Users/macbookpro/cody/marketplace/marketplace-app/marketplace",
     "settings.editor.selected.configurable": "AndroidSdkUpdater"
