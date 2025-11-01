@@ -116,6 +116,14 @@ export function CustomerRides() {
   // Initialize Yonna Forex service
   const yonnaForexService = new YonnaForexPaymentService();
 
+  // Normalize currency codes for payment providers (map symbols to ISO codes)
+  const normalizeCurrencyCode = (currency?: string): string => {
+    const code = (currency || '').trim().toUpperCase();
+    if (!code) return 'GMD';
+    if (code === 'D' || code === 'DALASI' || code === 'GAMBIAN DALASI') return 'GMD';
+    return code;
+  };
+
   // Rating-related state
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [selectedRideForRating, setSelectedRideForRating] = useState<RideRequest | null>(null);
@@ -397,6 +405,15 @@ export function CustomerRides() {
         case 'CREDIT_CARD':
         case 'DEBIT_CARD': {
           console.log('💳 Proceeding with Stripe from method tap...');
+          // Guard required data before opening Stripe modal
+          if (!user?.id) {
+            Alert.alert('Sign In Required', 'Please sign in to proceed with card payment.', [{ text: 'OK' }]);
+            return;
+          }
+          if (!selectedRideForPayment?.requestId) {
+            Alert.alert('Error', 'Missing ride reference. Please try again.');
+            return;
+          }
           setShowPaymentModal(false);
           setShowStripePayment(true);
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -462,6 +479,18 @@ export function CustomerRides() {
         case 'CREDIT_CARD':
         case 'DEBIT_CARD':
           console.log('💳 Opening Stripe payment modal...');
+          if (!user?.id) {
+            Alert.alert(
+              'Sign In Required',
+              'Please sign in to proceed with card payment.',
+              [{ text: 'OK' }]
+            );
+            return;
+          }
+          if (!selectedRideForPayment?.requestId) {
+            Alert.alert('Error', 'Missing ride reference. Please try again.');
+            return;
+          }
           // Close the bottom sheet to avoid clipping
           setShowPaymentModal(false);
           setShowStripePayment(true);
@@ -1303,7 +1332,7 @@ export function CustomerRides() {
           setSelectedRideForPayment(null);
         }}
         amount={selectedRideForPayment ? (typeof selectedRideForPayment.estimatedPrice === 'string' ? parseFloat(selectedRideForPayment.estimatedPrice) : selectedRideForPayment.estimatedPrice) : 0}
-        currency={(selectedRideForPayment?.currency || 'GMD').toUpperCase()}
+        currency={normalizeCurrencyCode(selectedRideForPayment?.currency)}
         orderId={selectedRideForPayment?.requestId || ''}
         onPaymentSuccess={handleYonnaPaymentSuccess}
         onPaymentError={handleYonnaPaymentError}
@@ -1311,20 +1340,25 @@ export function CustomerRides() {
       />
 
     {/* Stripe Payment Modal - placed at root level to avoid nesting under bottom sheet */}
-    {showStripePayment && selectedRideForPayment && (
-      <StripePayment
-        visible={showStripePayment}
-        onClose={() => setShowStripePayment(false)}
-        amount={typeof selectedRideForPayment.estimatedPrice === 'string' ? parseFloat(selectedRideForPayment.estimatedPrice) : selectedRideForPayment.estimatedPrice}
-        currency={(selectedRideForPayment.currency || 'GMD').toUpperCase()}
-        orderId={selectedRideForPayment.requestId}
-        customerId={user?.id || ''}
-        onPaymentSuccess={handleStripePaymentSuccess}
-        onPaymentError={handleStripePaymentError}
-        userInfo={{ firstName: user?.firstName || '', lastName: user?.lastName || '' }}
-        transactionType="ride"
-      />
-    )}
+    {(() => {
+      const stripeOrderId = selectedRideForPayment?.requestId || selectedRideForPayment?.id || '';
+      const stripeCustomerId = user?.id ? String(user.id) : '';
+      const canRenderStripe = showStripePayment && !!selectedRideForPayment && !!stripeOrderId && !!stripeCustomerId;
+      return canRenderStripe ? (
+        <StripePayment
+          visible={showStripePayment}
+          onClose={() => setShowStripePayment(false)}
+          amount={typeof selectedRideForPayment!.estimatedPrice === 'string' ? parseFloat(selectedRideForPayment!.estimatedPrice) : selectedRideForPayment!.estimatedPrice}
+          currency={normalizeCurrencyCode(selectedRideForPayment!.currency)}
+          orderId={stripeOrderId}
+          customerId={stripeCustomerId}
+          onPaymentSuccess={handleStripePaymentSuccess}
+          onPaymentError={handleStripePaymentError}
+          userInfo={{ firstName: user?.firstName || '', lastName: user?.lastName || '' }}
+          transactionType="ride"
+        />
+      ) : null;
+    })()}
 
       {/* Rating Modal */}
       <Modal

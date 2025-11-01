@@ -372,6 +372,7 @@ export function JourneyMapView() {
               console.error('Error completing ride:', error);
               
               let errorMessage = 'Failed to complete ride. Please try again.';
+              let canFallback = false;
               
               if (error?.response?.status === 400) {
                 errorMessage = 'Cannot complete ride. Please ensure the ride is in progress.';
@@ -379,9 +380,22 @@ export function JourneyMapView() {
                 errorMessage = 'Ride not found. It may have been cancelled or expired.';
               } else if (error?.response?.status === 403) {
                 errorMessage = 'You are not authorized to complete this ride.';
+              } else if (error?.response?.status >= 500 || error?.message?.includes('Network')) {
+                errorMessage = 'Server is unavailable right now. You can try again later from Ride History.';
+                canFallback = true;
               }
               
-              Alert.alert('Complete Ride Failed', errorMessage);
+              const buttons = canFallback
+                ? [
+                    { text: 'OK', style: 'default' as const },
+                    {
+                      text: 'Return to History',
+                      onPress: () => navigation.navigate('DriverRequests')
+                    }
+                  ]
+                : [{ text: 'OK', style: 'default' as const }];
+              
+              Alert.alert('Complete Ride Failed', errorMessage, buttons);
             }
           }
         }
@@ -440,6 +454,7 @@ export function JourneyMapView() {
       setIsAutoCompleted(false);
       
       let errorMessage = 'Failed to auto-complete ride. You can manually complete the ride.';
+      let canFallback = false;
       
       if (error?.response?.status === 400) {
         errorMessage = 'Cannot complete ride. Please ensure the ride is in progress.';
@@ -447,9 +462,22 @@ export function JourneyMapView() {
         errorMessage = 'Ride not found. It may have been cancelled or expired.';
       } else if (error?.response?.status === 403) {
         errorMessage = 'You are not authorized to complete this ride.';
+      } else if (error?.response?.status >= 500 || error?.message?.includes('Network')) {
+        errorMessage = 'Server is unavailable right now. You can try completing later from Ride History.';
+        canFallback = true;
       }
       
-      Alert.alert('Auto-Complete Failed', errorMessage);
+      const buttons = canFallback
+        ? [
+            { text: 'OK', style: 'default' as const },
+            {
+              text: 'Return to History',
+              onPress: () => navigation.navigate('DriverRequests')
+            }
+          ]
+        : [{ text: 'OK', style: 'default' as const }];
+      
+      Alert.alert('Auto-Complete Failed', errorMessage, buttons);
     }
   };
 
@@ -500,8 +528,9 @@ export function JourneyMapView() {
 
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" translucent />
+    <View style={styles.container}>
+      <SafeAreaView style={styles.contentSafeArea} edges={['bottom']}>
+        <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" translucent />
       
       {/* Header */}
       <View style={styles.header}>
@@ -697,7 +726,8 @@ export function JourneyMapView() {
           </Text>
         </View>
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -705,6 +735,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1E3A8A',
+  },
+  contentSafeArea: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',

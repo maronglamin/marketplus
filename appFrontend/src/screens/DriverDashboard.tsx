@@ -15,7 +15,7 @@ import {
   AppState,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -65,6 +65,7 @@ export function DriverDashboard() {
   const navigation = useNavigation<DriverDashboardNavigationProp>();
   const { user } = useAuth();
   const mapRef = useRef<GoogleMapViewRef>(null);
+  const insets = useSafeAreaInsets();
   
   const [isOnline, setIsOnline] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<MapLocation | null>(null);
@@ -1032,7 +1033,10 @@ export function DriverDashboard() {
       <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" translucent />
       
       {/* Floating Header */}
-      <View style={styles.floatingHeader}>
+      <View style={[
+        styles.floatingHeader,
+        { top: Platform.OS === 'ios' ? insets.top + 8 : ((StatusBar.currentHeight || 0) + 8) }
+      ]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity 
             style={styles.backButton} 

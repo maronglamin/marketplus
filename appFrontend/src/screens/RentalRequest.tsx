@@ -51,6 +51,7 @@ export default function RentalRequestScreen() {
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
   const [rentalsWithPendingPayments, setRentalsWithPendingPayments] = useState<Set<string>>(new Set());
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   // Initialize Yonna Forex service
   const yonnaForexService = new YonnaForexPaymentService();
@@ -66,13 +67,16 @@ export default function RentalRequestScreen() {
     validateUser();
   }, [authLoading, validateAndRefreshUser]);
 
-  // Refresh user data when screen comes into focus
+  // Refresh user data and rental list when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       const refreshOnFocus = async () => {
         if (!authLoading && user?.id) {
-          console.log('RentalRequest: Screen focused, refreshing user data...');
+          console.log('RentalRequest: Screen focused, refreshing user data and rental list...');
           await validateAndRefreshUser();
+          // Trigger a refresh by updating the refresh trigger
+          // This will cause the useEffect below to reload the rentals
+          setRefreshTrigger(prev => prev + 1);
         }
       };
       refreshOnFocus();
@@ -126,7 +130,7 @@ export default function RentalRequestScreen() {
         setRentals([]);
       }
     }
-  }, [user, status, authLoading]); // Changed from user?.id to user to detect all user changes
+  }, [user, status, authLoading, refreshTrigger]); // Added refreshTrigger to force refresh when screen comes into focus
 
   const load = async (nextPage: number = 1, replace: boolean = false) => {
     try {

@@ -904,14 +904,11 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
       return res.status(400).json({ success: false, message: 'No agreed price found for this rental request' });
     }
 
-    // Check if this is a Yonna payment
-    const isYonnaPayment = paymentMethodId === 'yonna-forex' || 
-                          (paymentMethod && paymentMethod.provider && 
-                           paymentMethod.provider.toLowerCase().includes('yonna'));
-
     // For Stripe payments, we don't need to validate the payment method in our database
     // since Stripe handles the payment method validation
     let paymentMethod = null;
+    let isYonnaPayment = paymentMethodId === 'yonna-forex';
+    
     if (paymentMethodId && paymentMethodId !== 'stripe' && !isYonnaPayment) {
       paymentMethod = await prisma.paymentMethod.findFirst({
         where: { 
@@ -922,6 +919,11 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
 
       if (!paymentMethod) {
         return res.status(404).json({ success: false, message: 'Payment method not found' });
+      }
+      
+      // Check if the payment method provider is Yonna
+      if (paymentMethod.provider && paymentMethod.provider.toLowerCase().includes('yonna')) {
+        isYonnaPayment = true;
       }
     }
 

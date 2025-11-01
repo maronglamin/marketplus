@@ -18,11 +18,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'com.snap.app',
+    bundleIdentifier: 'biz.snap.cloudnexus',
     infoPlist: {
       NSAppTransportSecurity: {
         NSExceptionDomains: {
-          '127.0.0.1': {
+          'snap.cloudnexus.biz': {
             NSTemporaryExceptionAllowsInsecureHTTPLoads: true,
             NSIncludesSubdomains: true,
           },
@@ -50,7 +50,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png'
   },
   extra: {
-    localIp: process.env.LOCAL_IP || '127.0.0.1',
+    localIp: process.env.LOCAL_IP || 'snap.cloudnexus.biz',
     stripePublishableKey: 'pk_test_51G7XqgIFQtDBTvihaeU6FZCsQuHg1NQIkdd8CTGL0ZulPMIjQZUmFSW80gOzDpGe5UezYoqkc55WmQhpyYtZdLmk00QmAVRon0',
     googlePlacesApiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo',
     eas: {

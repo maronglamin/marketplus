@@ -17,7 +17,7 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +30,7 @@ const { width, height } = Dimensions.get('window');
 
 export function DriverRequests() {
   const navigation = useNavigation<DriverRequestsNavigationProp>();
+  const insets = useSafeAreaInsets();
   const [rides, setRides] = useState<RideHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -593,11 +594,17 @@ export function DriverRequests() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" translucent />
+    <View style={styles.container}>
+      <SafeAreaView style={styles.contentSafeArea} edges={['bottom']}>
+        <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" translucent />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: Platform.OS === 'ios' ? insets.top + 8 : ((StatusBar.currentHeight || 0) + 8) }
+        ]}
+      >
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
@@ -1039,6 +1046,7 @@ export function DriverRequests() {
         </TouchableWithoutFeedback>
               </Modal>
       </SafeAreaView>
+    </View>
   );
 }
 
@@ -1046,6 +1054,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1E3A8A',
+  },
+  contentSafeArea: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
   },
   header: {
     flexDirection: 'row',

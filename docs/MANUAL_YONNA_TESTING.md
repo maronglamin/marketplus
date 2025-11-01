@@ -92,7 +92,7 @@ curl http://192.168.137.196:3000/api/health
 curl http://192.168.137.196:3000/api/payments/yonna-forex/currencies
 
 # Check your IP address
-ifconfig | grep "inet " | grep -v 127.0.0.1
+ifconfig | grep "inet " | grep -v snap.cloudnexus.biz
 ```
 
 ## What to Look For

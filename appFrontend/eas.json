@@ -12,7 +12,7 @@
       "distribution": "internal",
       "env": {
         "NODE_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "http://127.0.0.1:3000"
+        "EXPO_PUBLIC_API_URL": "http://snap.cloudnexus.biz:3000"
       },
       "android": {
         "buildType": "apk"
@@ -21,7 +21,7 @@
     "production": {
       "env": {
         "NODE_ENV": "production",
-        "EXPO_PUBLIC_API_URL": "http://127.0.0.1:3000"
+        "EXPO_PUBLIC_API_URL": "http://snap.cloudnexus.biz:3000"
       },
       "android": {
         "buildType": "app-bundle",

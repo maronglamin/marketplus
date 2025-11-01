@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
   FlatList,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -38,6 +38,7 @@ export function RideRequest() {
   const route = useRoute<RouteProp<AppStackParamList, 'RideRequest'>>();
   const mapRef = useRef<GoogleMapViewRef>(null);
   const trackingIntervalRef = useRef<number | null>(null);
+  const insets = useSafeAreaInsets();
   
   const [pickup, setPickup] = useState('');
   const [destination, setDestination] = useState('');
@@ -1164,7 +1165,10 @@ export function RideRequest() {
         <StatusBar barStyle="light-content" backgroundColor="#1E3A8A" translucent />
         <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
           {/* Header - Floating */}
-          <View style={styles.floatingHeader}>
+          <View style={[
+            styles.floatingHeader,
+            { top: Platform.OS === 'ios' ? insets.top + 8 : ((StatusBar.currentHeight || 0) + 8) }
+          ]}>
             <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
