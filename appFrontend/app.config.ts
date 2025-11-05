@@ -2,7 +2,7 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: 'SNAP',
+  name: 'SNAP App',
   slug: 'marketplace',
   version: '1.0.0',
   orientation: 'portrait',
@@ -18,8 +18,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'biz.snap.cloudnexus',
+    bundleIdentifier: 'biz.cloudnexus.snap.app',
     infoPlist: {
+      UILaunchStoryboardName: 'SplashScreen',
+      UIRequiresFullScreen: true,
+      NSCameraUsageDescription: 'This app uses the camera to take photos and videos for profile, receipts, and uploads.',
+      NSPhotoLibraryUsageDescription: 'This app needs access to your photo library so you can select photos to upload.',
+      NSPhotoLibraryAddUsageDescription: 'This app may save images or exports to your photo library when you choose to do so.',
+      NSMicrophoneUsageDescription: 'This app may use the microphone for features that require audio recording.',
+      NSLocationWhenInUseUsageDescription: 'This app needs access to your location to show your current position on the map and provide ride services.',
+      NSLocationAlwaysAndWhenInUseUsageDescription: 'This app needs access to your location to show your current position on the map and provide ride services.',
       NSAppTransportSecurity: {
         NSExceptionDomains: {
           'snap.cloudnexus.biz': {

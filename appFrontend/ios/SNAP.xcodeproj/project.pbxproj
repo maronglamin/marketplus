@@ -375,7 +375,7 @@
 					"FB_SONARKIT_ENABLED=1",
 				);
 				INFOPLIST_FILE = SNAP/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = SNAP;
+				INFOPLIST_KEY_CFBundleDisplayName = "SNAP App";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -389,7 +389,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = biz.snap.cloudnexus;
+				PRODUCT_BUNDLE_IDENTIFIER = biz.cloudnexus.snap.app;
 				PRODUCT_NAME = SNAP;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "SNAP/SNAP-Bridging-Header.h";
@@ -408,12 +408,14 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = SNAP/SNAP.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 925QXH73RD;
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 925QXH73RD;
 				INFOPLIST_FILE = SNAP/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = SNAP;
+				INFOPLIST_KEY_CFBundleDisplayName = "SNAP App";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -427,9 +429,10 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = biz.snap.cloudnexus;
+				PRODUCT_BUNDLE_IDENTIFIER = biz.cloudnexus.snap.app;
 				PRODUCT_NAME = SNAP;
-				PROVISIONING_PROFILE_SPECIFIER = "";
+				PROVISIONING_PROFILE_SPECIFIER = "SNAP App Store Profile";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = SNAP_Cloud_Nexus_APP;
 				SWIFT_OBJC_BRIDGING_HEADER = "SNAP/SNAP-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
