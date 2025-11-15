@@ -7,6 +7,29 @@
     <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/api/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/api/auth.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/config/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/config/api.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appBackend/src/app.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/app.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appBackend/src/routes/orders.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/routes/orders.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appBackend/src/routes/payments.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/routes/payments.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appBackend/src/routes/rental.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/routes/rental.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appBackend/src/routes/rideRequests.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/routes/rideRequests.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/.env" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/.env" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/app.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.config.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/eas.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/eas.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/ScheduleRideModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/ScheduleRideModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/VehicleDetailsModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/VehicleDetailsModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/config/env.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/config/env.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/navigation/AppNavigator.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/navigation/AppNavigator.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/DeliveryOptions.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/DeliveryOptions.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/DriverDashboard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/DriverDashboard.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/Home.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/Home.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/OrderDetails.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/OrderDetails.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/VehicleDetailsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/VehicleDetailsScreen.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/MANUAL_YONNA_TESTING.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/MANUAL_YONNA_TESTING.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

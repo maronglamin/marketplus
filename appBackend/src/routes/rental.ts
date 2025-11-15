@@ -908,6 +908,7 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
     // since Stripe handles the payment method validation
     let paymentMethod = null;
     let isYonnaPayment = paymentMethodId === 'yonna-forex';
+    let isWavePayment = paymentMethodId === 'wave-gambia' || paymentMethodId === 'wave';
     
     if (paymentMethodId && paymentMethodId !== 'stripe' && !isYonnaPayment) {
       paymentMethod = await prisma.paymentMethod.findFirst({
@@ -924,6 +925,9 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
       // Check if the payment method provider is Yonna
       if (paymentMethod.provider && paymentMethod.provider.toLowerCase().includes('yonna')) {
         isYonnaPayment = true;
+      }
+      if (paymentMethod.provider && paymentMethod.provider.toLowerCase().includes('wave')) {
+        isWavePayment = true;
       }
     }
 
@@ -947,6 +951,22 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
 
       // Process through Yonna
       return yonnaController.processPayment(yonnaReq, res);
+    }
+
+    // Handle Wave payment
+    if (isWavePayment) {
+      const WavePaymentController = require('../controllers/WavePaymentController').default;
+      const waveController = new WavePaymentController();
+      const waveReq = {
+        ...req,
+        body: {
+          amount: rental.agreedPrice,
+          currency: rental.currency || 'GMD',
+          description: `Rental payment for ${rental.rideService?.name || 'Rental Service'}`,
+          orderId: rentalId
+        }
+      };
+      return waveController.processPayment(waveReq, res);
     }
 
     // Generate app-level transaction id shared across all records

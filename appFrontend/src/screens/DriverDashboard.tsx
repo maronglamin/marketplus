@@ -20,6 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { useKeepAwake } from 'expo-keep-awake';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { GoogleMapView, type GoogleMapViewRef, type MapLocation, type RouteData } from '../components/GoogleMapView';
@@ -66,6 +67,7 @@ export function DriverDashboard() {
   const { user } = useAuth();
   const mapRef = useRef<GoogleMapViewRef>(null);
   const insets = useSafeAreaInsets();
+  useKeepAwake();
   
   const [isOnline, setIsOnline] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<MapLocation | null>(null);
@@ -1232,6 +1234,7 @@ export function DriverDashboard() {
         transparent={true}
         animationType="slide"
         onRequestClose={() => setShowRequestModal(false)}
+        statusBarTranslucent={true}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -1406,7 +1409,7 @@ export function DriverDashboard() {
               </ScrollView>
             )}
             
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
               <TouchableOpacity 
                 style={styles.rejectButton}
                 onPress={() => selectedRequest && handleRejectRequest(selectedRequest)}
@@ -1422,7 +1425,7 @@ export function DriverDashboard() {
                 activeOpacity={0.8}
               >
                 <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                <Text style={styles.acceptButtonText}>Accept & Navigate</Text>
+                <Text style={styles.acceptButtonText}>Accept</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1734,7 +1737,7 @@ export function DriverDashboard() {
               </ScrollView>
             )}
             
-            <View style={styles.requestDetailActions}>
+            <View style={[styles.requestDetailActions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
               <TouchableOpacity 
                 style={styles.rejectButton}
                 onPress={() => {
@@ -1760,7 +1763,7 @@ export function DriverDashboard() {
                 activeOpacity={0.8}
               >
                 <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                <Text style={styles.acceptButtonText}>Accept & Navigate</Text>
+                <Text style={styles.acceptButtonText}>Accept</Text>
               </TouchableOpacity>
             </View>
           </View>

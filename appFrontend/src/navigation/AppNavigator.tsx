@@ -71,9 +71,11 @@ import { ProductCategoryOptions } from '../screens/ProductCategoryOptions';
 import { RepsActivity } from '../screens/RepsActivity';
 import { RepOrderReport } from '../screens/reps-reports/RepOrderReport';
 import { RepProductReport } from '../screens/reps-reports/RepProductReport';
+import { ShoppingCart } from '../screens/ShoppingCart';
 
 export type AppStackParamList = {
   Home: { openSearch?: boolean } | undefined;
+  ShoppingCart: undefined;
   Settings: undefined;
   BranchesScreen: undefined;
   SalesRepsScreen: undefined;
@@ -306,6 +308,7 @@ export function AppNavigator() {
         <Stack.Screen name="FeaturedProducts" component={FeaturedProducts} />
         <Stack.Screen name="SellerProductDetail" component={SellerProductDetail} />
         <Stack.Screen name="InterestManagement" component={InterestManagement} />
+        <Stack.Screen name="ShoppingCart" component={ShoppingCart} />
         <Stack.Screen name="CustomerOrders" component={CustomerOrders} />
         <Stack.Screen name="ShowInterest" component={ShowInterest} />
         <Stack.Screen name="Order" component={Order} />

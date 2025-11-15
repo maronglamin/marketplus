@@ -39,27 +39,43 @@ export function DeliveryOptions() {
   const loadProductAndDeliveryOptions = async () => {
     try {
       setLoading(true);
-      
+
       // Load product details first to get the currency - use seller endpoint
       const productDetails = await productService.getSellerProductById(productId);
       setProduct(productDetails);
-      
+
       // Load delivery options
       const options = await deliveryOptionsService.getDeliveryOptions(productId);
       if (options.length === 0) {
-        // Use default options if none exist, but with the product's currency
-        const defaultOptions = deliveryOptionsService.getDefaultDeliveryOptions();
-        const optionsWithProductCurrency = defaultOptions.map(option => ({
-          ...option,
-          currencyCode: productDetails.currencyCode
-        }));
-        setDeliveryOptions(optionsWithProductCurrency);
+        // Ensure exactly one default option exists
+        const singleDefaultOption: DeliveryOption = {
+          deliveryType: 'STANDARD',
+          name: '',
+          description: '',
+          price: 0,
+          currencyCode: productDetails.currencyCode,
+          estimatedDays: 1,
+          isDefault: true,
+          isActive: true,
+        };
+        setDeliveryOptions([singleDefaultOption]);
       } else {
-        // Ensure all existing options use the product's currency
+        // Keep existing options, correct currency, and ensure a single default
         const optionsWithCorrectCurrency = options.map(option => ({
           ...option,
-          currencyCode: productDetails.currencyCode
+          currencyCode: productDetails.currencyCode,
         }));
+        const defaultIndexes = optionsWithCorrectCurrency
+          .map((o, idx) => (o.isDefault ? idx : -1))
+          .filter(idx => idx !== -1);
+        if (defaultIndexes.length === 0 && optionsWithCorrectCurrency.length > 0) {
+          optionsWithCorrectCurrency[0].isDefault = true;
+        } else if (defaultIndexes.length > 1) {
+          const firstDefault = defaultIndexes[0];
+          optionsWithCorrectCurrency.forEach((o, idx) => {
+            o.isDefault = idx === firstDefault;
+          });
+        }
         setDeliveryOptions(optionsWithCorrectCurrency);
       }
     } catch (error) {
@@ -76,7 +92,6 @@ export function DeliveryOptions() {
       Alert.alert('Error', 'Product information not loaded. Please try again.');
       return;
     }
-    
     const newOption: DeliveryOption = {
       deliveryType: 'STANDARD',
       name: '',
@@ -259,6 +274,7 @@ export function DeliveryOptions() {
                     value={option.name}
                     onChangeText={(text) => updateDeliveryOption(index, 'name', text)}
                     placeholder="e.g., Standard Delivery"
+                    placeholderTextColor="#9CA3AF"
                   />
                 </View>
 
@@ -271,6 +287,7 @@ export function DeliveryOptions() {
                     placeholder="e.g., Regular delivery within 3-5 business days"
                     multiline
                     numberOfLines={3}
+                    placeholderTextColor="#9CA3AF"
                   />
                 </View>
 
@@ -283,6 +300,7 @@ export function DeliveryOptions() {
                       onChangeText={(text) => updateDeliveryOption(index, 'price', parseFloat(text) || 0)}
                       placeholder="0.00"
                       keyboardType="numeric"
+                      placeholderTextColor="#9CA3AF"
                     />
                   </View>
                   <View style={[styles.inputGroup, {flex: 1, marginLeft: 12}]}>
@@ -293,6 +311,7 @@ export function DeliveryOptions() {
                       onChangeText={(text) => updateDeliveryOption(index, 'estimatedDays', parseInt(text) || 1)}
                       placeholder="1"
                       keyboardType="numeric"
+                      placeholderTextColor="#9CA3AF"
                     />
                   </View>
                 </View>
@@ -308,7 +327,6 @@ export function DeliveryOptions() {
                     </Text>
                   </View>
                 </View>
-
                 <View style={styles.checkboxContainer}>
                   <TouchableOpacity
                     style={styles.checkbox}
@@ -322,7 +340,6 @@ export function DeliveryOptions() {
                 </View>
               </View>
             ))}
-
             <TouchableOpacity 
               style={[styles.addButton, !product && styles.disabledButton]} 
               onPress={addDeliveryOption}
@@ -403,6 +420,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     backgroundColor: '#FFFFFF',
+    color: '#111827',
   },
   textArea: { height: 80, textAlignVertical: 'top' },
   row: { flexDirection: 'row' },
@@ -453,7 +471,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: 12,
     marginTop: 8,
-    paddingBottom: 10,
+    marginBottom: 32,
   },
   addButtonText: { fontSize: 16, fontWeight: '600', color: '#2563EB', marginLeft: 8 },
   currencyDisplayContainer: {
@@ -483,7 +501,7 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   contentContainer: {
-    paddingBottom: 16,
+    paddingBottom: 64,
   },
   disabledButton: {
     opacity: 0.7,

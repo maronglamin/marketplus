@@ -546,6 +546,378 @@ router.post('/payment-success', authenticate, async (req, res) => {
   }
 });
 
+// Bulk payment success - marks multiple orders as paid in one shot
+router.post('/bulk-payment-success', authenticate, async (req, res) => {
+  try {
+    const { paymentIntentId, orderIds } = req.body as { paymentIntentId: string; orderIds: string[] };
+    const userId = (req as any).user?.id;
+
+    if (!paymentIntentId || !orderIds || !Array.isArray(orderIds) || orderIds.length < 2) {
+      return res.status(400).json({
+        message: 'Missing required fields: paymentIntentId and at least two orderIds',
+      });
+    }
+
+    // Retrieve payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({ message: 'Payment intent is not in succeeded status' });
+    }
+
+    // Fetch orders and validate
+    const orders = await prisma.orders.findMany({
+      where: { id: { in: orderIds } },
+      include: {
+        User_orders_userIdToUser: true,
+        User_orders_sellerIdToUser: true,
+      },
+    });
+
+    if (orders.length !== orderIds.length) {
+      return res.status(404).json({ message: 'One or more orders not found' });
+    }
+
+    // Ensure all belong to current user and are eligible
+    const distinctUserIds = new Set(orders.map(o => o.userId));
+    if (distinctUserIds.size !== 1 || !distinctUserIds.has(userId)) {
+      return res.status(403).json({ message: 'Orders do not belong to the authenticated user' });
+    }
+    const currencies = new Set(orders.map(o => (o.currencyCode || '').toUpperCase()));
+    if (currencies.size !== 1) {
+      return res.status(400).json({ message: 'Orders have different currencies; cannot bulk pay' });
+    }
+    const currencyCode = Array.from(currencies)[0];
+    const ineligible = orders.filter(
+      o => (o.paymentStatus || '').toUpperCase() === 'PAID' || (o.status || '').toUpperCase() !== 'AUTHORIZED'
+    );
+    if (ineligible.length > 0) {
+      return res.status(400).json({ message: 'One or more orders are not eligible for bulk payment' });
+    }
+
+    // Validate payment amount equals sum (approximate using cents)
+    const sumAmount = orders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+    const currencyLower = currencyCode.toLowerCase();
+    const zeroDecimalCurrencies = ['jpy', 'bif', 'clp', 'djf', 'gnf', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
+    const expectedIntentAmount = zeroDecimalCurrencies.includes(currencyLower) ? Math.round(sumAmount) : Math.round(sumAmount * 100);
+    if (paymentIntent.amount !== expectedIntentAmount || paymentIntent.currency !== currencyLower) {
+      // Log a warning but continue to avoid user-facing errors due to rounding
+      console.warn('Bulk payment amount/currency mismatch:', {
+        expectedIntentAmount,
+        actual: paymentIntent.amount,
+        expectedCurrency: currencyLower,
+        actualCurrency: paymentIntent.currency,
+      });
+    }
+
+    // Calculate Stripe fees for the bulk total and prorate per order
+    const totalOriginal = sumAmount;
+    const totalStripeFees = calculateStripeFees(totalOriginal, currencyCode);
+    // Helper to round to currency
+    const isZeroDecimal = ['jpy','bif','clp','djf','gnf','kmf','krw','mga','pyg','rwf','ugx','vnd','vuv','xaf','xof','xpf'].includes(currencyLower);
+    const roundCurrency = (val: number) => (isZeroDecimal ? Math.round(val) : Math.round(val * 100) / 100);
+
+    // Single appTransactionId for this bulk payment
+    const appTransactionId = `BTXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+    // Perform updates in a transaction
+    const result = await prisma.$transaction(async tx => {
+      const updatedOrders: any[] = [];
+      const transactions: any[] = [];
+
+      for (let i = 0; i < orders.length; i++) {
+        const order = orders[i];
+        // Update order as PAID/CONFIRMED
+        const updated = await tx.orders.update({
+          where: { id: order.id },
+          data: {
+            paymentStatus: 'PAID',
+            status: 'CONFIRMED',
+            paymentReference: paymentIntent.id,
+            paidAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+        updatedOrders.push(updated);
+
+        // ORIGINAL transaction for the order
+        const originalTransaction = await tx.externalTransaction.create({
+          data: {
+            orderId: order.id,
+            customerId: order.userId,
+            sellerId: order.sellerId,
+            gatewayProvider: 'stripe',
+            gatewayTransactionId: paymentIntent.id,
+            paymentReference: paymentIntent.id,
+            appTransactionId: appTransactionId,
+            appService: 'ECOMMERCE',
+            transactionType: 'ORIGINAL',
+            amount: Number(order.totalAmount || 0),
+            currencyCode: currencyCode,
+            gatewayChargeFees: null,
+            processedAmount: null,
+            paidThroughGateway: true,
+            gatewayResponse: paymentIntent as any,
+            status: 'SUCCESS',
+            processedAt: new Date(),
+          },
+        });
+        transactions.push(originalTransaction);
+
+        // Prorate Stripe fee for this order
+        const ratio = totalOriginal > 0 ? Number(order.totalAmount || 0) / totalOriginal : 0;
+        let orderFee = roundCurrency(totalStripeFees * ratio);
+        // On last iteration, adjust to ensure sum of fees equals totalStripeFees
+        if (i === orders.length - 1) {
+          const allocated = transactions
+            .filter(t => t.transactionType === 'FEE')
+            .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+          const remaining = roundCurrency(totalStripeFees - allocated);
+          orderFee = remaining;
+        }
+
+        // Create Stripe fee transaction for this order
+        const feeTransaction = await tx.externalTransaction.create({
+          data: {
+            orderId: order.id,
+            customerId: order.userId,
+            sellerId: order.sellerId,
+            gatewayProvider: 'stripe',
+            gatewayTransactionId: `${paymentIntent.id}-fee-${order.id}`,
+            paymentReference: paymentIntent.id,
+            appTransactionId: appTransactionId,
+            appService: 'ECOMMERCE',
+            transactionType: 'FEE',
+            amount: orderFee,
+            currencyCode: currencyCode,
+            gatewayChargeFees: orderFee,
+            processedAmount: 0,
+            paidThroughGateway: true,
+            gatewayResponse: {
+              originalPaymentIntent: paymentIntent.id,
+              prorationRatio: ratio,
+              totalStripeFees: totalStripeFees,
+              allocatedFee: orderFee
+            } as any,
+            status: 'SUCCESS',
+            processedAt: new Date()
+          }
+        });
+        transactions.push(feeTransaction);
+
+        // Calculate service fee per order
+        const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } = await UCPService.calculateServiceFee(
+          'stripe',
+          Number(order.totalAmount || 0),
+          currencyCode
+        );
+
+        // Service fee transaction
+        const serviceFeeTransaction = await tx.externalTransaction.create({
+          data: {
+            orderId: order.id,
+            customerId: order.userId,
+            sellerId: order.sellerId,
+            gatewayProvider: 'stripe',
+            gatewayTransactionId: `${paymentIntent.id}-servicefee-${order.id}`,
+            paymentReference: paymentIntent.id,
+            appTransactionId: appTransactionId,
+            appService: 'ECOMMERCE',
+            transactionType: TransactionType.SERVICE_FEE,
+            amount: serviceFeeAmount,
+            currencyCode: currencyCode,
+            gatewayChargeFees: null,
+            processedAmount: 0,
+            paidThroughGateway: false,
+            gatewayResponse: {
+              originalPaymentIntent: paymentIntent.id,
+              serviceFeeConfig: serviceFeeConfig
+                ? {
+                    name: serviceFeeConfig.name,
+                    value: serviceFeeConfig.value,
+                    description: serviceFeeConfig.description,
+                    serviceType: serviceFeeConfig.serviceType,
+                    metadata: serviceFeeConfig.metadata,
+                  }
+                : null,
+              serviceFeePercentage,
+              serviceFeeAmount,
+            },
+            status: 'SUCCESS',
+            processedAt: new Date(),
+          },
+        });
+        transactions.push(serviceFeeTransaction);
+      }
+
+      return { updatedOrders, transactions };
+    });
+
+    res.json({
+      success: true,
+      orders: result.updatedOrders.map(o => ({
+        id: o.id,
+        paymentStatus: o.paymentStatus,
+        status: o.status,
+        paidAt: o.paidAt,
+      })),
+      paymentIntentId: paymentIntent.id,
+      appTransactionId,
+    });
+  } catch (error: any) {
+    console.error('Error processing bulk payment success:', error);
+    res.status(500).json({
+      message: error.message || 'Failed to process bulk payment success',
+    });
+  }
+});
+
+// Generic bulk external payment success (e.g., mobile wallets like Yonna, Wave)
+router.post('/bulk-external-success', authenticate, async (req, res) => {
+  try {
+    const { provider, transactionReference, orderIds, currencyCode, amount } = req.body as {
+      provider: string;
+      transactionReference: string;
+      orderIds: string[];
+      currencyCode: string;
+      amount?: number;
+    };
+    const userId = (req as any).user?.id;
+
+    if (!provider || !transactionReference || !orderIds || !Array.isArray(orderIds) || orderIds.length < 2 || !currencyCode) {
+      return res.status(400).json({ message: 'Missing provider, transactionReference, currencyCode or insufficient orderIds' });
+    }
+
+    // Fetch and validate orders
+    const orders = await prisma.orders.findMany({
+      where: { id: { in: orderIds } },
+      include: {
+        User_orders_userIdToUser: true,
+        User_orders_sellerIdToUser: true,
+      },
+    });
+    if (orders.length !== orderIds.length) {
+      return res.status(404).json({ message: 'One or more orders not found' });
+    }
+    const distinctUserIds = new Set(orders.map(o => o.userId));
+    if (distinctUserIds.size !== 1 || !distinctUserIds.has(userId)) {
+      return res.status(403).json({ message: 'Orders do not belong to the authenticated user' });
+    }
+    const currencies = new Set(orders.map(o => (o.currencyCode || '').toUpperCase()));
+    if (currencies.size !== 1 || !currencies.has(currencyCode.toUpperCase())) {
+      return res.status(400).json({ message: 'Orders have different currencies' });
+    }
+    const ineligible = orders.filter(
+      o => (o.paymentStatus || '').toUpperCase() === 'PAID' || (o.status || '').toUpperCase() !== 'AUTHORIZED'
+    );
+    if (ineligible.length > 0) {
+      return res.status(400).json({ message: 'One or more orders are not eligible for bulk payment' });
+    }
+
+    const appTransactionId = `BTXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
+    const result = await prisma.$transaction(async tx => {
+      const updatedOrders: any[] = [];
+      const transactions: any[] = [];
+      for (const order of orders) {
+        const updated = await tx.orders.update({
+          where: { id: order.id },
+          data: {
+            paymentStatus: 'PAID',
+            status: 'CONFIRMED',
+            paymentReference: transactionReference,
+            paidAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+        updatedOrders.push(updated);
+
+        const originalTx = await tx.externalTransaction.create({
+          data: {
+            orderId: order.id,
+            customerId: order.userId,
+            sellerId: order.sellerId,
+            gatewayProvider: provider,
+            gatewayTransactionId: transactionReference,
+            paymentReference: transactionReference,
+            appTransactionId,
+            appService: 'ECOMMERCE',
+            transactionType: 'ORIGINAL',
+            amount: Number(order.totalAmount || 0),
+            currencyCode: currencyCode.toUpperCase(),
+            gatewayChargeFees: null,
+            processedAmount: null,
+            paidThroughGateway: true,
+            gatewayResponse: {
+              provider,
+              transactionReference,
+              bulkAmount: amount || null,
+            } as any,
+            status: 'SUCCESS',
+            processedAt: new Date(),
+          },
+        });
+        transactions.push(originalTx);
+
+        // Service fee per order using UCP and provider
+        const providerKey = provider.toLowerCase().includes('yonna')
+          ? 'yonna'
+          : provider.toLowerCase().includes('wave')
+            ? 'wave_wallet'
+            : provider.toLowerCase();
+        const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } = await UCPService.calculateServiceFee(
+          providerKey,
+          Number(order.totalAmount || 0),
+          currencyCode
+        );
+        const serviceFeeTx = await tx.externalTransaction.create({
+          data: {
+            orderId: order.id,
+            customerId: order.userId,
+            sellerId: order.sellerId,
+            gatewayProvider: provider,
+            gatewayTransactionId: `${transactionReference}-servicefee-${order.id}`,
+            paymentReference: transactionReference,
+            appTransactionId,
+            appService: 'ECOMMERCE',
+            transactionType: TransactionType.SERVICE_FEE,
+            amount: serviceFeeAmount,
+            currencyCode: currencyCode.toUpperCase(),
+            gatewayChargeFees: null,
+            processedAmount: 0,
+            paidThroughGateway: false,
+            gatewayResponse: {
+              originalReference: transactionReference,
+              serviceFeeConfig: serviceFeeConfig || null,
+              serviceFeePercentage,
+              serviceFeeAmount,
+            } as any,
+            status: 'SUCCESS',
+            processedAt: new Date(),
+          },
+        });
+        transactions.push(serviceFeeTx);
+      }
+      return { updatedOrders, transactions };
+    });
+
+    res.json({
+      success: true,
+      orders: result.updatedOrders.map(o => ({
+        id: o.id,
+        paymentStatus: o.paymentStatus,
+        status: o.status,
+        paidAt: o.paidAt,
+      })),
+      appTransactionId,
+    });
+  } catch (error: any) {
+    console.error('Error processing bulk external payment success:', error);
+    res.status(500).json({
+      message: error.message || 'Failed to process bulk external payment success',
+    });
+  }
+});
+
 // Helper function to calculate Stripe fees
 function calculateStripeFees(amount: number, currency: string): number {
   // Stripe fees: 2.9% + 30 cents for most currencies

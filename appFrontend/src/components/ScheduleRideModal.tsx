@@ -453,19 +453,19 @@ export default function ScheduleRideModal({ isVisible, onClose, onSave }: Schedu
       await rentalApi.createRental(payload);
 
       await onSave(scheduleData);
-      Alert.alert('Success', 'Vehicle rental booked successfully!', [
+      Alert.alert('Success', 'Rental asset booked successfully, we will notify the asset owner.', [
         {
           text: 'OK',
           onPress: () => {
             resetForm();
             onClose();
-            // Navigate to Home screen after successful booking
-            console.log('Attempting to navigate to Home screen...');
-            // Reset navigation stack to Home screen with a small delay
+            // Navigate to RentalRequest screen after successful booking
+            console.log('Attempting to navigate to RentalRequest screen...');
+            // Reset navigation stack to Home -> RentalRequest with a small delay
             setTimeout(() => {
               navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }],
+                index: 1,
+                routes: [{ name: 'Home' }, { name: 'RentalRequest' }],
               });
             }, 100);
           },

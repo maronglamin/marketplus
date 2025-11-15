@@ -27,6 +27,7 @@ import rideRequestRoutes from './routes/rideRequest';
 import salesRepRoutes from './routes/salesRep';
 import branchRoutes from './routes/branch';
 import yonnaForexPaymentRoutes from './routes/yonnaForexPaymentRoutes';
+import wavePaymentRoutes from './routes/wavePaymentRoutes';
 
 const app = express();
 
@@ -75,6 +76,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Request size limits
+// Wave webhook raw body parser must be before JSON parser
+app.use('/api/payments/wave-gambia/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '50mb' })); // Increased for image uploads
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -140,6 +143,7 @@ app.use('/api/rental-messages', rentalMessageRoutes);
 app.use('/api/sales-reps', salesRepRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/payments/yonna-forex', yonnaForexPaymentRoutes);
+app.use('/api/payments/wave-gambia', wavePaymentRoutes);
 
 // Health check endpoint under /api
 app.get('/api/health', (req, res) => {

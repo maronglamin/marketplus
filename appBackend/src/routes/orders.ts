@@ -69,16 +69,14 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res) => {
       });
     }
 
-    // Check if user already has an active order for this product
+  // Check if user already has a pending order for this product
     const existingOrder = await prisma.orders.findFirst({
       where: {
         userId,
         items: {
           some: { productId }
         },
-        status: {
-          notIn: ['CANCELLED', 'REFUNDED']
-        }
+      status: 'PENDING'
       }
     });
     if (existingOrder) {

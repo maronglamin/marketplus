@@ -15,7 +15,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Linking } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Header } from '../components/Header';
@@ -33,6 +34,7 @@ import { API_URL } from '../config/env';
 import type { AppStackParamList } from '../navigation/AppNavigator';
 import YonnaPaymentModal from '../components/YonnaPaymentModal';
 import { YonnaForexPaymentService } from '../services/YonnaForexPaymentService';
+import WavePaymentService from '../services/WavePaymentService';
 
 // Use centralized API_URL from env
 const { height: screenHeight } = Dimensions.get('window');
@@ -97,6 +99,7 @@ export function OrderDetails() {
   const navigation = useNavigation<OrderDetailsNavigationProp>();
   const route = useRoute();
   const { orderId } = route.params as { orderId: string };
+  const insets = useSafeAreaInsets();
   
   console.log('OrderDetails route params:', route.params);
   console.log('OrderDetails orderId:', orderId);
@@ -141,6 +144,7 @@ export function OrderDetails() {
 
   // Initialize Yonna Forex service
   const yonnaForexService = new YonnaForexPaymentService();
+  const wavePaymentService = new WavePaymentService();
 
   // Payment method form data
   const [paymentMethodForms, setPaymentMethodForms] = useState<{[key: string]: any}>({
@@ -521,8 +525,34 @@ export function OrderDetails() {
         {
           const providerName = (method.provider || method.metadata?.providerName || '').toString().toLowerCase();
           const isYonna = providerName.includes('yonna');
+          const isWave = providerName.includes('wave');
           if (isYonna) {
             setShowYonnaPayment(true);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            break;
+          }
+          if (isWave) {
+            // Create Wave checkout session and open the Wave app/url
+            (async () => {
+              try {
+                const result = await wavePaymentService.processPayment({
+                  amount: order.totalAmount,
+                  currency: order.currencyCode || 'GMD',
+                  orderId: order.id,
+                  description: `Payment for Order #${order.orderNumber} via Wave`,
+                });
+                if (result.success && result.data?.waveLaunchUrl) {
+                  await Linking.openURL(result.data.waveLaunchUrl);
+                } else {
+                  Alert.alert(
+                    'Wave Payment Error',
+                    result.message || 'Unable to start Wave payment. Please try again.'
+                  );
+                }
+              } catch (err: any) {
+                Alert.alert('Wave Payment Error', err?.message || 'Failed to initiate Wave payment.');
+              }
+            })();
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             break;
           }
@@ -1521,7 +1551,11 @@ export function OrderDetails() {
         <View style={styles.headerSpacer} /> 
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 140 }}
+      >
         <View style={styles.statusSection}>
           <View style={styles.statusHeader}>
             <Text style={styles.sectionTitle}>Order Status</Text>
@@ -1955,87 +1989,7 @@ export function OrderDetails() {
           )}
         </View>
 
-        {/* Checkout Button - Only show to buyers when order is authorized and not paid */}
-        {(() => {
-          const currentUserId = user?.id;
-          const orderSellerId = order?.sellerId;
-          const isBuyer = currentUserId !== orderSellerId;
-          const isAuthorized = order.status.toLowerCase() === 'authorized';
-          const isNotPaid = !order.paymentStatus || order.paymentStatus.toLowerCase() !== 'paid';
-          
-          return isAuthorized && isNotPaid && isBuyer ? (
-            <View style={styles.checkoutSection}>
-              <TouchableOpacity
-                style={[
-                  styles.checkoutButton,
-                  (loadingPaymentMethods || checkingTransactions || !canMakePayment) && styles.disabledButton
-                ]}
-                onPress={async () => {
-                  // Don't allow payment if there are existing active transactions
-                  if (!canMakePayment) {
-                    Alert.alert(
-                      'Payment Already in Progress',
-                      'This order already has a payment transaction in progress. Please wait for it to complete.',
-                      [{ text: 'OK' }]
-                    );
-                    return;
-                  }
-                  try {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    
-                    // Check for payment methods first
-                    const hasPaymentMethods = await checkPaymentMethodsWithUserFeedback();
-                    
-                    if (hasPaymentMethods) {
-                      // User has payment methods - show payment method modal with checkout option
-                      setShowPaymentModal(true);
-                    } else {
-                      // No payment methods found - show add payment method modal
-                      navigation.navigate('PaymentMethods');
-                      setShowAddPaymentModal(false);
-                      setShowPaymentModal(false);
-                    }
-                  } catch (error) {
-                    console.error('Error during checkout process:', error);
-                    Alert.alert(
-                      'Error',
-                      'Unable to process checkout. Please try again.',
-                      [{ text: 'OK' }]
-                    );
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                  }
-                }}
-                disabled={loadingPaymentMethods || checkingTransactions || !canMakePayment}
-              >
-                {(loadingPaymentMethods || checkingTransactions) ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
-                )}
-                <Text style={styles.checkoutButtonText}>
-                  {checkingTransactions 
-                    ? 'Checking Transactions...'
-                    : loadingPaymentMethods 
-                      ? 'Checking Payment Methods...' 
-                      : !canMakePayment
-                        ? 'Payment in Progress'
-                        : paymentMethods.length > 0 
-                          ? `Pay Now (${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''})`
-                          : 'Pay Now'
-                  }
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.checkoutNote}>
-                {!canMakePayment
-                  ? 'This order has a payment transaction in progress. Please wait for it to complete.'
-                  : paymentMethods.length > 0 
-                    ? `You have ${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''} available. Click to complete payment.`
-                    : 'Your order has been authorized. Click to complete payment and finalize your purchase.'
-                }
-              </Text>
-            </View>
-          ) : null;
-        })()}
+        {/* Checkout button moved to fixed footer */}
 
         {/* Payment Completed Section - Show when payment is completed */}
         {(() => {
@@ -2062,6 +2016,88 @@ export function OrderDetails() {
           ) : null;
         })()}
       </ScrollView>
+
+      {(() => {
+        const currentUserId = user?.id;
+        const orderSellerId = order?.sellerId;
+        const isBuyer = currentUserId !== orderSellerId;
+        const isAuthorized = order.status.toLowerCase() === 'authorized';
+        const isNotPaid = !order.paymentStatus || order.paymentStatus.toLowerCase() !== 'paid';
+        
+        return isAuthorized && isNotPaid && isBuyer ? (
+          <View style={[
+            styles.footerContainer,
+            { 
+              paddingBottom: Math.max(insets.bottom, 12),
+              paddingLeft: Math.max(insets.left, 16),
+              paddingRight: Math.max(insets.right, 16),
+            }
+          ]}>
+            <TouchableOpacity
+              style={[
+                styles.checkoutButton,
+                (loadingPaymentMethods || checkingTransactions || !canMakePayment) && styles.disabledButton
+              ]}
+              onPress={async () => {
+                if (!canMakePayment) {
+                  Alert.alert(
+                    'Payment Already in Progress',
+                    'This order already has a payment transaction in progress. Please wait for it to complete.',
+                    [{ text: 'OK' }]
+                  );
+                  return;
+                }
+                try {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  const hasPaymentMethods = await checkPaymentMethodsWithUserFeedback();
+                  if (hasPaymentMethods) {
+                    setShowPaymentModal(true);
+                  } else {
+                    navigation.navigate('PaymentMethods');
+                    setShowAddPaymentModal(false);
+                    setShowPaymentModal(false);
+                  }
+                } catch (error) {
+                  console.error('Error during checkout process:', error);
+                  Alert.alert(
+                    'Error',
+                    'Unable to process checkout. Please try again.',
+                    [{ text: 'OK' }]
+                  );
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                }
+              }}
+              disabled={loadingPaymentMethods || checkingTransactions || !canMakePayment}
+            >
+              {(loadingPaymentMethods || checkingTransactions) ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
+              )}
+              <Text style={styles.checkoutButtonText}>
+                {checkingTransactions 
+                  ? 'Checking Transactions...'
+                  : loadingPaymentMethods 
+                    ? 'Checking Payment Methods...' 
+                    : !canMakePayment
+                      ? 'Payment in Progress'
+                      : paymentMethods.length > 0 
+                        ? `Pay Now (${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''})`
+                        : 'Pay Now'
+                }
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.checkoutNote}>
+              {!canMakePayment
+                ? 'This order has a payment transaction in progress. Please wait for it to complete.'
+                : paymentMethods.length > 0 
+                  ? `You have ${paymentMethods.length} payment method${paymentMethods.length > 1 ? 's' : ''} available. Click to complete payment.`
+                  : 'Your order has been authorized. Click to complete payment and finalize your purchase.'
+              }
+            </Text>
+          </View>
+        ) : null;
+      })()}
 
       {/* Professional Bottom Sheet Modal - Only show if user is the seller */}
       {order?.sellerId === user?.id && (
@@ -2563,7 +2599,7 @@ export function OrderDetails() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalContent, { maxHeight: screenHeight * 0.95, minHeight: screenHeight * 0.7 }]}>
+          <View style={[styles.modalContent, { maxHeight: screenHeight * 0.95, minHeight: screenHeight * 0.95 }]}>
             {/* Handle Bar */}
             <View style={styles.handleBar} />
             
@@ -3584,13 +3620,30 @@ const styles = StyleSheet.create({
     borderTopColor: '#E5E7EB',
     marginBottom: 16,
   },
+  footerContainer: {
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
   checkoutButton: {
-    padding: 12,
+    width: '100%',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     backgroundColor: '#2563EB',
     borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   checkoutButtonText: {
     color: '#FFFFFF',

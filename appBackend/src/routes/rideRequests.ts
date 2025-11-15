@@ -243,8 +243,9 @@ router.post('/:requestId/process-payment', async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Ride request not found' });
     }
 
-    // Check if this is a Yonna payment
+    // Check if this is a Yonna or Wave payment
     const isYonnaPayment = paymentMethod === 'YONNA_FOREX' || paymentMethod === 'yonna-forex';
+    const isWavePayment = paymentMethod === 'WAVE_GAMBIA' || paymentMethod === 'wave-gambia' || paymentMethod === 'wave';
 
     // Handle Yonna payment
     if (isYonnaPayment) {
@@ -268,6 +269,23 @@ router.post('/:requestId/process-payment', async (req: AuthRequest, res) => {
 
       // Process through Yonna
       return yonnaController.processPayment(yonnaReq, res);
+    }
+
+    // Handle Wave Gambia payment
+    if (isWavePayment) {
+      console.log('💰 Processing Wave payment for ride request:', requestId);
+      const WavePaymentController = require('../controllers/WavePaymentController').default;
+      const waveController = new WavePaymentController();
+      const waveReq = {
+        ...req,
+        body: {
+          amount: amount,
+          currency: rideRequest.currency || 'GMD',
+          description: `Ride payment for ${requestId}`,
+          orderId: requestId
+        }
+      };
+      return waveController.processPayment(waveReq, res);
     }
 
     console.log('Found ride request:', {

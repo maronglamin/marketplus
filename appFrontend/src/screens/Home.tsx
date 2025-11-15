@@ -74,6 +74,9 @@ export function Home() {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Pending payment orders count for cart badge
+  const [pendingPaymentCount, setPendingPaymentCount] = useState(0);
+  const [isLoadingPendingCount, setIsLoadingPendingCount] = useState(false);
 
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -102,6 +105,7 @@ export function Home() {
     loadCategories();
     getUserLocation();
     loadUnreadNotificationsCount();
+    loadPendingPaymentCount();
     // Check for active tokens when component mounts
     checkActiveTokens();
   }, []);
@@ -113,6 +117,7 @@ export function Home() {
       loadFreshUserData();
       checkRiderApplicationStatus();
       loadRecentDestinations();
+      loadPendingPaymentCount();
       loadUnreadNotificationsCount();
     } else {
       console.log('⚠️ No user in Home, clearing user-specific data');
@@ -120,6 +125,7 @@ export function Home() {
       setRiderApplication(null);
       setRecentDestinations([]);
       setUnreadNotificationsCount(0);
+      setPendingPaymentCount(0);
     }
   }, [user?.id]);
 
@@ -127,6 +133,7 @@ export function Home() {
   useFocusEffect(
     React.useCallback(() => {
       loadUnreadNotificationsCount();
+      loadPendingPaymentCount();
     }, [])
   );
 
@@ -138,6 +145,7 @@ export function Home() {
         loadFreshUserData();
         checkRiderApplicationStatus();
         loadRecentDestinations();
+        loadPendingPaymentCount();
         loadUnreadNotificationsCount();
       }
     }, [user?.id])
@@ -167,6 +175,7 @@ export function Home() {
         loadCategories(),
         getUserLocation(),
         loadUnreadNotificationsCount(),
+        loadPendingPaymentCount(),
       ]);
     } catch (e) {
       // no-op; errors handled within individual loaders
@@ -242,6 +251,26 @@ export function Home() {
       setRiderApplication(null);
     } finally {
       setIsLoadingRiderStatus(false);
+    }
+  };
+
+  // Load pending-payment orders count for cart badge
+  const loadPendingPaymentCount = async () => {
+    try {
+      setIsLoadingPendingCount(true);
+      // Using shared API client to fetch current user's orders
+      const response = await api.get('/api/orders/my-orders');
+      const orders = response?.data?.orders || [];
+      const count = orders.filter((o: any) => {
+        const status = (o.status || '').toString().toLowerCase();
+        const payment = (o.paymentStatus || '').toString().toLowerCase();
+        return status === 'authorized' && payment !== 'paid';
+      }).length;
+      setPendingPaymentCount(count);
+    } catch (e) {
+      setPendingPaymentCount(0);
+    } finally {
+      setIsLoadingPendingCount(false);
     }
   };
 
@@ -432,8 +461,8 @@ export function Home() {
       
       case 'APPROVED':
         return {
-          title: 'Snap Driver! 🎉',
-          subtitle: 'You can now start earning as a driver.',
+          title: 'SNAP Driver! 🎉',
+          subtitle: 'You can now start earning as a SNAP driver.',
           icon: 'car-sport',
           iconColor: '#10B981',
           buttonText: 'Go to Driver Dashboard',
@@ -745,8 +774,8 @@ export function Home() {
                   return 'Loading...';
                 }
                 // Fallback
-                return 'User';
-              })()} 👋
+                return 'User!';
+              })()}! 👋
             </Text>
             <Text style={styles.welcomeSubtitle}>What would you like to do today?</Text>
             
@@ -1185,8 +1214,8 @@ export function Home() {
                         </Text>
                         <View style={styles.suspendedContact}>
                           <Text style={styles.suspendedContactTitle}>Contact Support:</Text>
-                          <Text style={styles.suspendedContactText}>Email: support@snap.com</Text>
-                          <Text style={styles.suspendedContactText}>Phone: +220 123 4567</Text>
+                          <Text style={styles.suspendedContactText}>Email: customercare@cloudnexus.biz</Text>
+                          <Text style={styles.suspendedContactText}>Phone: +220 673 8885</Text>
                         </View>
                       </View>
                     </View>
@@ -1212,6 +1241,26 @@ export function Home() {
             })()}
           </View>
         </ScrollView>
+
+        {/* Floating Shopping Cart Button */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate('ShoppingCart')}
+          style={styles.floatingCartButton}
+        >
+          <Ionicons name="cart" size={24} color="#FFFFFF" />
+          {(isLoadingPendingCount || pendingPaymentCount > 0) && (
+            <View style={styles.floatingBadge}>
+              {isLoadingPendingCount ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.floatingBadgeText}>
+                  {pendingPaymentCount > 99 ? '99+' : pendingPaymentCount}
+                </Text>
+              )}
+            </View>
+          )}
+        </TouchableOpacity>
 
         {/* Bottom Navigation */}
         <SafeAreaView edges={['bottom']} style={styles.bottomNavContainer}>
@@ -2008,6 +2057,40 @@ const styles = StyleSheet.create({
   },
   bottomNavContainer: {
     backgroundColor: '#FFFFFF',
+  },
+  floatingCartButton: {
+    position: 'absolute',
+    right: 16,
+    bottom: 96,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2563EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 6,
+    zIndex: 50,
+  },
+  floatingBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#F97316',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  floatingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
   bottomNav: {
     flexDirection: 'row',
