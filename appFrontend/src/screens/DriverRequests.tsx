@@ -957,9 +957,9 @@ export function DriverRequests() {
               <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                 <View style={styles.tokenModalHeader}>
                   <Ionicons name="key" size={32} color="#3B82F6" />
-                  <Text style={styles.tokenModalTitle}>Enter Ride Token</Text>
+                  <Text style={styles.tokenModalTitle}>Generate & Enter Token</Text>
                   <Text style={styles.tokenModalSubtitle}>
-                    Ask the customer for the 6-digit token to start the ride
+                    Generate and ask the customer for the 6-digit token to start the ride
                   </Text>
                 </View>
               </TouchableWithoutFeedback>

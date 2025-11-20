@@ -14,6 +14,7 @@ import {
   Platform,
   SafeAreaView,
   StatusBar,
+  InteractionManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -186,13 +187,17 @@ export default function VehicleDetailsModal({
               onClose();
               // Navigate to RentalRequest screen after successful booking
               console.log('Attempting to navigate to RentalRequest screen...');
-              // Reset navigation stack to Home -> RentalRequest with a small delay
-              setTimeout(() => {
-                navigation.reset({
-                  index: 1,
-                  routes: [{ name: 'Home' }, { name: 'RentalRequest' }],
+              // Defer navigation until after all animations/interactions are complete
+              requestAnimationFrame(() => {
+                InteractionManager.runAfterInteractions(() => {
+                  setTimeout(() => {
+                    navigation.reset({
+                      index: 1,
+                      routes: [{ name: 'Home' }, { name: 'RentalRequest' }],
+                    });
+                  }, 50);
                 });
-              }, 100);
+              });
             }
           }
         ]

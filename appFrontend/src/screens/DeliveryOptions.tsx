@@ -296,7 +296,7 @@ export function DeliveryOptions() {
                     <Text style={styles.inputLabel}>Price</Text>
                     <TextInput
                       style={styles.textInput}
-                      value={option.price.toString()}
+                      value={option.price === 0 ? '' : option.price.toString()}
                       onChangeText={(text) => updateDeliveryOption(index, 'price', parseFloat(text) || 0)}
                       placeholder="0.00"
                       keyboardType="numeric"
@@ -307,7 +307,7 @@ export function DeliveryOptions() {
                     <Text style={styles.inputLabel}>Estimated Days</Text>
                     <TextInput
                       style={styles.textInput}
-                      value={option.estimatedDays.toString()}
+                      value={option.estimatedDays === 1 ? '' : option.estimatedDays.toString()}
                       onChangeText={(text) => updateDeliveryOption(index, 'estimatedDays', parseInt(text) || 1)}
                       placeholder="1"
                       keyboardType="numeric"

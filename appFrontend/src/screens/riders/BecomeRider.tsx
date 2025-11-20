@@ -190,13 +190,13 @@ export function BecomeRider() {
   const getEarningsRange = () => {
     switch (type) {
       case 'driver':
-        return 'Earn per request ride';
+        return 'Earn per ride request';
       case 'motorcycle':
-        return 'Earn per request ride';
+        return 'Earn per ride request';
       case 'bicycle':
-        return 'Earn per request ride';
+        return 'Earn per ride request';
       default:
-        return 'Earn per request ride';
+        return 'Earn per ride request';
     }
   };
 
@@ -1558,7 +1558,7 @@ export function BecomeRider() {
             <Text style={styles.vehicleDescription}>{getVehicleDescription()}</Text>
             <View style={styles.earningsBadge}>
               <Ionicons name="cash-outline" size={16} color="#1E40AF" />
-              <Text style={styles.earningsText}>Earn {getEarningsRange()}</Text>
+              <Text style={styles.earningsText}>{getEarningsRange()}</Text>
             </View>
           </View>
 
