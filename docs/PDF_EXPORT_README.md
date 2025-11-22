@@ -1,6 +1,6 @@
 # PDF Export Functionality
 
-This document describes the PDF export functionality added to the SNAP app.
+This document describes the PDF export functionality added to the SNAP.
 
 ## Overview
 

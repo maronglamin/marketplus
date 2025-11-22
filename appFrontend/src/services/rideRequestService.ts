@@ -157,7 +157,19 @@ export class RideRequestService {
       console.log('✅ Frontend: Direct driver request response:', response.data);
       
       return response.data.data;
-    } catch (error) {
+    } catch (error: any) {
+      // Fallback: backend may not support direct-driver endpoint. Try standard endpoint with driverId.
+      if (error?.response?.status === 404) {
+        try {
+          console.warn('⚠️ /api/ride-requests/direct-driver not found (404). Falling back to POST /api/ride-requests with driverId.');
+          const fallbackResponse = await api.post('/api/ride-requests', data);
+          console.log('✅ Fallback created via standard endpoint:', fallbackResponse.data);
+          return fallbackResponse.data.data;
+        } catch (fallbackErr) {
+          console.error('❌ Fallback create ride request failed:', fallbackErr);
+          throw fallbackErr;
+        }
+      }
       console.error('❌ Frontend: Error creating direct driver request:', error);
       throw error;
     }

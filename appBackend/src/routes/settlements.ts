@@ -2,6 +2,7 @@ import express from 'express';
 import {
   getAvailableRevenue,
   getAvailableRideEarnings,
+  getAvailableRentalEarnings,
   getBankAccounts,
   getWallets,
   createSettlementRequest,
@@ -19,6 +20,9 @@ router.get('/available-revenue', authenticate, getAvailableRevenue);
 
 // Get available ride earnings for settlement (rides)
 router.get('/available-ride-earnings', authenticate, getAvailableRideEarnings);
+
+// Get available rental earnings for settlement (rentals)
+router.get('/available-rental-earnings', authenticate, getAvailableRentalEarnings);
 
 // Get seller's bank accounts
 router.get('/bank-accounts', authenticate, getBankAccounts);

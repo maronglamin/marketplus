@@ -1,7 +1,7 @@
-# SNAP Application Architecture
+# SNAPlication Architecture
 
 ## Overview
-The SNAP Application is a React Native-based mobile application that facilitates buying and selling of products between users. The application follows a modern, component-based architecture with a focus on maintainability, scalability, and user experience.
+The SNAPlication is a React Native-based mobile application that facilitates buying and selling of products between users. The application follows a modern, component-based architecture with a focus on maintainability, scalability, and user experience.
 
 ## System Architecture
 

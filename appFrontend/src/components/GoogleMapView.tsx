@@ -36,9 +36,11 @@ export interface GoogleMapViewProps {
   routeData?: RouteData;
   mode?: 'customer' | 'driver';
   isOnline?: boolean;
+  currentUserId?: string;
   onMapReady?: () => void;
   onLocationUpdate?: (location: MapLocation) => void;
   onLocationError?: (error: string) => void;
+  onDriverRequest?: (driver: any) => void;
   style?: any;
   // Real-time ride tracking props
   rideId?: string;
@@ -73,6 +75,8 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
     onMapReady,
     onLocationUpdate,
     onLocationError,
+    onDriverRequest,
+    currentUserId,
     style 
   }, ref) => {
     const webViewRef = useRef<WebView>(null);
@@ -360,6 +364,8 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
           </div>
           
           <script>
+            // Inject current user id from React Native for self-request guard
+            const CURRENT_USER_ID = ${currentUserId ? JSON.stringify(currentUserId) : 'null'};
             let map;
             let currentMarker;
             let destinationMarker;
@@ -371,6 +377,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
             let currentLocation = { lat: ${initialLocation.lat}, lng: ${initialLocation.lng} };
             let requestMarkers = [];
             let requestInfoWindows = [];
+            let hasDestination = false;
             let isUserInteracting = false;
             let lastInteractionTime = 0;
             const INTERACTION_COOLDOWN_MS = 2000;
@@ -620,6 +627,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
             }
             
             function updateDestination(destination, routeData) {
+              hasDestination = true;
               // Remove existing destination marker and routes
               if (destinationMarker) {
                 destinationMarker.setMap(null);
@@ -680,6 +688,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
             }
             
             function showRoute(pickup, destination, routeData) {
+              hasDestination = true;
               console.log('🗺️ showRoute called with:', { pickup, destination, routeData });
               console.log('📍 Pickup coordinates:', pickup.lat, pickup.lng);
               console.log('📍 Destination coordinates:', destination.lat, destination.lng);
@@ -919,6 +928,55 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
             let driverMarkers = [];
             let driverInfoWindows = [];
             
+            function buildDriverInfoContent(driver, index) {
+              const firstName = (driver && driver.user && driver.user.firstName) ? driver.user.firstName : 'Driver';
+              const lastName = (driver && driver.user && driver.user.lastName) ? driver.user.lastName : '';
+              const distanceStr = (driver && typeof driver.distance === 'number') ? driver.distance.toFixed(1) : '-';
+              let infoContent = '<div style="padding: 12px; font-family: Arial, sans-serif; max-width: 300px;">' +
+                '<h3 style="margin: 0 0 8px 0; color: #1F2937; font-size: 16px;">' + firstName + ' ' + lastName + '</h3>';
+              
+              // Add distance
+              infoContent += '<p style="margin: 0 0 6px 0; color: #6B7280; font-size: 14px;">📍 Distance: ' + distanceStr + ' km</p>';
+              
+              // Add service name if available
+              if (driver && driver.rideService && driver.rideService.name) {
+                infoContent += '<p style="margin: 0 0 6px 0; color: #3B82F6; font-size: 13px; font-weight: 600;">🛠️ Service: ' + driver.rideService.name + '</p>';
+              } else if (driver && driver.rideServiceId) {
+                infoContent += '<p style="margin: 0 0 6px 0; color: #3B82F6; font-size: 13px;">🛠️ Service: ' + driver.rideServiceId + '</p>';
+              }
+              
+              // Add vehicle information from rider application if available
+              if (driver && driver.riderApplication) {
+                infoContent += '<div style="border-top: 1px solid #E5E7EB; margin: 8px 0; padding-top: 8px;">' +
+                  '<h4 style="margin: 0 0 6px 0; color: #374151; font-size: 14px;">Vehicle Details</h4>' +
+                  '<p style="margin: 0 0 4px 0; color: #6B7280; font-size: 13px;">🚗 ' + (driver.riderApplication.vehicleModel || '-') + '</p>' +
+                  '<p style="margin: 0 0 4px 0; color: #6B7280; font-size: 13px;">🔢 Plate: ' + (driver.riderApplication.vehiclePlate || driver.riderApplication.licensePlate || '-') + '</p>';
+                
+                if (driver && driver.driverLocation && driver.driverLocation.address) {
+                  infoContent += '<p style="margin: 0 0 4px 0; color: #6B7280; font-size: 13px;">📍 Location: ' + driver.driverLocation.address + '</p>';
+                }
+                
+                infoContent += '<p style="margin: 0 0 4px 0; color: #10B981; font-size: 13px; font-weight: 600;">✅ Verified Driver</p>';
+              } else if (driver && driver.vehicleInfo) {
+                infoContent += '<p style="margin: 0 0 4px 0; color: #6B7280; font-size: 13px;">🚗 Vehicle: ' + (driver.vehicleInfo.model || '-') + ' (' + (driver.vehicleInfo.color || '-') + ')</p>';
+              }
+              
+              const isSelf = (CURRENT_USER_ID && driver && driver.user && driver.user.id === CURRENT_USER_ID);
+              if (isSelf) {
+                infoContent += '<div style="margin-top: 10px; color: #EF4444; font-size: 12px;">You cannot request yourself.</div>';
+              } else if (hasDestination) {
+                const btnId = 'request-driver-' + index + '-' + (driver.id || driver.driverId || 'd');
+                infoContent += '<div style="margin-top: 10px; display: flex; justify-content: flex-end;">' +
+                  '<button id="' + btnId + '" style="background: #3B82F6; color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer;">Request Ride</button>' +
+                  '</div>';
+              } else {
+                infoContent += '<div style="margin-top: 10px; color: #EF4444; font-size: 12px;">Enter a destination to request this driver.</div>';
+              }
+              
+              infoContent += '</div>';
+              return infoContent;
+            }
+            
             function addDriverMarkers(drivers) {
               console.log('🚗 Adding driver markers:', drivers);
               
@@ -937,6 +995,9 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                     position: position,
                     map: map,
                     title: driver.user.firstName + ' ' + driver.user.lastName,
+                    clickable: true,
+                    optimized: false,
+                    zIndex: 100,
                     icon: {
                       url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#10B981" stroke="#FFFFFF" stroke-width="3"/><circle cx="12" cy="12" r="6" fill="#FFFFFF"/><text x="12" y="16" text-anchor="middle" fill="#10B981" font-size="10" font-weight="bold">🚗</text></svg>'),
                       scaledSize: new google.maps.Size(48, 48),
@@ -944,41 +1005,78 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                     }
                   });
                   
-                  // Create info window with minimal driver information
-                  let infoContent = '<div style="padding: 12px; font-family: Arial, sans-serif; max-width: 300px;">' +
-                    '<h3 style="margin: 0 0 8px 0; color: #1F2937; font-size: 16px;">' + driver.user.firstName + ' ' + driver.user.lastName + '</h3>';
-                  
-                  // Add distance
-                  infoContent += '<p style="margin: 0 0 6px 0; color: #6B7280; font-size: 14px;">📍 Distance: ' + driver.distance.toFixed(1) + ' km</p>';
-                  
-                  // Add vehicle information from rider application if available
-                  if (driver.riderApplication) {
-                    infoContent += '<div style="border-top: 1px solid #E5E7EB; margin: 8px 0; padding-top: 8px;">' +
-                      '<h4 style="margin: 0 0 6px 0; color: #374151; font-size: 14px;">Vehicle Details</h4>' +
-                      '<p style="margin: 0 0 4px 0; color: #6B7280; font-size: 13px;">🚗 ' + driver.riderApplication.vehicleModel + '</p>' +
-                      '<p style="margin: 0 0 4px 0; color: #6B7280; font-size: 13px;">🔢 Plate: ' + driver.riderApplication.vehiclePlate + '</p>';
-                    
-                    // Add driver location name from driver_locations table
-                    if (driver.driverLocation && driver.driverLocation.address) {
-                      infoContent += '<p style="margin: 0 0 4px 0; color: #6B7280; font-size: 13px;">📍 Location: ' + driver.driverLocation.address + '</p>';
-                    }
-                    
-                    // Add verification status
-                    infoContent += '<p style="margin: 0 0 4px 0; color: #10B981; font-size: 13px; font-weight: 600;">✅ Verified Driver</p>';
-                  } else if (driver.vehicleInfo) {
-                    // Fallback to vehicleInfo if riderApplication is not available
-                    infoContent += '<p style="margin: 0 0 4px 0; color: #6B7280; font-size: 13px;">🚗 Vehicle: ' + driver.vehicleInfo.model + ' (' + driver.vehicleInfo.color + ')</p>';
-                  }
-                  
-                  infoContent += '</div>';
-                  
                   const infoWindow = new google.maps.InfoWindow({
-                    content: infoContent
+                    content: '<div style=\"padding: 12px; font-family: Arial, sans-serif; max-width: 300px;\">Loading...</div>'
                   });
                   
-                  // Add click listener
-                  marker.addListener('click', () => {
-                    infoWindow.open(map, marker);
+                  // Add click listener: build content at click time using current hasDestination
+                  function openDriverInfo() {
+                    try {
+                      // Close any other open driver info windows
+                      try {
+                        driverInfoWindows.forEach((iw) => { try { iw.close(); } catch (e) {} });
+                      } catch (e) {}
+                      const content = buildDriverInfoContent(driver, index);
+                      infoWindow.setContent(content);
+                      // Slight delay helps on Android WebView sometimes
+                      // Newer API signature with anchor is sometimes more reliable in WebView
+                      setTimeout(() => {
+                        try {
+                          if (typeof infoWindow.open === 'function') {
+                            // @ts-ignore
+                            infoWindow.open({ anchor: marker, map, shouldFocus: false });
+                          } else {
+                            infoWindow.open(map, marker);
+                          }
+                        } catch (e) {
+                          try {
+                            infoWindow.open(map, marker);
+                          } catch (e2) {
+                            console.error('❌ Failed to open infoWindow with both signatures', e2);
+                          }
+                        }
+                      }, 0);
+                    } catch (e) {
+                      console.error('❌ Failed to open driver info window:', e);
+                    }
+                  }
+                  marker.addListener('click', openDriverInfo);
+                  
+                  // Bind click after DOM is ready to avoid inline JSON issues
+                  google.maps.event.addListener(infoWindow, 'domready', () => {
+                    try {
+                      if (!hasDestination) return;
+                      const btnId = 'request-driver-' + index + '-' + (driver.id || driver.driverId || 'd');
+                      const btn = document.getElementById(btnId);
+                      if (btn) {
+                        btn.addEventListener('click', function(e) {
+                          e.preventDefault();
+                          try {
+                            const payload = {
+                              id: driver.id || driver.driverId,
+                              driverId: driver.driverId || driver.id,
+                              rideService: driver.rideService || null,
+                              rideServiceId: (driver.rideService && (driver.rideService.id || driver.rideService.serviceId)) || driver.rideServiceId || null,
+                              user: driver.user,
+                              riderApplication: driver.riderApplication || null,
+                              vehicleInfo: driver.vehicleInfo || null,
+                              distance: driver.distance,
+                              currentLocation: driver.currentLocation || null
+                            };
+                            if (window.ReactNativeWebView) {
+                              window.ReactNativeWebView.postMessage(JSON.stringify({
+                                type: 'requestDriver',
+                                driver: payload
+                              }));
+                            }
+                          } catch (err) {
+                            console.error('❌ Error sending driver request payload:', err);
+                          }
+                        }, { once: true });
+                      }
+                    } catch (e) {
+                      console.error('❌ Error binding Request Ride button:', e);
+                    }
                   });
                   
                   driverMarkers.push(marker);
@@ -1000,6 +1098,8 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
               
               // Clear existing route
               clearRoute();
+              // Mark that destination is active AFTER clearing
+              hasDestination = true;
               
               // Add pickup marker (car icon for current location)
               const pickupMarker = new google.maps.Marker({
@@ -1233,6 +1333,7 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
                 clearInterval(animationInterval);
               }
               stopAnimationFrame();
+              hasDestination = false;
             }
             
             // Real-time ride tracking functions
@@ -1446,6 +1547,15 @@ export const GoogleMapView = forwardRef<GoogleMapViewRef, GoogleMapViewProps>(
         
         if (data.type === 'mapReady') {
           onMapReady?.();
+          return;
+        }
+        if (data.type === 'requestDriver') {
+          try {
+            onDriverRequest?.(data.driver);
+          } catch (e) {
+            console.error('❌ Error handling onDriverRequest:', e);
+          }
+          return;
         }
         
         // Pass all messages to the internal handler

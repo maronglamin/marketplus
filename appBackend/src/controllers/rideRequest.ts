@@ -499,7 +499,22 @@ export class RideRequestController {
   static async getNearbyRideRequests(req: AuthRequest, res: Response) {
     try {
       const { latitude, longitude, maxDistance = 5 } = req.query;
-      const driverId = req.user!.id; // Get driver ID from authenticated user
+      // Resolve the authenticated user's driver profile to get the driver.id
+      const { PrismaClient } = await import('@prisma/client');
+      const prisma = new PrismaClient();
+      const driverProfile = await prisma.driver.findUnique({
+        where: { userId: req.user!.id },
+        select: { id: true }
+      });
+      await prisma.$disconnect().catch(() => {});
+      
+      if (!driverProfile) {
+        return res.status(404).json({
+          success: false,
+          message: 'Driver profile not found for the authenticated user'
+        });
+      }
+      const driverId = driverProfile.id;
 
       console.log('🔍 getNearbyRideRequests called with:', {
         latitude,

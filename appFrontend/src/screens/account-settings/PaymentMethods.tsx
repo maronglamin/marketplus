@@ -602,7 +602,15 @@ export function PaymentMethods() {
                         styles.paymentTypeOption,
                         formData.type === option.type && styles.paymentTypeOptionSelected
                       ]}
-                      onPress={() => setFormData(prev => ({ ...prev, type: option.type as any }))}
+                      onPress={() => {
+                        const nextType = option.type as any;
+                        setFormData(prev => ({
+                          ...prev,
+                          type: nextType,
+                          // Clear provider when switching to Credit Card to avoid prefilled mobile wallet provider
+                          provider: nextType === 'CREDIT_CARD' ? '' : prev.provider,
+                        }));
+                      }}
                     >
                       <Ionicons 
                         name={option.icon as any} 
@@ -668,8 +676,8 @@ export function PaymentMethods() {
                   <View style={styles.formGroup}>
                     <Text style={styles.formLabel}>Mobile Number</Text>
                     <TextInput
-                      style={[styles.textInput, { backgroundColor: '#F3F4F6', color: '#6B7280' }]}
-                      value={user?.phoneNumber || ''}
+                      style={[styles.textInput, { backgroundColor: '#F3F4F6', color: '#111827', fontWeight: '500' }]}
+                      value={(mobileNumber || user?.phoneNumber || '').toString()}
                       editable={false}
                     />
                   </View>
@@ -997,6 +1005,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    paddingBottom: 30,
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
     gap: 24,

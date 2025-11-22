@@ -1,4 +1,4 @@
-# SNAP Application Functional Documentation
+# SNAPlication Functional Documentation
 
 ## User Authentication
 

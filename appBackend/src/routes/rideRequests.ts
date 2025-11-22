@@ -390,4 +390,113 @@ router.post('/:requestId/rate', async (req: AuthRequest, res) => {
   }
 });
 
+// Create a direct driver request (target a specific driver)
+router.post('/direct-driver', async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const {
+      pickupLocation,
+      destinationLocation,
+      rideType = 'STANDARD',
+      rideServiceId,
+      estimatedPrice,
+      estimatedDistance,
+      estimatedDuration,
+      currency,
+      currencySymbol,
+      paymentMethod = 'CASH',
+      customerNotes,
+      driverId, // targeted driver
+    } = req.body;
+
+    // Validate required fields
+    if (!pickupLocation || !destinationLocation) {
+      return res.status(400).json({ success: false, message: 'Pickup and destination locations are required' });
+    }
+    if (!driverId) {
+      return res.status(400).json({ success: false, message: 'driverId is required for direct driver request' });
+    }
+
+    // Prevent requesting yourself
+    const { PrismaClient } = await import('@prisma/client');
+    const prismaClient = new PrismaClient();
+    const targetDriver = await prismaClient.driver.findUnique({
+      where: { id: driverId },
+      select: { userId: true }
+    });
+    if (!targetDriver) {
+      await prismaClient.$disconnect().catch(() => {});
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+    if (targetDriver.userId === userId) {
+      await prismaClient.$disconnect().catch(() => {});
+      return res.status(403).json({ success: false, message: 'You cannot request yourself' });
+    }
+
+    // Build payload for service
+    const rideRequestData = {
+      customerId: userId,
+      pickupLocation: {
+        latitude: parseFloat(pickupLocation.latitude),
+        longitude: parseFloat(pickupLocation.longitude),
+        address: pickupLocation.address
+      },
+      destinationLocation: {
+        latitude: parseFloat(destinationLocation.latitude),
+        longitude: parseFloat(destinationLocation.longitude),
+        address: destinationLocation.address
+      },
+      rideType: rideType as any,
+      rideServiceId,
+      estimatedPrice: estimatedPrice ? parseFloat(estimatedPrice) : undefined,
+      estimatedDistance: estimatedDistance ? parseFloat(estimatedDistance) : undefined,
+      estimatedDuration: estimatedDuration ? parseInt(estimatedDuration) : undefined,
+      currency,
+      currencySymbol,
+      paymentMethod: paymentMethod as any,
+      customerNotes: customerNotes ? String(customerNotes) : undefined
+    };
+
+    // Create standard request
+    const request = await RideRequestService.createRideRequest(rideRequestData);
+
+    // Attach targeted driver (keep status REQUESTED to avoid treating as accepted)
+    const updated = await prismaClient.rideRequest.update({
+      where: { id: request.id },
+      data: { driverId: driverId }
+    });
+    await prismaClient.$disconnect().catch(() => {});
+
+    // Optionally, notify the targeted driver via WebSocket (best-effort)
+    try {
+      const webSocketService = (global as any).webSocketService;
+      if (webSocketService && updated) {
+        await webSocketService.sendTargetedRideRequest?.({
+          requestId: updated.requestId,
+          driverId,
+          customerId: updated.customerId,
+          pickupLocation: updated.pickupLocation,
+          destinationLocation: updated.destinationLocation
+        });
+      }
+    } catch (wsErr) {
+      console.warn('⚠️ Failed to send targeted ride request notification:', wsErr);
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        ...updated,
+      }
+    });
+  } catch (error: any) {
+    console.error('Error creating direct driver request:', error);
+    return res.status(500).json({ success: false, message: 'Failed to create direct driver request', error: error?.message || String(error) });
+  }
+});
+
 export default router; 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Backend service for the SNAP App, handling authentication, user management, and device verification.
+Backend service for the SNAP, handling authentication, user management, and device verification.
 
 ## Features
 

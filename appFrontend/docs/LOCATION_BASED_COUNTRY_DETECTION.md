@@ -2,7 +2,7 @@
 
 ## Overview
 
-The SNAP app now automatically detects the user's country based on their current location using Google's Geocoding API. This feature helps users by pre-selecting their country code when entering their phone number, making the login process more convenient.
+The SNAP now automatically detects the user's country based on their current location using Google's Geocoding API. This feature helps users by pre-selecting their country code when entering their phone number, making the login process more convenient.
 
 ## How It Works
 

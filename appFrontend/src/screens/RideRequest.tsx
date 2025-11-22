@@ -26,6 +26,7 @@ import { GoogleMapView, type GoogleMapViewRef, type MapLocation, type RouteData 
 import * as Location from 'expo-location';
 import { RideRequestService, type RideRequest } from '../services/rideRequestService';
 import { TokenNotificationCard } from '../components/TokenNotificationCard';
+import { userService } from '../services/userService';
 
 declare global {
   interface Window {
@@ -70,6 +71,7 @@ export function RideRequest() {
   const [rideOptions, setRideOptions] = useState<RideOption[]>([]);
   const [loadingRideOptions, setLoadingRideOptions] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Add this helper
   const isFromRequestListing = !!route.params?.showRoute;
@@ -101,6 +103,18 @@ export function RideRequest() {
     setTimeout(() => {
       loadRideOptions();
     }, 1000);
+    
+    // Fetch current user id for self-request guard
+    (async () => {
+      try {
+        const me = await userService.getBasicUserInfo();
+        // me may have different shapes; try user.id then id
+        const uid = me?.data?.user?.id || me?.user?.id || me?.id;
+        if (uid) setCurrentUserId(uid);
+      } catch (e) {
+        console.warn('⚠️ Unable to fetch current user id for self-request guard');
+      }
+    })();
     
     // Cleanup function for tracking intervals
     return () => {
@@ -540,6 +554,152 @@ export function RideRequest() {
     // The user can come back and check the status, or cancel explicitly via the cancel button
     
     navigation.goBack();
+  };
+
+  const handleDirectDriverRequest = async (driver: any) => {
+    try {
+      // Guard: prevent requesting self
+      if (driver?.user?.id && currentUserId && driver.user.id === currentUserId) {
+        Alert.alert('Not Allowed', 'You cannot request yourself.');
+        return;
+      }
+      if (!destinationLocation || !destination.trim()) {
+        Alert.alert('Destination Required', 'Please enter and select your destination before requesting a driver.');
+        return;
+      }
+      if (!currentLocation) {
+        Alert.alert('Error', 'Current location not available yet. Please wait a moment and try again.');
+        return;
+      }
+      if (currentRideRequest && currentRideRequest.status && currentRideRequest.status !== 'REQUESTED') {
+        Alert.alert('Ride In Progress', 'You already have an active or accepted request. Please complete or cancel it first.');
+        return;
+      }
+      setIsRequestingRide(true);
+      
+      // Compute distance & duration (prefer routeData)
+      let estimatedDistance = 5;
+      let estimatedDuration = 15;
+      if (routeData?.legs?.length) {
+        const distanceText = routeData.legs[0]?.distance?.text;
+        const durationText = routeData.legs[0]?.duration?.text;
+        if (distanceText) {
+          const m = distanceText.match(/(\\d+(?:\\.\\d+)?)/);
+          if (m) estimatedDistance = parseFloat(m[1]);
+        }
+        if (durationText) {
+          const m = durationText.match(/(\\d+)/);
+          if (m) estimatedDuration = parseInt(m[1]);
+        }
+      } else {
+        const lat1 = currentLocation.latitude;
+        const lon1 = currentLocation.longitude;
+        const lat2 = destinationLocation.latitude;
+        const lon2 = destinationLocation.longitude;
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLon/2) * Math.sin(dLon/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        estimatedDistance = R * c;
+        estimatedDuration = Math.round(estimatedDistance * 2);
+      }
+      
+      // Get ride options and match driver's service
+      let options = await rideServicesApi.getRideOptions(
+        estimatedDistance,
+        estimatedDuration,
+        currentLocation.latitude,
+        currentLocation.longitude
+      );
+      const driverServiceId: string | undefined =
+        driver?.rideService?.serviceId ||
+        driver?.rideService?.id ||
+        driver?.rideServiceId ||
+        undefined;
+      // Prefer already loaded bottom sheet prices to guarantee parity
+      let selectedOption = options[0];
+      if (driverServiceId) {
+        // First try local state (bottom sheet) for exact parity if available
+        const fromState = rideOptions.find(o => o.serviceId === driverServiceId);
+        if (fromState) {
+          selectedOption = fromState;
+        } else {
+          // Next try freshly loaded options set
+          const match = options.find(o => o.serviceId === driverServiceId);
+          if (match) {
+            selectedOption = match;
+          } else {
+            // Final fallback: compute price from service with surge, same as getRideOptions
+            try {
+              const svc = await rideServicesApi.getServiceById(driverServiceId);
+              let surgeMultiplier = 1.0;
+              try {
+                surgeMultiplier = await rideServicesApi.getSurgeMultiplier(currentLocation.latitude, currentLocation.longitude);
+              } catch (_e) {
+                // ignore, keep 1.0
+              }
+              if (svc) {
+                const computed = rideServicesApi.convertToRideOption(svc, estimatedDistance, estimatedDuration, surgeMultiplier);
+                selectedOption = computed;
+              }
+            } catch (_e) {
+              // keep existing selection if fetch fails
+            }
+          }
+        }
+      }
+      
+      // Confirm pricing before creating request
+      Alert.alert(
+        'Confirm Fare',
+        `Service: ${selectedOption?.name}\nEstimated Fare: ${selectedOption?.currencySymbol || ''}${(selectedOption?.priceValue || 0).toFixed(2)}\nEstimated Time: ${estimatedDuration} min\nDistance: ${estimatedDistance.toFixed(1)} km`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => setIsRequestingRide(false) },
+          { text: 'Confirm', onPress: async () => {
+              try {
+                const rideRequestData = {
+                  pickupLocation: currentLocation,
+                  destinationLocation: destinationLocation,
+                  rideServiceId: selectedOption?.serviceId,
+                  estimatedPrice: selectedOption?.priceValue || 0,
+                  estimatedDistance,
+                  estimatedDuration,
+                  currency: selectedOption?.currency,
+                  currencySymbol: selectedOption?.currencySymbol,
+                  paymentMethod: 'CASH' as const,
+                  customerNotes: `Direct driver request - ${selectedOption?.name}`,
+                  driverId: driver?.driverId || driver?.id
+                };
+                const directRequest = await RideRequestService.createDirectDriverRequest(rideRequestData);
+                setCurrentRideRequest(directRequest);
+                setHasCreatedRequest(true);
+                setIsRequestingRide(false);
+                setShowRideOptions(false);
+                setTrackingMode(true);
+                await loadOnlineDrivers();
+                Alert.alert(
+                  'Request Sent 🚗',
+                  `Your request has been sent directly to ${driver?.user?.firstName || 'the driver'}.\n\nEstimated Price: ${selectedOption?.currencySymbol || ''}${(selectedOption?.priceValue || 0).toFixed(2)}\nEstimated Time: ${rideRequestData.estimatedDuration} minutes`,
+                  [{ text: 'OK' }]
+                );
+                startStatusPolling(directRequest.requestId);
+              } catch (err) {
+                console.error('❌ Error creating direct driver request after confirm:', err);
+                setIsRequestingRide(false);
+                Alert.alert('Error', 'Failed to send request to this driver. Please try again.');
+              }
+            } 
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('❌ Error creating direct driver request:', error);
+      setIsRequestingRide(false);
+      Alert.alert('Error', 'Failed to send request to this driver. Please try again.');
+    }
   };
 
   const handleRequestRide = async () => {
@@ -983,10 +1143,10 @@ export function RideRequest() {
       clearInterval(trackingIntervalRef.current);
     }
     
-    // Refresh driver locations every 30 seconds
+    // Refresh driver locations more frequently to reflect online driver movement
     trackingIntervalRef.current = setInterval(() => {
       loadOnlineDrivers();
-    }, 30000);
+    }, 15000);
     
     return trackingIntervalRef.current;
   };
@@ -1212,9 +1372,11 @@ export function RideRequest() {
               destination={destinationLocation || undefined}
               routeData={routeData || undefined}
               mode="customer"
+              currentUserId={currentUserId || undefined}
               onMapReady={handleMapReady}
               onLocationUpdate={handleLocationUpdate}
               onLocationError={handleLocationError}
+              onDriverRequest={handleDirectDriverRequest}
               style={styles.map}
               // Ensure the WebView receives touch events beneath overlays
               // @ts-ignore

@@ -723,6 +723,7 @@ router.get('/seller/stats', authenticate, async (req: AuthRequest, res) => {
           paymentStatus: 'PAID'
         },
         select: {
+          id: true,
           totalAmount: true,
           currencyCode: true,
           createdAt: true
@@ -733,43 +734,70 @@ router.get('/seller/stats', authenticate, async (req: AuthRequest, res) => {
       })
     ]);
 
-    // Calculate revenue based on latest paid order currency
+    // Calculate revenue across currencies and pick a non-zero currency if available
     let totalRevenue = 0;
     let revenueCurrency = 'USD'; // Default currency
     let hasOtherCurrencies = false;
 
     if (paidOrders.length > 0) {
-      // Get the currency of the latest paid order
-      revenueCurrency = paidOrders[0].currencyCode;
-      
-      // Sum all paid orders in the same currency
-      const grossRevenue = paidOrders
-        .filter(order => order.currencyCode === revenueCurrency)
-        .reduce((sum, order) => sum + parseFloat(order.totalAmount.toString()), 0);
-      
-      // Get service fees for this currency from ExternalTransaction table
-      const serviceFeesResult = await prisma.externalTransaction.aggregate({
+      // Group gross by currency
+      const grossByCurrency = new Map<string, number>();
+      const orderIds = paidOrders.map(o => o.id);
+      for (const order of paidOrders) {
+        const currency = order.currencyCode;
+        const amount = parseFloat(order.totalAmount.toString());
+        grossByCurrency.set(currency, (grossByCurrency.get(currency) || 0) + amount);
+      }
+
+      // Fetch service fees only for these paid orders and group by currency
+      const serviceFees = await prisma.externalTransaction.findMany({
         where: {
-          sellerId: req.user.id,
-          currencyCode: revenueCurrency,
+          orderId: { in: orderIds },
           transactionType: TransactionType.SERVICE_FEE,
           status: 'SUCCESS'
         },
-        _sum: {
-          amount: true
+        select: {
+          amount: true,
+          currencyCode: true
         }
       });
+      const feesByCurrency = new Map<string, number>();
+      for (const fee of serviceFees) {
+        const currency = fee.currencyCode;
+        const feeAmount = parseFloat(fee.amount.toString());
+        feesByCurrency.set(currency, (feesByCurrency.get(currency) || 0) + feeAmount);
+      }
 
-      const totalServiceFees = serviceFeesResult._sum?.amount
-        ? parseFloat(serviceFeesResult._sum.amount.toString())
-        : 0;
+      // Compute net by currency
+      const netByCurrency = new Map<string, number>();
+      for (const [currency, gross] of grossByCurrency.entries()) {
+        const fees = feesByCurrency.get(currency) || 0;
+        const net = Math.max(0, gross - fees);
+        netByCurrency.set(currency, net);
+      }
 
-      // Calculate net revenue after deducting service fees
-      totalRevenue = Math.max(0, grossRevenue - totalServiceFees);
-      
-      // Check if there are orders in other currencies
-      const uniqueCurrencies = [...new Set(paidOrders.map(order => order.currencyCode))];
+      const uniqueCurrencies = [...grossByCurrency.keys()];
       hasOtherCurrencies = uniqueCurrencies.length > 1;
+
+      // Prefer the latest order's currency if it has non-zero net; otherwise pick the currency with the highest non-zero net
+      const latestCurrency = paidOrders[0].currencyCode;
+      const latestNet = netByCurrency.get(latestCurrency) || 0;
+      if (latestNet > 0) {
+        revenueCurrency = latestCurrency;
+        totalRevenue = latestNet;
+      } else {
+        // Pick highest non-zero net currency, if any
+        let bestCurrency = revenueCurrency;
+        let bestAmount = 0;
+        for (const [currency, amount] of netByCurrency.entries()) {
+          if (amount > bestAmount) {
+            bestAmount = amount;
+            bestCurrency = currency;
+          }
+        }
+        revenueCurrency = bestCurrency;
+        totalRevenue = bestAmount;
+      }
     }
 
     logger.info('Order counts and revenue calculated:', { 

@@ -1371,7 +1371,7 @@ export function CustomerRides() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <View style={[styles.modalContent, { maxHeight: screenHeight * 0.7, minHeight: screenHeight * 0.6 }]}>
+          <View style={[styles.modalContent, { maxHeight: screenHeight * 0.9, minHeight: screenHeight * 0.85 }]}>
             {/* Handle Bar */}
             <View style={styles.handleBar} />
             

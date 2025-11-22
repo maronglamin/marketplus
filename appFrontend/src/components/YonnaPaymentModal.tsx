@@ -212,40 +212,15 @@ const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
         const deeplink = result.data?.paymentUrl;
         if (deeplink) {
           try {
-            const { Linking, Platform } = require('react-native');
+            const { Linking } = require('react-native');
             console.log('Opening Yonna app with deeplink:', deeplink);
             
-            // First check if Yonna app is installed
-            const yonnaScheme = 'yonna://';
-            const canOpenYonna = await Linking.canOpenURL(yonnaScheme);
-            
-            if (canOpenYonna) {
-              // Yonna app is installed, open the web URL which should redirect to the app
-              setHasRedirectedToYonna(true);
-              await Linking.openURL(deeplink);
-            } else {
-              // Yonna app not installed, redirect to store
-              const storeUrl = Platform.OS === 'ios' 
-                ? 'https://apps.apple.com/us/app/yonna-wallet/id6459883610'
-                : 'https://play.google.com/store/apps/details?id=com.yonnaforex.android';
-              
-              console.log('Yonna app not installed, redirecting to store:', storeUrl);
-              setHasRedirectedToYonna(true);
-              await Linking.openURL(storeUrl);
-            }
+            // Let Yonna's deeplinking handle app detection and redirection
+            setHasRedirectedToYonna(true);
+            await Linking.openURL(deeplink);
             
           } catch (e) {
-            console.warn('Failed to open Yonna deeplink, trying app store:', e);
-            // If everything fails, try app store
-            try {
-              const { Linking, Platform } = require('react-native');
-              const storeUrl = Platform.OS === 'ios' 
-                ? 'https://apps.apple.com/us/app/yonna-wallet/id6459883610'
-                : 'https://play.google.com/store/apps/details?id=com.yonnaforex.android';
-              await Linking.openURL(storeUrl);
-            } catch (storeError) {
-              console.error('Failed to open app store:', storeError);
-            }
+            console.warn('Failed to open Yonna deeplink:', e);
           }
         }
 

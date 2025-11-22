@@ -612,7 +612,8 @@ export default function AssetRentalScreen() {
       {/* Chat Modal */}
       <KeyboardAvoidingView 
         style={[styles.chatModal, { display: showChatModal ? 'flex' : 'none' }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        enabled={showChatModal && Platform.OS === 'ios'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <SafeAreaView style={styles.chatModalContent}>
           <View style={styles.chatHeader}>
@@ -714,6 +715,7 @@ export default function AssetRentalScreen() {
             <TextInput
               style={styles.messageInput}
               placeholder="Type your message..."
+              placeholderTextColor="#6B7280"
               value={message}
               onChangeText={setMessage}
               multiline

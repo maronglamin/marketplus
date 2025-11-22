@@ -117,7 +117,7 @@ export class YonnaForexPaymentService {
 
       // Handle API errors
       if (response.status === 401) {
-        const errorMsg = response.data?.error || 'Authentication failed';
+        const errorMsg = (response.data?.error || response.data?.message || 'Authentication failed') as string;
         console.error('Yonna Forex API Error:', errorMsg);
         
         if (errorMsg.includes('Invalid signature')) {
@@ -127,6 +127,14 @@ export class YonnaForexPaymentService {
             status: 'failed',
             error: 'Invalid API credentials. Please contact support.',
             message: 'Payment service configuration error'
+          };
+        } else if (errorMsg.toLowerCase().includes('invalid client')) {
+          return {
+            success: false,
+            transactionId: paymentRequest.transactionId,
+            status: 'failed',
+            error: 'Invalid client credentials (client_id). Verify YONNA_FOREX_CLIENT_ID.',
+            message: 'Payment service authentication failed'
           };
         } else if (errorMsg.includes('Missing parameters')) {
           return {
@@ -184,13 +192,14 @@ export class YonnaForexPaymentService {
       }
 
     } catch (error: any) {
-      console.error('Yonna Forex payment error:', error);
+      const apiError = error?.response?.data || error?.message || error;
+      console.error('Yonna Forex payment error:', apiError);
       
       return {
         success: false,
         transactionId: paymentRequest.transactionId,
         status: 'failed',
-        error: error.message || 'Payment processing failed',
+        error: (apiError?.error || apiError?.message || String(apiError) || 'Payment processing failed'),
         message: 'Unable to process payment at this time'
       };
     }

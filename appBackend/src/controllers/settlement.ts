@@ -369,6 +369,115 @@ export const getAvailableRideEarnings = async (req: AuthRequest, res: Response) 
   }
 };
 
+// Get available rental earnings for settlement (rentals)
+export const getAvailableRentalEarnings = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    logger.info('Fetching available rental earnings for settlement:', { userId: req.user.id });
+
+    // Get successful external transactions for rentals where current user is seller (asset owner)
+    const txs = await prisma.externalTransaction.findMany({
+      where: {
+        sellerId: req.user.id,
+        appService: 'RENTAL',
+        status: 'SUCCESS',
+        rentalRequestId: { not: null }
+      },
+      select: {
+        rentalRequestId: true,
+        amount: true,
+        currencyCode: true,
+        transactionType: true
+      }
+    });
+
+    if (txs.length === 0) {
+      return res.json({
+        earnings: [],
+        count: 0,
+        totalRentals: 0
+      });
+    }
+
+    // Get rental requests to check settlement status and requestId
+    const rentalIds = Array.from(new Set(txs.map(t => t.rentalRequestId!).filter(Boolean)));
+    const rentals = await prisma.rentalRequest.findMany({
+      where: { id: { in: rentalIds } },
+      select: { id: true, requestId: true, createdAt: true, rentalSettlementStatus: true, currency: true }
+    });
+    const rentalById = new Map(rentals.map(r => [r.id, r]));
+
+    // Group by currency and compute net = sum(ORIGINAL) - sum(SERVICE_FEE), excluding settled rentals
+    const earningsByCurrency = new Map<string, { amount: number; rentals: any[] }>();
+    const serviceFeesByRental = new Map<string, number>();
+    const originalsByRental = new Map<string, number>();
+
+    for (const t of txs) {
+      const rid = t.rentalRequestId!;
+      if (!rentalById.has(rid)) continue;
+      const rr = rentalById.get(rid)!;
+      // Skip rentals already settled
+      if ((rr.rentalSettlementStatus as any) === 'SETTLED') continue;
+
+      if (t.transactionType === 'SERVICE_FEE') {
+        serviceFeesByRental.set(rid, (serviceFeesByRental.get(rid) || 0) + parseFloat(t.amount.toString()));
+      } else if (t.transactionType === 'ORIGINAL') {
+        originalsByRental.set(rid, (originalsByRental.get(rid) || 0) + parseFloat(t.amount.toString()));
+      }
+    }
+
+    // Build currency buckets
+    for (const rid of originalsByRental.keys()) {
+      const rr = rentalById.get(rid);
+      if (!rr) continue;
+      const currency = rr.currency || 'GMD';
+      const gross = originalsByRental.get(rid) || 0;
+      const svc = serviceFeesByRental.get(rid) || 0;
+      const net = Math.max(0, gross - svc);
+      if (net <= 0) continue;
+
+      if (!earningsByCurrency.has(currency)) {
+        earningsByCurrency.set(currency, { amount: 0, rentals: [] });
+      }
+      const bucket = earningsByCurrency.get(currency)!;
+      bucket.amount += net;
+      bucket.rentals.push({
+        id: rid,
+        requestId: rr.requestId,
+        earnings: net,
+        createdAt: rr.createdAt
+      });
+    }
+
+    const earnings = Array.from(earningsByCurrency.entries()).map(([currency, data]) => ({
+      currency,
+      amount: Math.round(data.amount * 100) / 100,
+      currencySymbol: getCurrencySymbol(currency),
+      rentalsCount: data.rentals.length,
+      rentals: data.rentals
+    }));
+
+    logger.info('Available rental earnings calculated successfully:', {
+      userId: req.user.id,
+      earnings: earnings.map(e => ({ currency: e.currency, amount: e.amount, rentalsCount: e.rentalsCount }))
+    });
+
+    res.json({
+      earnings,
+      count: earnings.length,
+      totalRentals: earnings.reduce((sum, e) => sum + e.rentalsCount, 0)
+    });
+  } catch (error) {
+    logger.error('Error getting available rental earnings:', error);
+    res.status(500).json({
+      message: 'Failed to get available rental earnings',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
 // Get seller's bank accounts
 export const getBankAccounts = async (req: AuthRequest, res: Response) => {
   try {
@@ -490,9 +599,9 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
     }
 
     // Validate channel
-    if (!['ECOMMERCE', 'RIDES'].includes(channel)) {
+    if (!['ECOMMERCE', 'RIDES', 'RENTALS'].includes(channel)) {
       return res.status(400).json({
-        message: 'Invalid channel. Must be ECOMMERCE or RIDES'
+        message: 'Invalid channel. Must be ECOMMERCE, RIDES or RENTALS'
       });
     }
 
@@ -526,8 +635,10 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
     let settlementData: any;
     if (channel === 'ECOMMERCE') {
       settlementData = await calculateEcommerceSettlementData(req.user.id, currency, amount, salesRepId);
-    } else {
+    } else if (channel === 'RIDES') {
       settlementData = await calculateRidesSettlementData(req.user.id, currency, amount);
+    } else {
+      settlementData = await calculateRentalsSettlementData(req.user.id, currency, amount);
     }
     
     if (!settlementData.isValid) {
@@ -555,6 +666,7 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
         includedRideIds: channel === 'RIDES' ? settlementData.includedRideIds : null,
         totalOrdersCount: channel === 'ECOMMERCE' ? settlementData.totalOrdersCount : 0,
         totalRidesCount: channel === 'RIDES' ? settlementData.totalRidesCount : 0,
+        // For rentals, include rental ids in metadata
         serviceFeesDeducted: settlementData.serviceFeesDeducted || 0,
         netAmountBeforeFees: settlementData.grossAmount || 0,
         metadata: {
@@ -566,7 +678,8 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
             serviceFees: settlementData.serviceFeesDeducted,
             netAmount: settlementData.netAmount,
             ordersIncluded: channel === 'ECOMMERCE' ? settlementData.includedOrderIds : null,
-            ridesIncluded: channel === 'RIDES' ? settlementData.includedRideIds : null
+            ridesIncluded: channel === 'RIDES' ? settlementData.includedRideIds : null,
+            rentalsIncluded: channel === 'RENTALS' ? settlementData.includedRentalIds : null
           }
         }
       },
@@ -581,6 +694,8 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
       await updateOrdersToSettled(settlementData.includedOrderIds);
     } else if (channel === 'RIDES' && settlementData.includedRideIds && settlementData.includedRideIds.length > 0) {
       await updateRidesToSettled(settlementData.includedRideIds);
+    } else if (channel === 'RENTALS' && settlementData.includedRentalIds && settlementData.includedRentalIds.length > 0) {
+      await updateRentalsToSettled(settlementData.includedRentalIds);
     }
 
     logger.info('Settlement request created successfully:', { 
@@ -1300,6 +1415,154 @@ async function calculateEcommerceSettlementData(userId: string, currency: string
   }
 }
 
+// Helper function to calculate rentals settlement data
+async function calculateRentalsSettlementData(userId: string, currency: string, requestedAmount: number) {
+  try {
+    logger.info('Starting rentals settlement calculation:', { userId, currency, requestedAmount });
+
+    // Get all rental requests for the driver (asset owner) via external transactions (sellerId)
+    const txs = await prisma.externalTransaction.findMany({
+      where: {
+        sellerId: userId,
+        appService: 'RENTAL',
+        status: 'SUCCESS',
+        currencyCode: currency,
+        rentalRequestId: { not: null }
+      },
+      select: {
+        rentalRequestId: true,
+        amount: true,
+        transactionType: true
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    if (txs.length === 0) {
+      return { isValid: false, error: 'No available rentals for settlement in this currency' };
+    }
+
+    const rentalIds = Array.from(new Set(txs.map(t => t.rentalRequestId!).filter(Boolean)));
+    const rentals = await prisma.rentalRequest.findMany({
+      where: {
+        id: { in: rentalIds },
+        rentalSettlementStatus: 'PENDING'
+      },
+      select: { id: true, requestId: true, createdAt: true }
+    });
+    if (rentals.length === 0) {
+      return { isValid: false, error: 'No available rentals for settlement in this currency' };
+    }
+
+    // Compute net per rental
+    const originalById = new Map<string, number>();
+    const serviceFeeById = new Map<string, number>();
+    for (const t of txs) {
+      const rid = t.rentalRequestId!;
+      if (!rentals.find(r => r.id === rid)) continue;
+      const amt = parseFloat(t.amount.toString());
+      if (t.transactionType === 'ORIGINAL') {
+        originalById.set(rid, (originalById.get(rid) || 0) + amt);
+      } else if (t.transactionType === 'SERVICE_FEE') {
+        serviceFeeById.set(rid, (serviceFeeById.get(rid) || 0) + amt);
+      }
+    }
+
+    const details: any[] = [];
+    for (const r of rentals) {
+      const gross = originalById.get(r.id) || 0;
+      const svc = serviceFeeById.get(r.id) || 0;
+      const net = Math.max(0, gross - svc);
+      if (net > 0) {
+        details.push({
+          rentalId: r.id,
+          requestId: r.requestId,
+          earnings: net,
+          createdAt: r.createdAt,
+          serviceFees: svc
+        });
+      }
+    }
+
+    if (details.length === 0) {
+      return { isValid: false, error: 'No available rentals for settlement in this currency' };
+    }
+
+    const totalAvailable = details.reduce((sum, d) => sum + d.earnings, 0);
+    const roundedAvailableAmount = Math.round(totalAvailable * 100) / 100;
+    const roundedRequestedAmount = Math.round(requestedAmount * 100) / 100;
+
+    if (roundedRequestedAmount > roundedAvailableAmount) {
+      return {
+        isValid: false,
+        error: `Insufficient available earnings. Available: ${roundedAvailableAmount.toFixed(2)}, Requested: ${roundedRequestedAmount.toFixed(2)}`
+      };
+    }
+
+    if (Math.abs(roundedRequestedAmount - roundedAvailableAmount) < 0.01) {
+      return {
+        isValid: true,
+        includedRentalIds: details.map(d => d.rentalId),
+        totalRentalsCount: details.length,
+        grossAmount: totalAvailable,
+        serviceFeesDeducted: details.reduce((s, d) => s + d.serviceFees, 0),
+        netAmount: roundedAvailableAmount,
+        rentalDetails: details
+      };
+    }
+
+    // Select rentals FIFO until requested amount met
+    let remaining = roundedRequestedAmount;
+    const included: any[] = [];
+    for (const d of details) {
+      if (d.earnings <= remaining) {
+        included.push(d);
+        remaining -= d.earnings;
+        if (remaining <= 0.01) break;
+      } else {
+        break;
+      }
+    }
+    if (included.length === 0) {
+      return { isValid: false, error: 'No suitable rentals found for the requested settlement amount' };
+    }
+    const finalNet = Math.round(included.reduce((s, d) => s + d.earnings, 0) * 100) / 100;
+    const includedServiceFees = included.reduce((s, d) => s + d.serviceFees, 0);
+
+    return {
+      isValid: true,
+      includedRentalIds: included.map(d => d.rentalId),
+      totalRentalsCount: included.length,
+      grossAmount: included.reduce((s, d) => s + d.earnings + d.serviceFees, 0),
+      serviceFeesDeducted: includedServiceFees,
+      netAmount: finalNet,
+      rentalDetails: included
+    };
+  } catch (error) {
+    logger.error('Error calculating rentals settlement data:', error);
+    return { isValid: false, error: 'Failed to calculate settlement data' };
+  }
+}
+
+// Helper function to update rentals to SETTLED status
+async function updateRentalsToSettled(rentalIds: string[]) {
+  try {
+    const result = await prisma.rentalRequest.updateMany({
+      where: {
+        id: { in: rentalIds },
+        rentalSettlementStatus: 'PENDING'
+      },
+      data: {
+        rentalSettlementStatus: 'SETTLED',
+        updatedAt: new Date()
+      }
+    });
+    logger.info('Rentals updated to SETTLED status:', { rentalIds, updatedCount: result.count });
+    return result.count;
+  } catch (error) {
+    logger.error('Error updating rentals to SETTLED status:', error);
+    throw error;
+  }
+}
 // Helper function to calculate rides settlement data
 async function calculateRidesSettlementData(userId: string, currency: string, requestedAmount: number) {
   try {

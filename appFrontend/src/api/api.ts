@@ -2,8 +2,20 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config/env';
 
+// Normalize base URL to avoid accidental double `/api` when endpoints already include it
+const normalizeBaseUrl = (url: string): string => {
+  // Trim trailing slashes
+  let normalized = (url || '').replace(/\/+$/, '');
+  // If URL ends with `/api`, strip it so all callers can safely use `/api/...` paths
+  if (/\/api$/i.test(normalized)) {
+    console.warn('[API] EXPO_PUBLIC_API_URL should not include /api. Stripping it to prevent duplicate segments.');
+    normalized = normalized.replace(/\/api$/i, '');
+  }
+  return normalized;
+};
+
 const api = axios.create({
-  baseURL: API_URL, // Use the correct local development URL
+  baseURL: normalizeBaseUrl(API_URL),
   headers: {
     'Content-Type': 'application/json',
   },

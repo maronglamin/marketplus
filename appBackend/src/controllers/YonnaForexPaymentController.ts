@@ -22,10 +22,14 @@ export class YonnaForexPaymentController {
     }
 
     // Initialize with configuration from environment variables only
+    const baseUrl = (process.env.YONNA_FOREX_API_URL || '').trim().replace(/\/+$/, '');
+    const secretKey = (process.env.YONNA_FOREX_SECRET_KEY || '').trim();
+    const clientId = (process.env.YONNA_FOREX_CLIENT_ID || '').trim();
+
     this.paymentService = new YonnaForexPaymentService({
-      baseUrl: process.env.YONNA_FOREX_API_URL!,
-      secretKey: process.env.YONNA_FOREX_SECRET_KEY!,
-      clientId: process.env.YONNA_FOREX_CLIENT_ID!
+      baseUrl,
+      secretKey,
+      clientId
     });
   }
 

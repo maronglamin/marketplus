@@ -119,11 +119,26 @@ export interface AvailableRideEarnings {
   rides: RideDetail[];
 }
 
+export interface RentalDetail {
+  id: string;
+  requestId?: string;
+  earnings: number;
+  createdAt: string;
+}
+
+export interface AvailableRentalEarnings {
+  currency: string;
+  amount: number;
+  currencySymbol: string;
+  rentalsCount: number;
+  rentals: RentalDetail[];
+}
+
 export interface SettlementRequestData {
   amount: number;
   currency: string;
   type: 'BANK_TRANSFER' | 'WALLET_TRANSFER';
-  channel?: 'ECOMMERCE' | 'RIDES';
+  channel?: 'ECOMMERCE' | 'RIDES' | 'RENTALS';
   bankAccountId?: string;
   walletId?: string;
 }
@@ -155,6 +170,21 @@ class SettlementService {
         throw new Error(error.response.data.message);
       } else {
         throw new Error('Failed to fetch available ride earnings');
+      }
+    }
+  }
+
+  // Get available rental earnings for settlement (rentals)
+  async getAvailableRentalEarnings(): Promise<AvailableRentalEarnings[]> {
+    try {
+      const response = await api.get('/api/settlements/available-rental-earnings');
+      return response.data.earnings;
+    } catch (error: any) {
+      console.error('Error fetching available rental earnings:', error);
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      } else {
+        throw new Error('Failed to fetch available rental earnings');
       }
     }
   }

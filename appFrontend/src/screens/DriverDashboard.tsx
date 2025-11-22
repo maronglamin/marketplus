@@ -16,7 +16,7 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -45,6 +45,7 @@ interface DriverStats {
 interface RideRequest {
   id: string;
   requestId?: string; // Add requestId field for compatibility
+  requestType?: 'DIRECT' | 'BROADCAST';
   customerName: string;
   customerPhone: string;
   customerNotes?: string;
@@ -68,6 +69,9 @@ export function DriverDashboard() {
   const mapRef = useRef<GoogleMapViewRef>(null);
   const insets = useSafeAreaInsets();
   useKeepAwake();
+  const DRIVER_ONLINE_CACHE_KEY = 'driver_last_online_state';
+  const DRIVER_ONLINE_SINCE_KEY = 'driver_online_since_ms';
+  const [onlineSinceMs, setOnlineSinceMs] = useState<number | null>(null);
   
   const [isOnline, setIsOnline] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<MapLocation | null>(null);
@@ -90,8 +94,31 @@ export function DriverDashboard() {
     monthlyEarnings: 0,
   });
   const [showRequestNotification, setShowRequestNotification] = useState(false);
+  const locationWatchRef = useRef<Location.LocationSubscription | null>(null);
+  const ensuredOnlineRef = useRef(false);
 
   useEffect(() => {
+    // Pre-hydrate toggle from cached state to avoid flicker
+    (async () => {
+      try {
+        const cached = await AsyncStorage.getItem(DRIVER_ONLINE_CACHE_KEY);
+        if (cached !== null) {
+          const cachedValue = JSON.parse(cached);
+          if (typeof cachedValue === 'boolean') {
+            setIsOnline(cachedValue);
+          }
+        }
+        const sinceVal = await AsyncStorage.getItem(DRIVER_ONLINE_SINCE_KEY);
+        if (sinceVal) {
+          const parsed = parseInt(sinceVal, 10);
+          if (!Number.isNaN(parsed)) {
+            setOnlineSinceMs(parsed);
+          }
+        }
+      } catch (e) {
+        // no-op
+      }
+    })();
     getCurrentLocation();
     loadDriverStats();
     loadDriverOnlineStatus(); // Load driver's current online status
@@ -106,30 +133,94 @@ export function DriverDashboard() {
     };
   }, []); // Only run once on mount, not when isOnline changes
 
-  // Automatic location updates when online
-  useEffect(() => {
-    let locationInterval: number | null = null;
-
-    if (isOnline && currentLocation) {
-      // Update location every 60 seconds when online (increased from 30 to reduce rate)
-      locationInterval = setInterval(async () => {
+  // Refresh backend online status whenever screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      // Immediately reflect cached state, then reconcile with backend
+      (async () => {
         try {
-          if (mapRef.current) {
-            // Trigger location update from map component
-            mapRef.current.getCurrentLocation();
+          const cached = await AsyncStorage.getItem(DRIVER_ONLINE_CACHE_KEY);
+          if (cached !== null) {
+            const cachedValue = JSON.parse(cached);
+            if (typeof cachedValue === 'boolean') {
+              setIsOnline(cachedValue);
+            }
           }
-        } catch (error) {
-          console.error('Error in automatic location update:', error);
+          const sinceVal = await AsyncStorage.getItem(DRIVER_ONLINE_SINCE_KEY);
+          if (sinceVal) {
+            const parsed = parseInt(sinceVal, 10);
+            if (!Number.isNaN(parsed)) {
+              setOnlineSinceMs(parsed);
+            } else {
+              setOnlineSinceMs(null);
+            }
+          } else {
+            setOnlineSinceMs(null);
+          }
+        } catch (e) {
+          // no-op
         }
-      }, 60000); // 60 seconds
-    }
+      })();
+      loadDriverOnlineStatus();
+    }, [])
+  );
 
-    return () => {
-      if (locationInterval) {
-        clearInterval(locationInterval);
+  // Automatic location updates when online (use location watcher for more frequent updates)
+  useEffect(() => {
+    let unsubscribed = false;
+    const startWatching = async () => {
+      try {
+        if (!isOnline) return;
+        // Request permissions if not already granted
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.warn('Location permission not granted for driver watch');
+          return;
+        }
+        // Avoid duplicate watchers
+        if (locationWatchRef.current) {
+          return;
+        }
+        // Start watching position with reasonable intervals for real-time updates
+        const sub = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 15000, // 15 seconds
+            distanceInterval: 30, // update if moved ~30 meters for higher precision
+          },
+          (loc) => {
+            if (unsubscribed) return;
+            const locObj: MapLocation = {
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+              // address will be filled by throttledLocationUpdate via reverse geocode
+            };
+            // Push update through throttled pipeline; also updates backend if online
+            throttledLocationUpdate(locObj);
+          }
+        );
+        locationWatchRef.current = sub;
+      } catch (err) {
+        console.error('Error starting location watch:', err);
       }
     };
-  }, [isOnline, currentLocation]);
+    if (isOnline) {
+      startWatching();
+    } else {
+      // Stop watching when going offline
+      if (locationWatchRef.current) {
+        try { locationWatchRef.current.remove(); } catch {}
+        locationWatchRef.current = null;
+      }
+    }
+    return () => {
+      unsubscribed = true;
+      if (locationWatchRef.current) {
+        try { locationWatchRef.current.remove(); } catch {}
+        locationWatchRef.current = null;
+      }
+    };
+  }, [isOnline]);
 
   // Real-time polling for nearby ride requests when online
   useEffect(() => {
@@ -281,31 +372,55 @@ export function DriverDashboard() {
         const driverStatus = response.data.status || 'OFFLINE';
         const isOnlineBoolean = response.data.isOnline || false;
         
-        // Use status field as primary, fallback to isOnline boolean
-        const isDriverOnline = driverStatus === 'ONLINE' || isOnlineBoolean;
+        // Treat BUSY as online for the toggle; fallback to isOnline boolean
+        const isDriverOnline = (driverStatus === 'ONLINE' || driverStatus === 'BUSY') || isOnlineBoolean;
         
         console.log('📱 Driver status from database:', driverStatus);
         console.log('📱 Driver isOnline boolean from database:', isOnlineBoolean);
         console.log('📱 Driver online status determined:', isDriverOnline);
         
-        // Set the online state based on database status
+        // Set the online state based on database status and ensure UI reflects backend state
         setIsOnline(isDriverOnline);
-        
-        // If driver was online, load nearby requests
-        if (isDriverOnline) {
-          console.log('🎉 Driver is online, loading nearby requests');
+        try {
+          await AsyncStorage.setItem(DRIVER_ONLINE_CACHE_KEY, JSON.stringify(isDriverOnline));
+        } catch (e) {
+          // no-op
+        }
+        if (isDriverOnline && !ensuredOnlineRef.current) {
+          ensuredOnlineRef.current = true;
+          console.log('✅ Forcing online UI state to match backend');
+          // Trigger immediate nearby requests fetch
           loadNearbyRequests();
-        } else {
+          // Kick a location refresh to seed watcher
+          try {
+            if (mapRef.current) {
+              mapRef.current.getCurrentLocation();
+            }
+          } catch (e) {
+            console.warn('⚠️ Unable to trigger immediate location refresh on status sync', e);
+          }
+          // Seed onlineSince if missing
+          try {
+            const existingSince = await AsyncStorage.getItem(DRIVER_ONLINE_SINCE_KEY);
+            if (!existingSince) {
+              const nowMs = Date.now();
+              setOnlineSinceMs(nowMs);
+              await AsyncStorage.setItem(DRIVER_ONLINE_SINCE_KEY, String(nowMs));
+            }
+          } catch (_e) {
+            // no-op
+          }
+        }
+        if (!isDriverOnline) {
           console.log('🔴 Driver is offline, not loading requests');
         }
       } else {
         console.log('⚠️ No driver profile data received');
-        setIsOnline(false);
+        // Preserve existing toggle state on missing data
       }
     } catch (error) {
       console.error('❌ Error loading driver online status:', error);
-      // Keep current state if API fails
-      setIsOnline(false);
+      // Preserve current state if API fails
     }
   };
 
@@ -360,6 +475,7 @@ export function DriverDashboard() {
             return {
               id: req.requestId, // Use requestId instead of id for the API call
               requestId: req.requestId, // Keep both for compatibility
+              requestType: req.requestType || 'BROADCAST',
               customerName: `${req.customer?.firstName || 'Customer'} ${req.customer?.lastName || ''}`,
               customerPhone: req.customer?.phoneNumber || '',
               customerNotes: req.customerNotes || '',
@@ -445,6 +561,19 @@ export function DriverDashboard() {
         // Update the local state immediately after successful API call
         console.log('🔄 Setting isOnline state to:', value);
         setIsOnline(value);
+        try {
+          await AsyncStorage.setItem(DRIVER_ONLINE_CACHE_KEY, JSON.stringify(value));
+          if (value) {
+            const nowMs = Date.now();
+            setOnlineSinceMs(nowMs);
+            await AsyncStorage.setItem(DRIVER_ONLINE_SINCE_KEY, String(nowMs));
+          } else {
+            setOnlineSinceMs(null);
+            await AsyncStorage.removeItem(DRIVER_ONLINE_SINCE_KEY);
+          }
+        } catch (e) {
+          // no-op
+        }
         
         // If going online, force an immediate location update for accuracy
         if (value && currentLocation) {
@@ -512,7 +641,7 @@ export function DriverDashboard() {
   };
 
   const handleRentals = () => {
-    navigation.navigate('AssetRental');
+    navigation.navigate('RentalEarnings');
   };
 
   const handleSettings = () => {
@@ -1138,7 +1267,25 @@ export function DriverDashboard() {
         
         <View style={styles.statItem}>
           <Ionicons name="time" size={16} color="#3B82F6" />
-          <Text style={styles.statValue}>{stats.todayOnlineHours || stats.onlineHours}h</Text>
+          {(() => {
+            // Derive display online hours:
+            // 1) Prefer backend-provided todayOnlineHours
+            // 2) Fallback to overall onlineHours
+            // 3) If still unavailable and currently online, approximate using onlineSinceMs
+            const todayHours = typeof (stats as any).todayOnlineHours === 'number' ? (stats as any).todayOnlineHours : undefined;
+            const overallHours = typeof (stats as any).onlineHours === 'number' ? (stats as any).onlineHours : undefined;
+            let displayHours: number = 0;
+            if (todayHours !== undefined && !Number.isNaN(todayHours) && todayHours > 0) {
+              displayHours = todayHours;
+            } else if (overallHours !== undefined && !Number.isNaN(overallHours) && overallHours > 0) {
+              displayHours = overallHours;
+            } else if (isOnline && onlineSinceMs) {
+              const diffMs = Date.now() - onlineSinceMs;
+              displayHours = Math.max(0, diffMs / (1000 * 60 * 60));
+            }
+            const formatted = displayHours >= 10 ? Math.round(displayHours).toString() : displayHours.toFixed(1);
+            return <Text style={styles.statValue}>{formatted}h</Text>;
+          })()}
           <Text style={styles.statLabel}>Online Today</Text>
         </View>
       </View>
@@ -1492,6 +1639,11 @@ export function DriverDashboard() {
                       <View style={styles.requestListInfo}>
                         <View style={styles.requestListHeaderRow}>
                           <Text style={styles.requestListName}>{request.customerName}</Text>
+                          {request.requestType === 'DIRECT' && (
+                            <View style={styles.directBadge}>
+                              <Text style={styles.directBadgeText}>Direct</Text>
+                            </View>
+                          )}
                           <View style={styles.requestListRating}>
                             <Ionicons name="star" size={14} color="#F59E0B" />
                             <Text style={styles.requestListRatingText}>{request.customerRating}</Text>
@@ -2072,7 +2224,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '80%',
+    maxHeight: '95%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -2446,6 +2598,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 2,
   },
+  directBadge: {
+    marginLeft: 8,
+    backgroundColor: '#FCE7F3',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  directBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#DB2777',
+  },
   requestListName: {
     fontSize: 16,
     fontWeight: '600',
@@ -2579,7 +2743,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '80%',
+    maxHeight: '95%',
+    height: '95%',
+    overflow: 'hidden',
   },
   handleBar: {
     alignSelf: 'center',
@@ -2630,11 +2796,12 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   requestDetailContent: {
+    flex: 1,
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
   requestDetailContentContainer: {
-    paddingBottom: 20,
+    paddingBottom: 120,
   },
   requestDetailCard: {
     backgroundColor: '#F8FAFC',

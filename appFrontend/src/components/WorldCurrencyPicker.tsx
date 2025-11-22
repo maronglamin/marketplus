@@ -30,7 +30,7 @@ export const WorldCurrencyPicker: React.FC<WorldCurrencyPickerProps> = ({ value,
         value={search}
         onChangeText={setSearch}
         placeholder="Search currencies..."
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#6B7280"
       />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scrollView}>
         <View style={styles.currencyContainer}>
@@ -60,6 +60,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
+    color: '#111827',
     backgroundColor: '#FFFFFF',
     marginBottom: 8,
   },

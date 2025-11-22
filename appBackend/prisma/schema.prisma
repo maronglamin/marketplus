@@ -732,6 +732,7 @@ model RentalRequest {
   riderApplicationId String?
   rideServiceId      String
   status             RentalRequestStatus   @default(PENDING_QUOTE)
+  rentalSettlementStatus PaymentStatus     @default(PENDING)
   pickupAddress      String
   pickupLocation     Json?
   pickupLatitude     Float?
@@ -1269,6 +1270,7 @@ enum SettlementType {
 enum SettlementChannel {
   ECOMMERCE
   RIDES
+  RENTALS
 }
 
 enum OrderInterestStatus {

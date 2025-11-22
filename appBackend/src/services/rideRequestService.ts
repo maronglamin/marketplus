@@ -395,6 +395,15 @@ export class RideRequestService {
             phoneNumber: true
           }
         },
+        rideService: {
+          select: {
+            id: true,
+            serviceId: true,
+            name: true,
+            currency: true,
+            currencySymbol: true
+          }
+        },
         riderApplication: {
           select: {
             id: true,
@@ -461,6 +470,14 @@ export class RideRequestService {
         return {
           id: driver.id,
           user: driver.user,
+          rideServiceId: driver.rideServiceId,
+          rideService: driver.rideService ? {
+            id: driver.rideService.id,
+            serviceId: driver.rideService.serviceId,
+            name: driver.rideService.name,
+            currency: driver.rideService.currency,
+            currencySymbol: driver.rideService.currencySymbol
+          } : null,
           currentLocation: {
             latitude: driverLocation.latitude,
             longitude: driverLocation.longitude
@@ -869,14 +886,19 @@ export class RideRequestService {
         driverRideService = driver?.rideService;
       }
 
-      // Get all active ride requests that haven't been accepted yet
+      // Get all active ride requests:
+      // - Broadcast: driverId is null (visible to nearby drivers)
+      // - Direct: driverId equals the current driver (targeted requests)
       const rideRequests = await prisma.rideRequest.findMany({
         where: {
           status: RideStatus.REQUESTED,
           expiresAt: {
             gt: new Date() // Only non-expired requests
           },
-          driverId: null // Only requests that haven't been accepted
+          OR: [
+            { driverId: null },
+            ...(driverId ? [{ driverId }] : [])
+          ]
         },
         include: {
           customer: {
@@ -906,7 +928,8 @@ export class RideRequestService {
 
       console.log(`📋 Found ${rideRequests.length} active ride requests`);
 
-      // Filter requests by distance and driver's ride service compatibility
+      // Filter requests by distance and driver's ride service compatibility,
+      // Always include DIRECT requests (driverId == current driver) even if outside radius.
       const nearbyRequests = rideRequests.filter(request => {
         try {
           // Check if customer data exists
@@ -929,6 +952,12 @@ export class RideRequestService {
             pickupLocation.latitude,
             pickupLocation.longitude
           );
+
+          // If this is a direct targeted request to this driver, include it regardless of distance
+          const isDirect = driverId ? request.driverId === driverId : false;
+          if (isDirect) {
+            return true;
+          }
 
           // Check if request is within max distance
           if (distance > maxDistance) {
@@ -959,6 +988,8 @@ export class RideRequestService {
             return null;
           }
           
+          const requestType = driverId && request.driverId === driverId ? 'DIRECT' : 'BROADCAST';
+
           return {
             id: request.id,
             requestId: request.requestId,
@@ -976,6 +1007,7 @@ export class RideRequestService {
             requestedAt: request.requestedAt,
             expiresAt: request.expiresAt,
             rideService: request.rideService,
+            requestType,
             // Calculate distance from driver to pickup
             distanceFromDriver: this.calculateDistance(
               latitude,

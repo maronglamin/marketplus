@@ -1,4 +1,4 @@
-# SNAP Application Business Documentation
+# SNAPlication Business Documentation
 
 ## Mission Statement
 

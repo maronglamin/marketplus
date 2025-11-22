@@ -72,6 +72,8 @@ import { RepsActivity } from '../screens/RepsActivity';
 import { RepOrderReport } from '../screens/reps-reports/RepOrderReport';
 import { RepProductReport } from '../screens/reps-reports/RepProductReport';
 import { ShoppingCart } from '../screens/ShoppingCart';
+import { RentalEarnings } from '../screens/RentalEarnings';
+import { RentalSettlementRequest } from '../screens/transactions/RentalSettlementRequest';
 
 export type AppStackParamList = {
   Home: { openSearch?: boolean } | undefined;
@@ -196,6 +198,8 @@ export type AppStackParamList = {
   DriverDashboard: undefined;
   DriverRequests: undefined;
   DriverEarnings: undefined;
+  RentalEarnings: undefined;
+  RentalSettlementRequest: { defaultCurrency?: string } | undefined;
   DriverSettings: undefined;
   DriverProfile: undefined;
   JourneyMapView: {
@@ -333,6 +337,8 @@ export function AppNavigator() {
         <Stack.Screen name="DriverDashboard" component={DriverDashboard} options={{ gestureEnabled: true }} />
         <Stack.Screen name="DriverRequests" component={DriverRequests} options={{ gestureEnabled: true }} />
         <Stack.Screen name="DriverEarnings" component={DriverEarnings} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="RentalEarnings" component={RentalEarnings} options={{ gestureEnabled: true }} />
+        <Stack.Screen name="RentalSettlementRequest" component={RentalSettlementRequest} />
         <Stack.Screen name="DriverSettings" component={DriverSettings} options={{ gestureEnabled: true }} />
         <Stack.Screen name="DriverProfile" component={DriverProfile} options={{ gestureEnabled: true }} />
         <Stack.Screen name="JourneyMapView" component={JourneyMapView} options={{ gestureEnabled: true }} />

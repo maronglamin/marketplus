@@ -622,7 +622,8 @@ export function Home() {
         navigation.navigate('RentalRequest');
         break;
       case 'Ride History':
-        navigation.navigate('CustomerRidesRecords');
+        // Directly navigate to Requested Rides for faster access
+        navigation.navigate('CustomerRides');
         break;
       case 'My Orders':
         navigation.navigate('CustomerOrders');

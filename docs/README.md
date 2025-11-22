@@ -1,7 +1,7 @@
-# SNAP Application Documentation
+# SNAPlication Documentation
 
 ## Overview
-This documentation provides comprehensive information about the SNAP Application, covering its architecture, functionality, and business aspects. The documentation is organized into four main sections:
+This documentation provides comprehensive information about the SNAPlication, covering its architecture, functionality, and business aspects. The documentation is organized into four main sections:
 
 1. [Architecture Documentation](ARCHITECTURE.md)
 2. [Functional Documentation](FUNCTIONAL.md)
