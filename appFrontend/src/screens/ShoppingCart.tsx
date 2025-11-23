@@ -40,6 +40,8 @@ interface OrderSummaryItem {
   currencyCode: string;
   createdAt: string;
   sellerId: string;
+  productLabel?: string;
+  itemCount?: number;
 }
 
 const { height: screenHeight } = Dimensions.get('window');
@@ -49,6 +51,7 @@ export function ShoppingCart() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
 
+  const [activeTab, setActiveTab] = useState<'pay' | 'orders'>('pay');
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<OrderSummaryItem[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
@@ -64,11 +67,17 @@ export function ShoppingCart() {
   const [processingStripePayment, setProcessingStripePayment] = useState(false);
   const [showYonnaPayment, setShowYonnaPayment] = useState(false);
   const [waveSessionId, setWaveSessionId] = useState<string | null>(null);
+  const [actioningOrderId, setActioningOrderId] = useState<string | null>(null);
   const yonnaForexService = new YonnaForexPaymentService();
   const wavePaymentService = new WavePaymentService();
 
   const pendingOrders = useMemo(() => {
     return orders.filter(o => o.status?.toLowerCase() === 'authorized' && (o.paymentStatus || '').toLowerCase() !== 'paid');
+  }, [orders]);
+
+  // Orders awaiting buyer action (status PENDING)
+  const pendingBuyerOrders = useMemo(() => {
+    return orders.filter(o => (o.status || '').toLowerCase() === 'pending');
   }, [orders]);
 
   // Selected currency constraint: only one currency at a time for bulk payment
@@ -171,6 +180,19 @@ export function ShoppingCart() {
         currencyCode: o.currencyCode,
         createdAt: o.createdAt,
         sellerId: o.sellerId,
+        productLabel: (() => {
+          try {
+            const items = Array.isArray(o.items) ? o.items : [];
+            const names = items
+              .map((it: any) => it?.product?.name || it?.product?.title || it?.productName || it?.name)
+              .filter(Boolean);
+            const primary = names[0] || 'Item';
+            return names.length > 1 ? `${primary} +${names.length - 1} more` : primary;
+          } catch {
+            return 'Item';
+          }
+        })(),
+        itemCount: Array.isArray(o.items) ? o.items.length : (typeof o.itemCount === 'number' ? o.itemCount : undefined),
       }));
       setOrders(simplified);
       // Preserve only still valid selected ids
@@ -192,6 +214,34 @@ export function ShoppingCart() {
 
   const formatPrice = (price: number, currencyCode: string) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(price);
+  };
+
+  const handleAuthorizeOrder = async (order: OrderSummaryItem) => {
+    try {
+      setActioningOrderId(order.id);
+      await api.patch(`/api/orders/${order.id}/authorize`, { action: 'authorize' });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Order Authorized', `Order #${order.orderNumber} has been authorized.`);
+      await loadOrders();
+    } catch (e: any) {
+      Alert.alert('Authorize Failed', e?.response?.data?.message || 'Failed to authorize order.');
+    } finally {
+      setActioningOrderId(null);
+    }
+  };
+
+  const handleCancelOrder = async (order: OrderSummaryItem) => {
+    try {
+      setActioningOrderId(order.id);
+      await api.patch(`/api/orders/${order.id}/authorize`, { action: 'cancel' });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Alert.alert('Order Cancelled', `Order #${order.orderNumber} has been cancelled.`);
+      await loadOrders();
+    } catch (e: any) {
+      Alert.alert('Cancel Failed', e?.response?.data?.message || 'Failed to cancel order.');
+    } finally {
+      setActioningOrderId(null);
+    }
   };
 
   const getPaymentMethodDisplayName = (method: any) => {
@@ -443,111 +493,220 @@ export function ShoppingCart() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 120 }}>
-        {pendingOrders.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="cart-outline" size={48} color="#9CA3AF" />
-            <Text style={styles.emptyTitle}>No pending payments</Text>
-            <Text style={styles.emptySubtitle}>Orders awaiting payment will appear here.</Text>
-          </View>
-        ) : (
-          <View style={{ padding: 16 }}>
-            <Text style={styles.sectionTitle}>Pending Payment Orders</Text>
-            <View style={styles.summaryCard}>
-              <Text style={[styles.summaryLabel, { marginBottom: 8 }]}>Totals by currency (all pending)</Text>
-              {Array.from(totalsByCurrencyAll.entries()).map(([cur, total]) => (
-                <View key={cur} style={styles.summaryRow}>
-                  <Text style={styles.summaryValue}>{cur}</Text>
-                  <Text style={styles.summaryTotalValue}>{formatPrice(total, cur)}</Text>
-                </View>
-              ))}
+      {/* Tabs */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          onPress={() => setActiveTab('pay')}
+          style={[styles.tabItem, activeTab === 'pay' && styles.activeTabItem]}
+        >
+          <Text style={[styles.tabText, activeTab === 'pay' && styles.activeTabText]}>Pay</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setActiveTab('orders')}
+          style={[styles.tabItem, activeTab === 'orders' && styles.activeTabItem]}
+        >
+          <Text style={[styles.tabText, activeTab === 'orders' && styles.activeTabText]}>Pending Orders</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Pay Tab Content */}
+      {activeTab === 'pay' && (
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 120 }}>
+          {pendingOrders.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cart-outline" size={48} color="#9CA3AF" />
+              <Text style={styles.emptyTitle}>No pending payments</Text>
+              <Text style={styles.emptySubtitle}>Orders awaiting payment will appear here.</Text>
             </View>
-            <View style={{ marginTop: 12, gap: 10 }}>
-              {pendingOrders.map((o) => (
-                <TouchableOpacity
-                  key={o.id}
-                  style={[styles.orderCard, selectedOrderIds.has(o.id) && styles.selectedOrderCard]}
-                  onPress={() => toggleSelectOrder(o)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.orderHeader}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Ionicons
-                        name={selectedOrderIds.has(o.id) ? 'checkbox' : 'square-outline'}
-                        size={20}
-                        color={selectedOrderIds.has(o.id) ? '#10B981' : '#9CA3AF'}
-                      />
-                      <Text style={styles.orderNumber}>#{o.orderNumber}</Text>
-                    </View>
+          ) : (
+            <View style={{ padding: 16 }}>
+              <Text style={styles.sectionTitle}>Pending Payment Orders</Text>
+              <View style={styles.summaryCard}>
+                <Text style={[styles.summaryLabel, { marginBottom: 8 }]}>Totals by currency (all pending)</Text>
+                {Array.from(totalsByCurrencyAll.entries()).map(([cur, total]) => (
+                  <View key={cur} style={styles.summaryRow}>
+                    <Text style={styles.summaryValue}>{cur}</Text>
+                    <Text style={styles.summaryTotalValue}>{formatPrice(total, cur)}</Text>
                   </View>
+                ))}
+              </View>
+              <View style={{ marginTop: 12, gap: 10 }}>
+                {pendingOrders.map((o) => (
+                  <TouchableOpacity
+                    key={o.id}
+                    style={[styles.orderCard, selectedOrderIds.has(o.id) && styles.selectedOrderCard]}
+                    onPress={() => toggleSelectOrder(o)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.orderHeader}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons
+                          name={selectedOrderIds.has(o.id) ? 'checkbox' : 'square-outline'}
+                          size={20}
+                          color={selectedOrderIds.has(o.id) ? '#10B981' : '#9CA3AF'}
+                        />
+                        <Text style={styles.orderNumber}>#{o.orderNumber}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.orderRow}>
+                      <View style={styles.rowLeft}>
+                        <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                        <Text style={styles.rowLabel}>Date</Text>
+                      </View>
+                      <Text style={styles.rowValue}>
+                        {new Date(o.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </Text>
+                    </View>
                   <View style={styles.orderRow}>
                     <View style={styles.rowLeft}>
-                      <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                      <Text style={styles.rowLabel}>Date</Text>
+                      <Ionicons name="pricetag-outline" size={16} color="#6B7280" />
+                      <Text style={styles.rowLabel}>Product</Text>
                     </View>
-                    <Text style={styles.rowValue}>
-                      {new Date(o.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    <Text style={styles.rowValue} numberOfLines={1} ellipsizeMode="tail">
+                      {o.productLabel || 'Item'}
                     </Text>
                   </View>
-                  <View style={styles.orderRow}>
-                    <View style={styles.rowLeft}>
-                      <Ionicons name="card-outline" size={16} color="#059669" />
-                      <Text style={styles.rowLabel}>Payable</Text>
+                    <View style={styles.orderRow}>
+                      <View style={styles.rowLeft}>
+                        <Ionicons name="card-outline" size={16} color="#059669" />
+                        <Text style={styles.rowLabel}>Payable</Text>
+                      </View>
+                      <Text style={[styles.rowValue, { color: '#059669', fontWeight: '700' }]}>
+                        {formatPrice(o.totalAmount, o.currencyCode)}
+                      </Text>
                     </View>
-                    <Text style={[styles.rowValue, { color: '#059669', fontWeight: '700' }]}>
-                      {formatPrice(o.totalAmount, o.currencyCode)}
-                    </Text>
-                  </View>
-                  {/* Status pill repositioned to bottom of card */}
-                  <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
-                    <View style={[styles.badge, { backgroundColor: '#DBEAFE' }]}>
-                      <Text style={[styles.badgeText, { color: '#1E40AF' }]}>Authorized</Text>
+                    <View style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+                      <View style={[styles.badge, { backgroundColor: '#DBEAFE' }]}>
+                        <Text style={[styles.badgeText, { color: '#1E40AF' }]}>Authorized</Text>
+                      </View>
                     </View>
-                  </View>
-                  {selectedOrderIds.has(o.id) && (
-                    <View style={styles.selectedHint}>
-                      <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-                      <Text style={styles.selectedHintText}>Selected for payment</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+                    {selectedOrderIds.has(o.id) && (
+                      <View style={styles.selectedHint}>
+                        <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+                        <Text style={styles.selectedHintText}>Selected for payment</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Selected Orders</Text>
-                <Text style={styles.summaryValue}>{selectedCount}</Text>
-              </View>
-              <View style={[styles.summaryRow, { marginTop: 4 }]}>
-                <Text style={styles.summaryTotalLabel}>
-                  Grand Total {selectedCurrencyCode ? `(${selectedCurrencyCode})` : ''}
-                </Text>
-                <Text style={styles.summaryTotalValue}>
-                  {selectedCurrencyCode ? formatPrice(selectedTotalForCurrency, selectedCurrencyCode) : '--'}
-                </Text>
-              </View>
-              {totalsByCurrencySelected.size > 1 && (
-                <View style={{ marginTop: 8 }}>
-                  {Array.from(totalsByCurrencySelected.entries()).map(([cur, total]) => (
-                    <View key={cur} style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Total in {cur}</Text>
-                      <Text style={styles.summaryValue}>{formatPrice(total, cur)}</Text>
-                    </View>
-                  ))}
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Selected Orders</Text>
+                  <Text style={styles.summaryValue}>{selectedCount}</Text>
                 </View>
-              )}
-              {selectedCount > 0 && (
-                <TouchableOpacity style={{ marginTop: 10 }} onPress={clearSelection}>
-                  <Text style={{ color: '#2563EB', fontWeight: '600' }}>Clear Selection</Text>
-                </TouchableOpacity>
-              )}
+                <View style={[styles.summaryRow, { marginTop: 4 }]}>
+                  <Text style={styles.summaryTotalLabel}>
+                    Grand Total {selectedCurrencyCode ? `(${selectedCurrencyCode})` : ''}
+                  </Text>
+                  <Text style={styles.summaryTotalValue}>
+                    {selectedCurrencyCode ? formatPrice(selectedTotalForCurrency, selectedCurrencyCode) : '--'}
+                  </Text>
+                </View>
+                {totalsByCurrencySelected.size > 1 && (
+                  <View style={{ marginTop: 8 }}>
+                    {Array.from(totalsByCurrencySelected.entries()).map(([cur, total]) => (
+                      <View key={cur} style={styles.summaryRow}>
+                        <Text style={styles.summaryLabel}>Total in {cur}</Text>
+                        <Text style={styles.summaryValue}>{formatPrice(total, cur)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                {selectedCount > 0 && (
+                  <TouchableOpacity style={{ marginTop: 10 }} onPress={clearSelection}>
+                    <Text style={{ color: '#2563EB', fontWeight: '600' }}>Clear Selection</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
-        )}
-      </ScrollView>
+          )}
+        </ScrollView>
+      )}
 
-      {pendingOrders.length > 0 && (
+      {/* Pending Orders Tab Content */}
+      {activeTab === 'orders' && (
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 40 }}>
+          {pendingBuyerOrders.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="time-outline" size={48} color="#9CA3AF" />
+              <Text style={styles.emptyTitle}>No pending orders</Text>
+              <Text style={styles.emptySubtitle}>Orders awaiting your authorization will appear here.</Text>
+            </View>
+          ) : (
+            <View style={{ padding: 16 }}>
+              <Text style={styles.sectionTitle}>Pending Orders</Text>
+              <View style={{ marginTop: 12, gap: 10 }}>
+                {pendingBuyerOrders.map((o) => (
+                  <View key={o.id} style={styles.orderCard}>
+                    <View style={styles.orderHeader}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="document-text-outline" size={20} color="#6B7280" />
+                        <Text style={styles.orderNumber}>#{o.orderNumber}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.orderRow}>
+                      <View style={styles.rowLeft}>
+                        <Ionicons name="calendar-outline" size={16} color="#6B7280" />
+                        <Text style={styles.rowLabel}>Date</Text>
+                      </View>
+                      <Text style={styles.rowValue}>
+                        {new Date(o.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </Text>
+                    </View>
+                    <View style={styles.orderRow}>
+                      <View style={styles.rowLeft}>
+                        <Ionicons name="pricetag-outline" size={16} color="#6B7280" />
+                        <Text style={styles.rowLabel}>Product</Text>
+                      </View>
+                      <Text style={styles.rowValue} numberOfLines={1} ellipsizeMode="tail">
+                        {o.productLabel || 'Item'}
+                      </Text>
+                    </View>
+                    <View style={styles.orderRow}>
+                      <View style={styles.rowLeft}>
+                        <Ionicons name="cash-outline" size={16} color="#059669" />
+                        <Text style={styles.rowLabel}>Total</Text>
+                      </View>
+                      <Text style={[styles.rowValue, { color: '#059669', fontWeight: '700' }]}>
+                        {formatPrice(o.totalAmount, o.currencyCode)}
+                      </Text>
+                    </View>
+                    <View style={{ marginTop: 12, flexDirection: 'row', gap: 10 }}>
+                      <TouchableOpacity
+                        style={[styles.authorizeButton, (actioningOrderId === o.id) && styles.disabledButton]}
+                        onPress={() => handleAuthorizeOrder(o)}
+                        disabled={actioningOrderId === o.id}
+                      >
+                        {actioningOrderId === o.id ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+                        )}
+                        <Text style={styles.actionButtonText}>Authorize</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.cancelButton, (actioningOrderId === o.id) && styles.disabledButton]}
+                        onPress={() => handleCancelOrder(o)}
+                        disabled={actioningOrderId === o.id}
+                      >
+                        {actioningOrderId === o.id ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
+                        )}
+                        <Text style={styles.actionButtonText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+        </ScrollView>
+      )}
+
+      {activeTab === 'pay' && pendingOrders.length > 0 && (
         <View style={[styles.footerContainer, { paddingBottom: Math.max(insets.bottom, 12), paddingHorizontal: 16 }]}>
           <TouchableOpacity
             style={[styles.payNowButton, (selectedCount === 0 || !selectedCurrencyCode || loadingPaymentMethods) && styles.disabledButton]}
@@ -684,6 +843,17 @@ export function ShoppingCart() {
               >
                 <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
                 <Text style={styles.saveButtonText}>Process Payment</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.addPaymentButton}
+                onPress={() => {
+                  setShowPaymentModal(false);
+                  navigation.navigate('PaymentMethods');
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.addPaymentButtonText}>Add More Payment Methods</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1106,6 +1276,82 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F2937',
     marginBottom: 16,
+  },
+  addPaymentButton: {
+    width: '100%',
+    paddingVertical: 16,
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  addPaymentButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    backgroundColor: '#FFFFFF',
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  activeTabItem: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  activeTabText: {
+    color: '#3730A3',
+  },
+  authorizeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: '#10B981',
+    flex: 1,
+  },
+  cancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: '#EF4444',
+    flex: 1,
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 

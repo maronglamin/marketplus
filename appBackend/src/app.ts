@@ -28,6 +28,7 @@ import salesRepRoutes from './routes/salesRep';
 import branchRoutes from './routes/branch';
 import yonnaForexPaymentRoutes from './routes/yonnaForexPaymentRoutes';
 import wavePaymentRoutes from './routes/wavePaymentRoutes';
+import appVersionRoutes from './routes/appVersion';
 
 const app = express();
 
@@ -144,6 +145,7 @@ app.use('/api/sales-reps', salesRepRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/payments/yonna-forex', yonnaForexPaymentRoutes);
 app.use('/api/payments/wave-gambia', wavePaymentRoutes);
+app.use('/api/app', appVersionRoutes);
 
 // Health check endpoint under /api
 app.get('/api/health', (req, res) => {

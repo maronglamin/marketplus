@@ -37,6 +37,8 @@ import { getUserLocationFromGPS } from '../utils/locationService';
 import { categoryService, type Category } from '../services/categoryService';
 import { rentalApi } from '../services/rentalApi';
 import { userService } from '../services/userService';
+import { AppUpdateBottomSheet } from '../components/AppUpdateBottomSheet';
+import { checkForUpdate, type UpdateCheckResult } from '../services/appUpdateService';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -53,6 +55,9 @@ export function Home() {
   // Fresh user data state (fetched from backend using JWT)
   const [freshUserData, setFreshUserData] = useState<any>(null);
   const [isLoadingUserData, setIsLoadingUserData] = useState(true);
+  // App update state
+  const [isUpdateVisible, setIsUpdateVisible] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   
   // Rider application state
   const [riderApplication, setRiderApplication] = useState<RiderApplication | null>(null);
@@ -108,6 +113,14 @@ export function Home() {
     loadPendingPaymentCount();
     // Check for active tokens when component mounts
     checkActiveTokens();
+    // Check for app updates on mount (no-op if backend endpoint not present)
+    (async () => {
+      const result = await checkForUpdate();
+      if (result.shouldPrompt) {
+        setUpdateInfo(result);
+        setIsUpdateVisible(true);
+      }
+    })();
   }, []);
 
   // Re-run data loading when user changes
@@ -749,7 +762,7 @@ export function Home() {
                 activeOpacity={0.7}
               >
                 <Text style={styles.searchPlaceholder}>
-                  Search products, orders, rides, rentals...
+                  Search now...
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={openSearchScreen}>
@@ -1334,6 +1347,16 @@ export function Home() {
           </View>
         </SafeAreaView>
       </SafeAreaView>
+
+      {/* Update Prompt - render last to avoid affecting layout/safe area */}
+      <AppUpdateBottomSheet
+        isVisible={isUpdateVisible}
+        onClose={() => setIsUpdateVisible(false)}
+        message={updateInfo?.message}
+        mandatory={updateInfo?.mandatory}
+        storeUrl={updateInfo?.storeUrl}
+        latestVersion={updateInfo?.latestVersion}
+      />
 
 
     </View>

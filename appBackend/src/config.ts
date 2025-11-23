@@ -46,9 +46,33 @@ const envSchema = z.object({
   
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'http', 'verbose', 'debug', 'silly']).default('info'),
+
+  // App Versioning (optional)
+  APP_VERSION_LATEST_IOS: z.string().optional(),
+  APP_VERSION_LATEST_ANDROID: z.string().optional(),
+  APP_VERSION_MIN_IOS: z.string().optional(),
+  APP_VERSION_MIN_ANDROID: z.string().optional(),
+  APP_UPDATE_MANDATORY: z.string().optional(), // "true" | "false"
+  APP_UPDATE_MESSAGE: z.string().optional(),
+  APP_STORE_URL_IOS: z.string().optional(),
+  APP_STORE_URL_ANDROID: z.string().optional(),
+  APP_VERSION_REQUIRE_EXACT: z.string().optional(), // "true" | "false"
 });
 
-let config;
+export type AppVersionInfo = {
+  latest: { ios: string | null; android: string | null };
+  minSupported: { ios: string | null; android: string | null };
+  mandatory: boolean;
+  message: string | null;
+  storeUrl: { ios: string | null; android: string | null };
+  requireExact: boolean;
+};
+
+export type Config = {
+  appVersion: AppVersionInfo;
+} & Record<string, unknown>;
+
+let config: Config;
 
 try {
   // Parse and validate environment variables
@@ -91,7 +115,25 @@ try {
     logging: {
       level: env.LOG_LEVEL,
     },
-  } as const;
+
+  appVersion: {
+    latest: {
+      ios: env.APP_VERSION_LATEST_IOS || null,
+      android: env.APP_VERSION_LATEST_ANDROID || null,
+    },
+    minSupported: {
+      ios: env.APP_VERSION_MIN_IOS || null,
+      android: env.APP_VERSION_MIN_ANDROID || null,
+    },
+    mandatory: (env.APP_UPDATE_MANDATORY || 'false').toLowerCase() === 'true',
+    message: env.APP_UPDATE_MESSAGE || null,
+    storeUrl: {
+      ios: env.APP_STORE_URL_IOS || null,
+      android: env.APP_STORE_URL_ANDROID || null,
+    },
+    requireExact: (env.APP_VERSION_REQUIRE_EXACT || 'false').toLowerCase() === 'true',
+  },
+  } as unknown as Config;
 } catch (error) {
   logger.error('Failed to parse environment variables:', error);
   throw error;
