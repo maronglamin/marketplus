@@ -75,6 +75,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../contexts/AuthContext'
 import { userService, UserProfileData } from '../services/userService'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { ENV_CONFIG } from '../config/env'
 
 type MenuItem = {
   id: string
@@ -839,7 +840,7 @@ export function AccountSettings() {
           
           {/* App Version at Bottom */}
           <View style={styles.appVersionContainer}>
-            <Text style={styles.appVersionText}>Version 1.0.0</Text>
+            <Text style={styles.appVersionText}>Version {ENV_CONFIG.APP_VERSION}</Text>
           </View>
         </ScrollView>
       </View>

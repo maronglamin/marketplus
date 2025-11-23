@@ -1,7 +1,7 @@
 {
   "name": "snap-backend",
-  "version": "1.0.0",
-  "description": "SNAPlication backend",
+  "version": "1.0.1",
+  "description": "SNAP Application backend",
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",

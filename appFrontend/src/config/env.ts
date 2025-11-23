@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 // Centralized environment configuration
 export const ENV_CONFIG = {
   // API Configuration
-  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:3000',
+  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://snap.cloudnexus.biz:3000',
   API_TIMEOUT: 30000,
   
   // Local IP for development (used for diagnostics only)
@@ -11,7 +11,7 @@ export const ENV_CONFIG = {
   
   // App Configuration
   APP_NAME: 'SNAP',
-  APP_VERSION: '1.0.0',
+  APP_VERSION: '1.0.1',
   
   // Feature Flags
   ENABLE_DEBUG_LOGGING: __DEV__,

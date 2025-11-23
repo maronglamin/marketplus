@@ -4,7 +4,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'SNAP',
   slug: 'marketplace',
-  version: '1.0.0',
+  version: '1.0.1',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
@@ -19,6 +19,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'biz.cloudnexus.snap.app',
+    buildNumber: '4',
     infoPlist: {
       UILaunchStoryboardName: 'SplashScreen',
       UIRequiresFullScreen: true,
@@ -30,7 +31,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSLocationAlwaysAndWhenInUseUsageDescription: 'This app needs access to your location to show your current position on the map and provide ride services.',
       NSAppTransportSecurity: {
         NSExceptionDomains: {
-          '172.20.10.3': {
+          'snap.cloudnexus.biz': {
             NSTemporaryExceptionAllowsInsecureHTTPLoads: true,
             NSIncludesSubdomains: true,
           },
@@ -47,6 +48,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: '#ffffff'
     },
     package: 'com.snap.app',
+    versionCode: 2,
     usesCleartextTraffic: true,
     config: {
       googleMaps: {
@@ -58,7 +60,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png'
   },
   extra: {
-    localIp: process.env.LOCAL_IP || '172.20.10.3',
+    localIp: process.env.LOCAL_IP || 'snap.cloudnexus.biz',
     stripePublishableKey: 'pk_test_51G7XqgIFQtDBTvihaeU6FZCsQuHg1NQIkdd8CTGL0ZulPMIjQZUmFSW80gOzDpGe5UezYoqkc55WmQhpyYtZdLmk00QmAVRon0',
     googlePlacesApiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo',
     eas: {
