@@ -10,7 +10,7 @@ export interface YonnaForexWebhookPayload {
   amount: number;
   currency: string;
   phoneNumber: string;
-  timestamp: string;
+  timestamp: string | number;
   message?: string;
   error?: string;
   signature?: string; // For webhook signature verification
@@ -23,7 +23,46 @@ export class YonnaForexWebhookController {
    */
   async handleWebhook(req: Request, res: Response): Promise<void> {
     try {
-      const payload: YonnaForexWebhookPayload = req.body;
+      // Normalize/parse incoming payload in case body is a raw string, Buffer, or nested object
+      let incoming: any = req.body;
+      
+      // If body is a Buffer (misconfigured content-type), try to parse to JSON
+      if (Buffer.isBuffer(incoming)) {
+        const raw = incoming.toString('utf8');
+        try {
+          incoming = JSON.parse(raw);
+        } catch {
+          // Keep as string if not parseable
+          incoming = raw;
+        }
+      }
+      
+      // If body is a string (e.g., content-type text/plain), try to parse JSON
+      if (typeof incoming === 'string') {
+        try {
+          incoming = JSON.parse(incoming);
+        } catch {
+          // leave as-is; validation will fail below
+        }
+      }
+      
+      // If provider nests payload under "payload" or "data", unwrap it (and parse if stringified)
+      if (incoming && typeof incoming === 'object') {
+        const nested = (incoming as any).payload ?? (incoming as any).data;
+        if (nested) {
+          if (typeof nested === 'string') {
+            try {
+              incoming = JSON.parse(nested);
+            } catch {
+              incoming = nested;
+            }
+          } else {
+            incoming = nested;
+          }
+        }
+      }
+      
+      const payload: YonnaForexWebhookPayload = incoming as any;
 
       console.log('Yonna Forex webhook received:', payload);
 

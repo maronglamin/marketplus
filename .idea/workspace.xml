@@ -5,19 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/AndroidManifest.xml" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/app/src/main/AndroidManifest.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values/strings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values/strings.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values/styles.xml" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values/styles.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/settings.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/settings.gradle" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/ios/SNAP.xcodeproj/project.pbxproj" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/ios/SNAP.xcodeproj/project.pbxproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/ios/SNAP.xcodeproj/xcshareddata/xcschemes/SNAP.xcscheme" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/ScheduleRideModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/ScheduleRideModal.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/VehicleDetailsModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/VehicleDetailsModal.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/DeliveryOptions.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/DeliveryOptions.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/DriverRequests.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/DriverRequests.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/VehicleDetailsScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/VehicleDetailsScreen.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/riders/BecomeRider.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/riders/BecomeRider.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/app.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.config.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

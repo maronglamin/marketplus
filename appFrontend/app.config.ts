@@ -9,8 +9,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: './assets/icon.png',
   userInterfaceStyle: 'light',
   splash: {
-    image: './assets/splash.png',
-    resizeMode: 'contain',
     backgroundColor: '#ffffff'
   },
   assetBundlePatterns: [
@@ -42,9 +40,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       googleMapsApiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo'
     }
   },
-  android: {
+  android: ({
     adaptiveIcon: {
-      foregroundImage: './assets/adaptive-icon.png',
+      foregroundImage: './assets/adaptive-icon-foreground.png',
       backgroundColor: '#ffffff'
     },
     package: 'com.snap.app',
@@ -55,7 +53,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         apiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo'
       }
     }
-  },
+  } as any),
   web: {
     favicon: './assets/favicon.png'
   },
