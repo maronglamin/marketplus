@@ -74,7 +74,7 @@ export function SellerKycBusiness() {
       isValid = false;
     }
 
-    if (!formData.registrationNumber.trim()) {
+    if (formData.businessType !== 'SOLE_PROPRIETORSHIP' && !formData.registrationNumber.trim()) {
       newErrors.registrationNumber = 'Registration number is required';
       isValid = false;
     }

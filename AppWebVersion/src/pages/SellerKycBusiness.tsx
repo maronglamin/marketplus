@@ -47,7 +47,7 @@ export function SellerKycBusiness() {
     let ok = true;
     if (!formData.businessName.trim()) { next.businessName = 'Business name is required'; ok = false; }
     if (!formData.businessType) { next.businessType = 'Business type is required'; ok = false; }
-    if (!formData.registrationNumber.trim()) { next.registrationNumber = 'Registration number is required'; ok = false; }
+    if (formData.businessType !== 'SOLE_PROPRIETORSHIP' && !formData.registrationNumber.trim()) { next.registrationNumber = 'Registration number is required'; ok = false; }
     setErrors(next);
     return ok;
   };
