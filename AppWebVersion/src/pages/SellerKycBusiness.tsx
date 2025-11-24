@@ -42,12 +42,20 @@ export function SellerKycBusiness() {
     }
   }, [existingData]);
 
+  const isSoleProprietorship = () => {
+    const normalized = (formData.businessType || '')
+      .toString()
+      .replace(/[\s_-]/g, '')
+      .toLowerCase();
+    return normalized === 'soleproprietorship';
+  };
+
   const validate = () => {
     const next = { businessName: '', businessType: '', registrationNumber: '' };
     let ok = true;
     if (!formData.businessName.trim()) { next.businessName = 'Business name is required'; ok = false; }
     if (!formData.businessType) { next.businessType = 'Business type is required'; ok = false; }
-    if (formData.businessType !== 'SOLE_PROPRIETORSHIP' && !formData.registrationNumber.trim()) { next.registrationNumber = 'Registration number is required'; ok = false; }
+    if (!isSoleProprietorship() && !formData.registrationNumber.trim()) { next.registrationNumber = 'Registration number is required'; ok = false; }
     setErrors(next);
     return ok;
   };
@@ -93,7 +101,14 @@ export function SellerKycBusiness() {
               <select
                 className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 ${errors.businessType ? 'border-red-300' : 'border-gray-300'}`}
                 value={formData.businessType}
-                onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFormData({ ...formData, businessType: value });
+                  const normalized = value.replace(/[\s_-]/g, '').toLowerCase();
+                  if (normalized === 'soleproprietorship' && errors.registrationNumber) {
+                    setErrors({ ...errors, registrationNumber: '' });
+                  }
+                }}
               >
                 <option value="">Select type</option>
                 <option value="SOLE_PROPRIETORSHIP">Sole Proprietorship</option>
@@ -105,7 +120,9 @@ export function SellerKycBusiness() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Registration Number</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {isSoleProprietorship() ? 'Registration Number (Optional for Sole Proprietorship)' : 'Registration Number'}
+              </label>
               <input
                 className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 ${errors.registrationNumber ? 'border-red-300' : 'border-gray-300'}`}
                 value={formData.registrationNumber}

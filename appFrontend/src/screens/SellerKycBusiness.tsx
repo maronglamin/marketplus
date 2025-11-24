@@ -56,6 +56,14 @@ export function SellerKycBusiness() {
     }
   }, [existingData]);
 
+  const isSoleProprietorship = () => {
+    const normalized = (formData.businessType || '')
+      .toString()
+      .replace(/[\s_-]/g, '')
+      .toLowerCase();
+    return normalized === 'soleproprietorship';
+  };
+
   const validateForm = () => {
     const newErrors = {
       businessName: '',
@@ -74,7 +82,7 @@ export function SellerKycBusiness() {
       isValid = false;
     }
 
-    if (formData.businessType !== 'SOLE_PROPRIETORSHIP' && !formData.registrationNumber.trim()) {
+    if (!isSoleProprietorship() && !formData.registrationNumber.trim()) {
       newErrors.registrationNumber = 'Registration number is required';
       isValid = false;
     }
@@ -173,6 +181,11 @@ export function SellerKycBusiness() {
                   onValueChange={(value: string | string[]) => {
                     if (typeof value === 'string') {
                       setFormData({ ...formData, businessType: value });
+                      // Clear registrationNumber error if not required for Sole Proprietorship
+                      const normalized = value.replace(/[\s_-]/g, '').toLowerCase();
+                      if (normalized === 'soleproprietorship' && errors.registrationNumber) {
+                        setErrors({ ...errors, registrationNumber: '' });
+                      }
                       if (errors.businessType) {
                         setErrors({ ...errors, businessType: '' });
                       }
@@ -187,7 +200,7 @@ export function SellerKycBusiness() {
                   error={errors.businessType}
                 />
                 <Input
-                  label="Registration Number"
+                  label={isSoleProprietorship() ? 'Registration Number (Optional for Sole Proprietorship)' : 'Registration Number'}
                   value={formData.registrationNumber}
                   onChangeText={(text: string) => {
                     setFormData({ ...formData, registrationNumber: text });
