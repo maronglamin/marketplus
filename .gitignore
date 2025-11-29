@@ -1,3 +1,6 @@
 node_modules
 node_modules
 appBackend/uploads/
+.env
+.env.*
+!**/.env.example
