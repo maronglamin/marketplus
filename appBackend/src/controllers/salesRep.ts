@@ -393,6 +393,17 @@ export const createSalesRep = async (req: AuthenticatedRequest, res: Response) =
         })
       }
 
+      // Check if this user is already a parent seller (has Seller KYC)
+      const existingSellerKyc = await prisma.sellerKyc.findUnique({
+        where: { userId: existingUser.id }
+      })
+
+      if (existingSellerKyc) {
+        return res.status(400).json({
+          error: 'User already has Seller KYC and cannot be added as a sales representative'
+        })
+      }
+
       userId = existingUser.id
     } else {
       // Hash the PIN before storing

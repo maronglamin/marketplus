@@ -79,6 +79,7 @@ model User {
   lastName                     String
   phoneNumber                  String                 @unique
   pin                          String
+  status                       AccountStatus          @default(ACTIVE)
   createdAt                    DateTime               @default(now())
   updatedAt                    DateTime               @updatedAt
   deliveryAddresses            DeliveryAddress[]
@@ -107,6 +108,7 @@ model User {
   branches                     Branch[]               @relation("ParentSellerBranches")
 
   @@index([phoneNumber])
+  @@index([status])
   @@index([createdAt])
   @@index([updatedAt])
 }
@@ -514,6 +516,8 @@ model Settlement {
   channel             SettlementChannel @default(ECOMMERCE)
   includedRideIds     Json?
   totalRidesCount     Int               @default(0)
+  includedRentalIds   Json?
+  totalRentalsCount   Int               @default(0)
   bankAccount         BankAccount?      @relation(fields: [bankAccountId], references: [id])
   user                User              @relation(fields: [userId], references: [id])
   wallet              Wallet?           @relation(fields: [walletId], references: [id])

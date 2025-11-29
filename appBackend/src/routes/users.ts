@@ -28,6 +28,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
         middleName: true,
         lastName: true,
         phoneNumber: true,
+        status: true,
         createdAt: true,
         updatedAt: true
       }

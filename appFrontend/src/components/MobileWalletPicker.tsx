@@ -15,9 +15,10 @@ interface MobileWalletPickerProps {
   onChange: (providerId: string, providerName?: string) => void;
   style?: ViewStyle;
   label?: string;
+  renderIconForProvider?: (provider: ProviderItem, isSelected: boolean) => React.ReactNode;
 }
 
-export const MobileWalletPicker: React.FC<MobileWalletPickerProps> = ({ value, onChange, style, label }) => {
+export const MobileWalletPicker: React.FC<MobileWalletPickerProps> = ({ value, onChange, style, label, renderIconForProvider }) => {
   const [search, setSearch] = useState('');
   const [providers, setProviders] = useState<ProviderItem[]>([]);
 
@@ -73,11 +74,15 @@ export const MobileWalletPicker: React.FC<MobileWalletPickerProps> = ({ value, o
               onPress={() => onChange(provider.id, provider.name)}
             >
               <View style={styles.providerContent}>
-                <Ionicons 
-                  name="phone-portrait-outline" 
-                  size={16} 
-                  color={value === provider.id ? '#FFFFFF' : '#6B7280'} 
-                />
+                {renderIconForProvider ? (
+                  renderIconForProvider(provider, value === provider.id)
+                ) : (
+                  <Ionicons 
+                    name="phone-portrait-outline" 
+                    size={16} 
+                    color={value === provider.id ? '#FFFFFF' : '#6B7280'} 
+                  />
+                )}
                 <Text style={[styles.providerOptionText, value === provider.id && styles.providerOptionTextSelected]}>
                   {provider.name}
                 </Text>

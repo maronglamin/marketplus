@@ -262,10 +262,8 @@ export function Login() {
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      Alert.alert(
-        'Login Failed',
-        error.message || 'Please try again'
-      );
+      const title = /blocked|unauthorized/i.test(error?.message || '') ? 'Unauthorized' : 'Login Failed';
+      Alert.alert(title, error?.message || 'Please try again');
     } finally {
       setLoading(false);
     }

@@ -11,6 +11,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   ScrollView,
+  Keyboard,
   Vibration,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -135,6 +136,9 @@ export function ProductPricing({ onNext, initialPrice, initialCurrency, initialQ
                 keyboardType="decimal-pad"
                 placeholder="e.g., 29.99"
                 placeholderTextColor="#9CA3AF"
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={() => Keyboard.dismiss()}
               />
             </View>
 
@@ -167,6 +171,9 @@ export function ProductPricing({ onNext, initialPrice, initialCurrency, initialQ
                 keyboardType="number-pad"
                 placeholder="e.g., 10"
                 placeholderTextColor="#9CA3AF"
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={() => Keyboard.dismiss()}
               />
             </View>
 

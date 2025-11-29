@@ -315,8 +315,8 @@ export class YonnaForexWebhookController {
           if (ext?.orderId) {
             // Map to orders
             const orderStatusMap: { [key: string]: string } = {
-              'success': 'COMPLETED',
-              'completed': 'COMPLETED',
+              'success': 'CONFIRMED',
+              'completed': 'CONFIRMED',
               'failed': 'CANCELLED',
               'cancelled': 'CANCELLED',
               'pending': 'PENDING'
@@ -383,8 +383,8 @@ export class YonnaForexWebhookController {
       } else {
         // Update order status
         const orderStatusMap: { [key: string]: string } = {
-          'success': 'COMPLETED',
-          'completed': 'COMPLETED',
+          'success': 'CONFIRMED',
+          'completed': 'CONFIRMED',
           'failed': 'CANCELLED',
           'cancelled': 'CANCELLED',
           'pending': 'PENDING'

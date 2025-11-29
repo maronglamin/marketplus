@@ -35,6 +35,8 @@ import type { AppStackParamList } from '../navigation/AppNavigator';
 import YonnaPaymentModal from '../components/YonnaPaymentModal';
 import { YonnaForexPaymentService } from '../services/YonnaForexPaymentService';
 import WavePaymentService from '../services/WavePaymentService';
+import waveImg from '../../assets/wave.jpg';
+import YonnaWalletIcon from '../../assets/yonna_wallet.svg';
 
 // Use centralized API_URL from env
 const { height: screenHeight } = Dimensions.get('window');
@@ -1389,6 +1391,30 @@ export function OrderDetails() {
     }
   };
 
+  const renderPaymentMethodIcon = (method: any) => {
+    const type = (method?.type || '').toString();
+    if (type === 'MOBILE_MONEY') {
+      const providerName = (method?.provider || method?.metadata?.providerName || '').toString().toLowerCase();
+      if (providerName.includes('wave')) {
+        return <Image source={waveImg} style={{ width: 32, height: 32, borderRadius: 6 }} />;
+      }
+      if (providerName.includes('yonna') || providerName.includes('aps')) {
+        return <YonnaWalletIcon width={32} height={32} fill="#10B981" color="#10B981" stroke="#10B981" />;
+      }
+      return <Ionicons name="phone-portrait-outline" size={24} color="#2563EB" />;
+    }
+    if (type === 'CREDIT_CARD' || type === 'DEBIT_CARD') {
+      return <Ionicons name="card-outline" size={24} color="#2563EB" />;
+    }
+    if (type === 'BANK_TRANSFER') {
+      return <Ionicons name="business-outline" size={24} color="#2563EB" />;
+    }
+    if (type === 'CRYPTO') {
+      return <Ionicons name="logo-bitcoin" size={24} color="#2563EB" />;
+    }
+    return <Ionicons name="wallet-outline" size={24} color="#2563EB" />;
+  };
+
   const formatPrice = (price: number, currencyCode: string) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -2724,14 +2750,7 @@ export function OrderDetails() {
                     onPress={() => handlePaymentMethodSelect(method.id)}
                   >
                     <View style={styles.paymentMethodItemIcon}>
-                      <Ionicons 
-                        name={method.type === 'CREDIT_CARD' ? 'card-outline' : 
-                             method.type === 'MOBILE_MONEY' ? 'phone-portrait-outline' :
-                             method.type === 'BANK_TRANSFER' ? 'business-outline' :
-                             method.type === 'CRYPTO' ? 'logo-bitcoin' : 'wallet-outline'} 
-                        size={24} 
-                        color="#2563EB" 
-                      />
+                      {renderPaymentMethodIcon(method)}
                     </View>
                     <View style={styles.paymentMethodItemDetails}>
                       <View style={styles.paymentMethodItemHeader}>

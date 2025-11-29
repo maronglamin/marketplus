@@ -27,6 +27,9 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react-native';
+import { Image } from 'react-native';
+import waveImg from '../../../assets/wave.jpg';
+import YonnaWalletIcon from '../../../assets/yonna_wallet.svg';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../api/api';
 import { MobileWalletPicker } from '../../components/MobileWalletPicker';
@@ -413,13 +416,22 @@ export function PaymentMethods() {
     }
   };
 
-  const getPaymentMethodIcon = (type: string) => {
+  const getPaymentMethodIcon = (type: string, provider?: string) => {
     switch (type) {
       case 'CREDIT_CARD':
       case 'DEBIT_CARD':
         return <CreditCard size={24} color="#2563EB" />;
-      case 'MOBILE_MONEY':
+      case 'MOBILE_MONEY': {
+        const providerLower = (provider || '').toLowerCase();
+        if (providerLower.includes('wave')) {
+          return <Image source={waveImg} style={{ width: 28, height: 28, borderRadius: 4 }} />;
+        }
+        // Yonna wallet may appear as "Yonna" or "APS Wallet"
+        if (providerLower.includes('yonna') || providerLower.includes('aps')) {
+          return <YonnaWalletIcon width={28} height={28} fill="#10B981" color="#10B981" stroke="#10B981" />;
+        }
         return <Smartphone size={24} color="#10B981" />;
+      }
       case 'BANK_TRANSFER':
         return <Wallet size={24} color="#7C3AED" />;
       case 'CRYPTO':
@@ -454,7 +466,7 @@ export function PaymentMethods() {
       <View style={styles.paymentMethodHeader}>
         <View style={styles.paymentMethodInfo}>
           <View style={styles.paymentMethodIcon}>
-            {getPaymentMethodIcon(method.type)}
+            {getPaymentMethodIcon(method.type, method.provider)}
           </View>
           <View style={styles.paymentMethodDetails}>
             <Text style={styles.paymentMethodName}>
@@ -670,6 +682,7 @@ export function PaymentMethods() {
                          || '';
                        setFormData(prev => ({ ...prev, provider: resolvedName || providerId }));
                      }}
+                     renderIconForProvider={(provider) => getPaymentMethodIcon('MOBILE_MONEY', provider.name || provider.code)}
                    />
                   </View>
 
@@ -1009,6 +1022,24 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#F3F4F6',
     gap: 24,
+  },
+  providerPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  providerPreviewIcon: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  providerPreviewText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+    flexShrink: 1,
   },
   cancelButton: {
     flex: 1,

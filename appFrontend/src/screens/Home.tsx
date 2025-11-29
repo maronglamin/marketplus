@@ -94,6 +94,20 @@ export function Home() {
       const userData = await userService.getBasicUserInfo();
       console.log('✅ Fresh user data loaded:', userData);
       setFreshUserData(userData);
+      // Enforce logout if user is blocked
+      if (userData?.status && userData.status.toString().toUpperCase() === 'BLOCKED') {
+        Alert.alert('Unauthorized', 'Your account is blocked. You have been logged out.');
+        try {
+          await logout();
+        } catch (e) {
+          // ignore logout errors; proceed with navigation reset
+        }
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Login' as any }],
+        });
+        return;
+      }
     } catch (error) {
       console.error('❌ Error loading fresh user data:', error);
       setFreshUserData(null);
@@ -553,7 +567,7 @@ export function Home() {
           // Show contact support alert
           Alert.alert(
             'Contact Support',
-            'Please contact our support team to resolve your account suspension.\n\nEmail: contact@cloudnexus.biz\nPhone: +220 3547128',
+            'Please contact our support team to resolve your account suspension.\n\nEmail: contact@cloudnexus.biz\nPhone: +220 673 8885',
             [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Copy Email', onPress: () => console.log('Copy email to clipboard') }

@@ -9,8 +9,15 @@ const config = getDefaultConfig(__dirname, {
 });
 
 // Add any custom configuration here
-config.resolver.sourceExts = ['jsx', 'js', 'ts', 'tsx', 'json'];
-config.resolver.assetExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'ttf', 'otf'];
+// Enable SVG support via react-native-svg-transformer
+const currentAssetExts = config.resolver.assetExts || [];
+const currentSourceExts = config.resolver.sourceExts || [];
+config.transformer = {
+  ...config.transformer,
+  babelTransformerPath: require.resolve('react-native-svg-transformer'),
+};
+config.resolver.assetExts = currentAssetExts.filter((ext) => ext !== 'svg');
+config.resolver.sourceExts = Array.from(new Set([...currentSourceExts, 'svg']));
 
 // Enable Hermes
 config.transformer.minifierConfig = {

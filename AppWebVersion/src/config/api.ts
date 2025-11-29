@@ -10,7 +10,7 @@ console.log('API Base URL:', API_CONFIG.BASE_URL);
 export const getApiUrl = (): string => API_CONFIG.BASE_URL;
 
 // Images are served directly by the backend host (not under /api)
-const IMAGE_HOST = process.env.REACT_APP_IMAGE_HOST || 'http://snap.cloudnexus.biz';
+const IMAGE_HOST = process.env.REACT_APP_IMAGE_HOST || 'http://172.20.10.3';
 
 export const getImageUrl = (imagePath: string | null | undefined): string => {
   if (!imagePath) return 'https://via.placeholder.com/300x300?text=No+Image';

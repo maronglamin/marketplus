@@ -10,6 +10,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   ScrollView,
+  Keyboard,
   Vibration,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -106,6 +107,9 @@ export function ProductDescription({ onNext, initialDescription }: ProductDescri
               multiline
               maxLength={1000}
               textAlignVertical="top"
+              returnKeyType="done"
+              blurOnSubmit
+              onSubmitEditing={() => Keyboard.dismiss()}
             />
             <Text style={styles.characterCount}>
               {description.length}/1000 characters

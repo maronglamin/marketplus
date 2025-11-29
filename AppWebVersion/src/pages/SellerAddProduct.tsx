@@ -82,6 +82,15 @@ export function SellerAddProduct() {
     !!categoryId &&
     images.length > 0;
 
+  // On Android, the soft keyboard "Next" key can cause focus jumps and scroll bouncing.
+  // We intercept Enter/Next and blur the input so users press "Done" to proceed.
+  const handleEnterOrNextKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
   const submit = async () => {
     if (!canSubmit || submitting) return;
     try {
@@ -152,6 +161,8 @@ export function SellerAddProduct() {
                 placeholder="Enter product name"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
+                enterKeyHint="done"
+                onKeyDown={handleEnterOrNextKey}
               />
 
               <div className="mt-4">
@@ -177,6 +188,8 @@ export function SellerAddProduct() {
                     placeholder="0.00"
                     value={price}
                     onChange={e => setPrice(Number(e.target.value))}
+                    enterKeyHint="done"
+                    onKeyDown={handleEnterOrNextKey}
                   />
                 </div>
                 <div>
@@ -187,6 +200,8 @@ export function SellerAddProduct() {
                       placeholder="Search currency code (e.g., USD)"
                       value={currencyQuery}
                       onChange={e => setCurrencyQuery(e.target.value)}
+                      enterKeyHint="done"
+                      onKeyDown={handleEnterOrNextKey}
                     />
                     <select
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
@@ -211,6 +226,8 @@ export function SellerAddProduct() {
                     placeholder="0"
                     value={quantity}
                     onChange={e => setQuantity(Number(e.target.value))}
+                    enterKeyHint="done"
+                    onKeyDown={handleEnterOrNextKey}
                   />
                 </div>
                 <div>

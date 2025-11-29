@@ -29,7 +29,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSLocationAlwaysAndWhenInUseUsageDescription: 'This app needs access to your location to show your current position on the map and provide ride services.',
       NSAppTransportSecurity: {
         NSExceptionDomains: {
-          'snap.cloudnexus.biz': {
+          '172.20.10.3': {
             NSTemporaryExceptionAllowsInsecureHTTPLoads: true,
             NSIncludesSubdomains: true,
           },
@@ -58,7 +58,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png'
   },
   extra: {
-    localIp: process.env.LOCAL_IP || 'snap.cloudnexus.biz',
+    localIp: process.env.LOCAL_IP || '172.20.10.3',
     stripePublishableKey: 'pk_test_51G7XqgIFQtDBTvihaeU6FZCsQuHg1NQIkdd8CTGL0ZulPMIjQZUmFSW80gOzDpGe5UezYoqkc55WmQhpyYtZdLmk00QmAVRon0',
     googlePlacesApiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo',
     eas: {

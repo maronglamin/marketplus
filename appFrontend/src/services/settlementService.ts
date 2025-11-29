@@ -45,8 +45,10 @@ export interface SettlementRequest {
   wallet?: Wallet;
   includedOrderIds?: string[];
   includedRideIds?: string[];
+  includedRentalIds?: string[];
   totalOrdersCount?: number;
   totalRidesCount?: number;
+  totalRentalsCount?: number;
   serviceFeesDeducted?: number;
   netAmountBeforeFees?: number;
   metadata?: any;
@@ -141,6 +143,10 @@ export interface SettlementRequestData {
   channel?: 'ECOMMERCE' | 'RIDES' | 'RENTALS';
   bankAccountId?: string;
   walletId?: string;
+  includedRideIds?: string[];
+  totalRidesCount?: number;
+  includedRentalIds?: string[];
+  totalRentalsCount?: number;
 }
 
 class SettlementService {

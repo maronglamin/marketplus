@@ -8,6 +8,8 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -15,6 +17,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { settlementService, type BankAccount, type Wallet, type AvailableRentalEarnings } from '../../services/settlementService';
+import { useAuth } from '../../contexts/AuthContext';
 
 type RentalSettlementRequestNavigationProp = NativeStackNavigationProp<AppStackParamList, 'RentalSettlementRequest'>;
 
@@ -34,6 +37,7 @@ interface AvailableRentalEarning {
 export function RentalSettlementRequest() {
   const navigation = useNavigation<RentalSettlementRequestNavigationProp>();
   const route = useRoute<any>();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -45,6 +49,28 @@ export function RentalSettlementRequest() {
   const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
   const [selectedWallet, setSelectedWallet] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  // Add payout method modal/form state
+  const [addMethodModalVisible, setAddMethodModalVisible] = useState(false);
+  const [selectedMethodType, setSelectedMethodType] = useState<'BANK' | 'WALLET' | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [bankForm, setBankForm] = useState({
+    accountName: '',
+    accountNumber: '',
+    bankName: '',
+    bankCode: '',
+    branchCode: '',
+    swiftCode: '',
+    iban: '',
+    currency: '',
+    isDefault: false,
+  });
+  const [walletForm, setWalletForm] = useState({
+    walletType: 'MOBILE_MONEY' as 'CRYPTO' | 'MOBILE_MONEY' | 'DIGITAL_WALLET',
+    walletAddress: '',
+    account: user?.phoneNumber || '',
+    currency: '',
+    isDefault: false,
+  });
 
   useEffect(() => {
     loadData();
@@ -69,6 +95,9 @@ export function RentalSettlementRequest() {
         const preferred = route?.params?.defaultCurrency as string | undefined;
         const found = preferred ? earningsData.find(e => e.currency === preferred) : null;
         setSelectedCurrency((found || earningsData[0]).currency);
+        const currencyToUse = (found || earningsData[0]).currency;
+        setBankForm(prev => ({ ...prev, currency: currencyToUse }));
+        setWalletForm(prev => ({ ...prev, currency: currencyToUse }));
       }
     } catch (e) {
       console.error('Error loading rental settlement data:', e);
@@ -86,6 +115,72 @@ export function RentalSettlementRequest() {
     setSelectedPaymentMethod(method);
     setSelectedBankAccount('');
     setSelectedWallet('');
+  };
+
+  const handleAddPayoutMethod = () => {
+    setAddMethodModalVisible(true);
+    setSelectedMethodType(null);
+    setShowForm(false);
+    setBankForm({
+      accountName: '',
+      accountNumber: '',
+      bankName: '',
+      bankCode: '',
+      branchCode: '',
+      swiftCode: '',
+      iban: '',
+      currency: selectedCurrency || '',
+      isDefault: false,
+    });
+    setWalletForm({
+      walletType: 'MOBILE_MONEY',
+      walletAddress: '',
+      account: user?.phoneNumber || '',
+      currency: selectedCurrency || '',
+      isDefault: false,
+    });
+  };
+
+  const handleMethodTypeSelect = (type: 'BANK' | 'WALLET') => {
+    setSelectedMethodType(type);
+    setShowForm(true);
+  };
+
+  const handleBankFormChange = (field: string, value: string | boolean) => {
+    setBankForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleWalletFormChange = (field: string, value: string | boolean) => {
+    setWalletForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddMethod = async () => {
+    if (!selectedMethodType) {
+      Alert.alert('Error', 'Please select a method type');
+      return;
+    }
+    try {
+      if (selectedMethodType === 'BANK') {
+        if (!bankForm.accountName || !bankForm.accountNumber || !bankForm.bankName || !bankForm.currency) {
+          Alert.alert('Error', 'Please fill in all required fields for Bank Account');
+          return;
+        }
+        await settlementService.addBankAccount(bankForm);
+        Alert.alert('Success', 'Bank account added successfully');
+      } else {
+        if (!walletForm.walletAddress || !walletForm.currency) {
+          Alert.alert('Error', 'Please fill in all required fields');
+          return;
+        }
+        await settlementService.addWallet(walletForm);
+        Alert.alert('Success', 'Wallet added successfully');
+      }
+      setAddMethodModalVisible(false);
+      await loadData();
+    } catch (err: any) {
+      console.error('Error adding payment method:', err);
+      Alert.alert('Error', err.message || 'Failed to add payment method');
+    }
   };
 
   const handleSubmitSettlement = async () => {
@@ -109,9 +204,7 @@ export function RentalSettlementRequest() {
 
     try {
       setSubmitting(true);
-      // Submit settlement request.
-      // Note: Backend currently supports channels 'ECOMMERCE' and 'RIDES'.
-      // Rentals are driver-based, so we align with 'RIDES' channel semantics.
+      // Submit settlement request for rentals using rental-specific columns
       await settlementService.createSettlementRequest({
         amount: earnings.amount,
         currency: selectedCurrency,
@@ -119,6 +212,13 @@ export function RentalSettlementRequest() {
         channel: 'RENTALS',
         bankAccountId: selectedPaymentMethod === 'BANK_TRANSFER' ? selectedBankAccount : undefined,
         walletId: selectedPaymentMethod === 'WALLET_TRANSFER' ? selectedWallet : undefined,
+        // Store request IDs in rental-specific columns
+        includedRentalIds: (earnings.rentals || [])
+          .map(r => r.requestId || r.id || '')
+          .filter((id) => !!id),
+        totalRentalsCount: ((earnings.rentals || [])
+          .map(r => r.requestId || r.id || '')
+          .filter((id) => !!id)).length,
       });
 
       Alert.alert(
@@ -258,7 +358,13 @@ export function RentalSettlementRequest() {
           {/* Payment Method Section */}
           {selectedEarnings && selectedEarnings.amount > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Payment Method</Text>
+              <View style={styles.paymentHeader}>
+                <Text style={styles.sectionTitle}>Payment Method</Text>
+                <TouchableOpacity style={styles.addMoreButton} onPress={handleAddPayoutMethod}>
+                  <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
+                  <Text style={styles.addMoreButtonText}>Add More</Text>
+                </TouchableOpacity>
+              </View>
               {hasAnyPaymentMethod ? (
                 <>
                   {hasBankAccounts && (
@@ -354,6 +460,10 @@ export function RentalSettlementRequest() {
                   <Ionicons name="card-outline" size={48} color="#9CA3AF" />
                   <Text style={styles.emptyStateText}>No payment methods available</Text>
                   <Text style={styles.emptyStateSubtext}>Please add a bank account or wallet to request settlements</Text>
+                  <TouchableOpacity style={styles.addPayoutMethodButton} onPress={handleAddPayoutMethod}>
+                    <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.addPayoutMethodButtonText}>Add Payout Method</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
@@ -382,6 +492,178 @@ export function RentalSettlementRequest() {
           )}
         </ScrollView>
       </View>
+      {/* Add Payout Method Modal */}
+      <Modal
+        visible={addMethodModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAddMethodModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setAddMethodModalVisible(false)} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color="#000" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>
+              {showForm ? (selectedMethodType === 'BANK' ? 'Add Bank Account' : 'Add Wallet') : 'Add Payout Method'}
+            </Text>
+            {showForm ? (
+              <TouchableOpacity onPress={() => setShowForm(false)} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color="#2563EB" />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 24 }} />
+            )}
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {!showForm ? (
+              <>
+                <Text style={styles.modalSubtitle}>Choose how you'd like to receive your settlements</Text>
+                <View style={styles.methodTypeSection}>
+                  <TouchableOpacity
+                    style={[styles.methodTypeCard, selectedMethodType === 'BANK' && styles.selectedMethodTypeCard]}
+                    onPress={() => handleMethodTypeSelect('BANK')}
+                  >
+                    <View style={styles.methodTypeHeader}>
+                      <Ionicons name="card-outline" size={32} color="#2563EB" />
+                      <View style={styles.methodTypeInfo}>
+                        <Text style={styles.methodTypeTitle}>Bank Account</Text>
+                        <Text style={styles.methodTypeDescription}>Receive settlements directly to your bank account</Text>
+                      </View>
+                      <Ionicons
+                        name={selectedMethodType === 'BANK' ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={24}
+                        color={selectedMethodType === 'BANK' ? '#2563EB' : '#9CA3AF'}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.methodTypeCard, selectedMethodType === 'WALLET' && styles.selectedMethodTypeCard]}
+                    onPress={() => handleMethodTypeSelect('WALLET')}
+                  >
+                    <View style={styles.methodTypeHeader}>
+                      <Ionicons name="wallet-outline" size={32} color="#8B5CF6" />
+                      <View style={styles.methodTypeInfo}>
+                        <Text style={styles.methodTypeTitle}>Digital Wallet</Text>
+                        <Text style={styles.methodTypeDescription}>Receive settlements to your digital wallet</Text>
+                      </View>
+                      <Ionicons
+                        name={selectedMethodType === 'WALLET' ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={24}
+                        color={selectedMethodType === 'WALLET' ? '#8B5CF6' : '#9CA3AF'}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                {selectedMethodType === 'BANK' && (
+                  <View style={styles.formSection}>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Account Name *</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        value={bankForm.accountName}
+                        onChangeText={(v) => handleBankFormChange('accountName', v)}
+                        placeholder="Enter account holder name"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Account Number *</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        value={bankForm.accountNumber}
+                        onChangeText={(v) => handleBankFormChange('accountNumber', v)}
+                        placeholder="Enter account number"
+                        keyboardType="numeric"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Bank Name *</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        value={bankForm.bankName}
+                        onChangeText={(v) => handleBankFormChange('bankName', v)}
+                        placeholder="Enter bank name"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Bank Code</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        value={bankForm.bankCode}
+                        onChangeText={(v) => handleBankFormChange('bankCode', v)}
+                        placeholder="Enter bank code (optional)"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Currency *</Text>
+                      <TextInput style={[styles.textInput, styles.disabledInput]} value={bankForm.currency} editable={false} />
+                      <Text style={styles.inputNote}>Currency will match selected earnings ({selectedCurrency})</Text>
+                    </View>
+                  </View>
+                )}
+                {selectedMethodType === 'WALLET' && (
+                  <View style={styles.formSection}>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Wallet Type *</Text>
+                      <View style={styles.pickerContainer}>
+                        {(['MOBILE_MONEY', 'DIGITAL_WALLET'] as const).map((type) => (
+                          <TouchableOpacity
+                            key={type}
+                            style={[styles.pickerOption, walletForm.walletType === type && styles.pickerOptionSelected]}
+                            onPress={() => handleWalletFormChange('walletType', type)}
+                          >
+                            <Text
+                              style={[styles.pickerOptionText, walletForm.walletType === type && styles.pickerOptionTextSelected]}
+                            >
+                              {type.replace('_', ' ')}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Wallet Number (Phone) *</Text>
+                      <TextInput
+                        style={[styles.textInput, styles.disabledInput]}
+                        value={walletForm.account}
+                        editable={false}
+                        placeholder="Your phone number"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Wallet Provider Name *</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        value={walletForm.walletAddress}
+                        onChangeText={(v) => handleWalletFormChange('walletAddress', v)}
+                        placeholder="Enter wallet provider name"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.inputLabel}>Currency *</Text>
+                      <TextInput style={[styles.textInput, styles.disabledInput]} value={walletForm.currency} editable={false} />
+                      <Text style={styles.inputNote}>Currency will match selected earnings ({selectedCurrency})</Text>
+                    </View>
+                  </View>
+                )}
+                <TouchableOpacity style={styles.addMethodButton} onPress={handleAddMethod}>
+                  <Text style={styles.addMethodButtonText}>Add {selectedMethodType === 'BANK' ? 'Account' : 'Wallet'}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -541,6 +823,179 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginLeft: 36,
+  },
+  paymentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  addMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addMoreButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563EB',
+    marginLeft: 8,
+  },
+  addPayoutMethodButton: {
+    marginTop: 16,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  addPayoutMethodButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalContent: {
+    padding: 16,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#4B5563',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  methodTypeSection: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  methodTypeCard: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  selectedMethodTypeCard: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+  },
+  methodTypeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  methodTypeInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  methodTypeTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  methodTypeDescription: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  formSection: {
+    marginTop: 16,
+  },
+  inputGroup: {
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+  },
+  disabledInput: {
+    backgroundColor: '#F3F4F6',
+    color: '#9CA3AF',
+  },
+  inputNote: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  pickerContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  pickerOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  pickerOptionSelected: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+  },
+  pickerOptionText: {
+    fontSize: 14,
+    color: '#4B5563',
+  },
+  pickerOptionTextSelected: {
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+  addMethodButton: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  addMethodButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   selectionSection: {
     marginTop: 16,

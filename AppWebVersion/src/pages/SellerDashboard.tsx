@@ -344,6 +344,37 @@ export function SellerDashboard() {
     );
   }
 
+  // If suspended
+  if (kyc.status === 'SUSPENDED') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-2xl mx-auto px-4 py-10">
+          <div className="bg-white rounded-xl shadow-sm p-8 border border-red-100">
+            <div className="flex items-start">
+              <div className="p-3 bg-red-50 rounded-lg mr-3">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-gray-900">Account Suspended</h2>
+                <p className="text-gray-700 mt-2">
+                  Your seller account has been suspended. Please contact support for more information.
+                </p>
+                <div className="mt-6 flex gap-3">
+                  <a href="mailto:customercare@cloudnexus.biz" className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    Contact Support
+                  </a>
+                  <Link to="/home" className="px-5 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                    Go Home
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // If rejected
   if (kyc.status === 'REJECTED') {
     return (

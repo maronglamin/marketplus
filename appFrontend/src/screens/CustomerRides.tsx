@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Image,
   Modal,
   StatusBar,
   Platform,
@@ -34,6 +35,8 @@ import YonnaPaymentModal from '../components/YonnaPaymentModal';
 import { YonnaForexPaymentService } from '../services/YonnaForexPaymentService';
 import { TokenNotificationCard } from '../components/TokenNotificationCard';
 import { useTokenNotification } from '../contexts/TokenNotificationContext';
+import waveImg from '../../assets/wave.jpg';
+import YonnaWalletIcon from '../../assets/yonna_wallet.svg';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -450,6 +453,30 @@ export function CustomerRides() {
       case 'CRYPTO': return 'Cryptocurrency';
       default: return method.provider || 'Payment Method';
     }
+  };
+
+  const renderPaymentMethodIcon = (method: any) => {
+    const type = (method?.type || '').toString();
+    if (type === 'MOBILE_MONEY') {
+      const providerName = (method?.provider || method?.metadata?.providerName || '').toString().toLowerCase();
+      if (providerName.includes('wave')) {
+        return <Image source={waveImg} style={{ width: 28, height: 28, borderRadius: 4 }} />;
+      }
+      if (providerName.includes('yonna') || providerName.includes('aps')) {
+        return <YonnaWalletIcon width={28} height={28} fill="#10B981" color="#10B981" stroke="#10B981" />;
+      }
+      return <Ionicons name="phone-portrait-outline" size={24} color="#2563EB" />;
+    }
+    if (type === 'CREDIT_CARD' || type === 'DEBIT_CARD') {
+      return <Ionicons name="card-outline" size={24} color="#2563EB" />;
+    }
+    if (type === 'BANK_TRANSFER') {
+      return <Ionicons name="business-outline" size={24} color="#2563EB" />;
+    }
+    if (type === 'CRYPTO') {
+      return <Ionicons name="logo-bitcoin" size={24} color="#2563EB" />;
+    }
+    return <Ionicons name="wallet-outline" size={24} color="#2563EB" />;
   };
 
   const handleProceedToPayment = async () => {
@@ -1258,14 +1285,7 @@ export function CustomerRides() {
                         onPress={() => handlePaymentMethodSelect(method.id)}
                       >
                         <View style={styles.paymentMethodItemIcon}>
-                          <Ionicons 
-                            name={method.type === 'CREDIT_CARD' ? 'card-outline' : 
-                                 method.type === 'MOBILE_MONEY' ? 'phone-portrait-outline' :
-                                 method.type === 'BANK_TRANSFER' ? 'business-outline' :
-                                 method.type === 'CRYPTO' ? 'logo-bitcoin' : 'wallet-outline'} 
-                            size={24} 
-                            color="#2563EB" 
-                          />
+                          {renderPaymentMethodIcon(method)}
                         </View>
                         <View style={styles.paymentMethodItemDetails}>
                           <View style={styles.paymentMethodItemHeader}>
@@ -1306,6 +1326,19 @@ export function CustomerRides() {
                   <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
                   <Text style={styles.proceedToCheckoutButtonText}>
                     Process Payment
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.addMorePaymentButton}
+                  onPress={() => {
+                    setShowPaymentModal(false);
+                    navigation.navigate('PaymentMethods');
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  }}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.addMorePaymentButtonText}>
+                    Add More Payment Methods
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -2176,6 +2209,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#9CA3AF',
     shadowOpacity: 0,
     elevation: 0,
+  },
+  addMorePaymentButton: {
+    marginTop: 12,
+    backgroundColor: '#2563EB',
+    paddingVertical: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  addMorePaymentButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   // Rating Modal Styles
   ratingSection: {

@@ -443,6 +443,60 @@ export function SellerDashboard() {
     )
   }
 
+  // Then check for suspended status
+  if (((kycStatus?.status || '') as string).toString().toUpperCase() === 'SUSPENDED') {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor="#FFFFFF"
+          translucent={false}
+        />
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color="#111827" />
+            </TouchableOpacity>
+            <Text style={styles.title}>Seller Verification</Text>
+            <View style={styles.placeholder} />
+          </View>
+          <ScrollView style={styles.content}>
+            <View style={styles.kycContainer}>
+              <View style={[styles.kycIconContainer, styles.rejectedIcon]}>
+                <Ionicons name="warning-outline" size={64} color="#DC2626" />
+              </View>
+              <Text style={styles.kycTitle}>Account Suspended</Text>
+              <Text style={styles.kycDescription}>
+                Your seller account has been suspended. Please contact support for more information.
+              </Text>
+              <View style={styles.infoBox}>
+                <Ionicons name="information-circle-outline" size={24} color="#2563EB" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.infoText}>
+                    You cannot submit a new verification while your account is suspended. Contact support for assistance.
+                  </Text>
+                  <Text style={[styles.infoText, { marginTop: 8, color: '#0F172A', fontWeight: '600' }]}>
+                    Contact Support:
+                  </Text>
+                  <Text style={[styles.infoText, { color: '#334155' }]}>
+                    Email: customercare@cloudnexus.biz
+                  </Text>
+                  <Text style={[styles.infoText, { color: '#334155' }]}>
+                    Phone: +220 673 8885
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
   // Show dashboard if KYC is approved OR user is an active sales rep
   const isApproved = kycStatus?.status === 'APPROVED' || salesRepStatus?.status === 'ACTIVE'
   console.log('Dashboard access check:', {

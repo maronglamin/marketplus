@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   ScrollView,
+  Keyboard,
   Vibration,
   ActivityIndicator,
 } from 'react-native';
@@ -117,6 +118,7 @@ export function ProductBasicInfo({ onNext, initialTitle = '', initialCategory = 
           style={styles.content}
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           <View style={styles.progressContainer}>
             <View style={[styles.progressStep, styles.activeStep]}>
@@ -154,6 +156,9 @@ export function ProductBasicInfo({ onNext, initialTitle = '', initialCategory = 
                 }}
                 placeholder="Enter product title"
                 placeholderTextColor="#9CA3AF"
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={() => Keyboard.dismiss()}
               />
               {error && (
                 <Text style={styles.errorText}>{error}</Text>

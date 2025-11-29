@@ -170,7 +170,7 @@ export class RiderService {
         where: {
           userId,
           status: {
-            in: ['PENDING', 'UNDER_REVIEW', 'APPROVED']
+            in: ['PENDING', 'UNDER_REVIEW', 'APPROVED', 'SUSPENDED', 'REJECTED']
           }
         }
       });

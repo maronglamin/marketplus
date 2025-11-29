@@ -67,6 +67,12 @@ export const initiateLogin = async (req: Request, res: Response) => {
       include: { devices: true }
     });
 
+    // Blocked status check
+    if (user && user.status === 'BLOCKED') {
+      console.log('Blocked user attempted login:', { userId: user.id, phoneNumber });
+      return res.status(401).json({ message: 'Your account is blocked. Please contact support.' });
+    }
+
     console.log('User lookup result:', user ? {
       id: user.id,
       firstName: user.firstName,

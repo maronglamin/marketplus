@@ -27,6 +27,9 @@ import { StripePayment } from '../components/StripePayment';
 import YonnaPaymentModal from '../components/YonnaPaymentModal';
 import { YonnaForexPaymentService } from '../services/YonnaForexPaymentService';
 import WavePaymentService from '../services/WavePaymentService';
+import { Image } from 'react-native';
+import waveImg from '../../assets/wave.jpg';
+import YonnaWalletIcon from '../../assets/yonna_wallet.svg';
 
 
 type ShoppingCartNavigation = NativeStackNavigationProp<AppStackParamList, 'ShoppingCart'>;
@@ -254,6 +257,30 @@ export function ShoppingCart() {
       case 'DIGITAL_WALLET': return 'Digital Wallet';
       default: return method.type || 'Unknown Payment Method';
     }
+  };
+
+  const renderPaymentMethodIcon = (method: any) => {
+    const type = (method?.type || '').toString();
+    if (type === 'MOBILE_MONEY') {
+      const providerName = (method?.provider || method?.metadata?.providerName || '').toString().toLowerCase();
+      if (providerName.includes('wave')) {
+        return <Image source={waveImg} style={{ width: 28, height: 28, borderRadius: 4 }} />;
+      }
+      if (providerName.includes('yonna') || providerName.includes('aps')) {
+        return <YonnaWalletIcon width={28} height={28} fill="#10B981" color="#10B981" stroke="#10B981" />;
+      }
+      return <Ionicons name="phone-portrait-outline" size={24} color="#2563EB" />;
+    }
+    if (type === 'CREDIT_CARD' || type === 'DEBIT_CARD') {
+      return <Ionicons name="card-outline" size={24} color="#2563EB" />;
+    }
+    if (type === 'BANK_TRANSFER') {
+      return <Ionicons name="business-outline" size={24} color="#2563EB" />;
+    }
+    if (type === 'CRYPTO') {
+      return <Ionicons name="logo-bitcoin" size={24} color="#2563EB" />;
+    }
+    return <Ionicons name="wallet-outline" size={24} color="#2563EB" />;
   };
 
   const checkPaymentMethodsWithUserFeedback = async () => {
@@ -798,21 +825,7 @@ export function ShoppingCart() {
                     onPress={() => handlePaymentMethodSelect(method.id)}
                   >
                     <View style={styles.paymentMethodItemIcon}>
-                      <Ionicons
-                        name={
-                          method.type === 'CREDIT_CARD'
-                            ? 'card-outline'
-                            : method.type === 'MOBILE_MONEY'
-                            ? 'phone-portrait-outline'
-                            : method.type === 'BANK_TRANSFER'
-                            ? 'business-outline'
-                            : method.type === 'CRYPTO'
-                            ? 'logo-bitcoin'
-                            : 'wallet-outline'
-                        }
-                        size={24}
-                        color="#2563EB"
-                      />
+                      {renderPaymentMethodIcon(method)}
                     </View>
                     <View style={styles.paymentMethodItemDetails}>
                       <View style={styles.paymentMethodItemHeader}>

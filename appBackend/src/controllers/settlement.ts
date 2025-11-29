@@ -664,8 +664,10 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
         walletId: type === 'WALLET_TRANSFER' ? walletId : null,
         includedOrderIds: channel === 'ECOMMERCE' ? settlementData.includedOrderIds : null,
         includedRideIds: channel === 'RIDES' ? settlementData.includedRideIds : null,
+        includedRentalIds: channel === 'RENTALS' ? settlementData.includedRentalIds : null,
         totalOrdersCount: channel === 'ECOMMERCE' ? settlementData.totalOrdersCount : 0,
         totalRidesCount: channel === 'RIDES' ? settlementData.totalRidesCount : 0,
+        totalRentalsCount: channel === 'RENTALS' ? settlementData.totalRentalsCount : 0,
         // For rentals, include rental ids in metadata
         serviceFeesDeducted: settlementData.serviceFeesDeducted || 0,
         netAmountBeforeFees: settlementData.grossAmount || 0,
@@ -860,7 +862,7 @@ export const createBankAccount = async (req: AuthRequest, res: Response) => {
     });
 
     // Get seller's KYC record
-    const sellerKyc = await prisma.sellerKyc.findUnique({
+    let sellerKyc = await prisma.sellerKyc.findUnique({
       where: { userId: req.user.id },
       include: {
         bankAccounts: {
@@ -869,10 +871,60 @@ export const createBankAccount = async (req: AuthRequest, res: Response) => {
       }
     });
 
+    // For riders/drivers, allow adding payout methods without seller KYC by deriving from rider application info
     if (!sellerKyc) {
-      return res.status(400).json({
-        message: 'Seller KYC not found. Please complete KYC verification first.'
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: {
+          firstName: true,
+          lastName: true
+        }
       });
+      // Check driver profile or approved rider application
+      const driver = await prisma.driver.findUnique({ where: { userId: req.user.id } });
+      const riderApp = await prisma.riderApplication.findFirst({
+        where: { userId: req.user.id, status: 'APPROVED' },
+        orderBy: { updatedAt: 'desc' }
+      });
+      if (driver || riderApp) {
+        // Try to enrich address from user's default delivery address
+        const defaultAddress = await prisma.deliveryAddress.findFirst({
+          where: { userId: req.user.id, isDefault: true }
+        });
+        // Create a lightweight KYC profile for payout method linkage
+        await prisma.sellerKyc.create({
+          data: {
+            userId: req.user.id,
+            businessName: `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'Individual',
+            businessType: 'INDIVIDUAL',
+            address: defaultAddress?.address || riderApp?.address || 'N/A',
+            city: defaultAddress?.city || riderApp?.city || 'N/A',
+            state: defaultAddress?.state || '',
+            postalCode: defaultAddress?.postalCode || '',
+            documentType: 'DRIVERS_LICENSE',
+            documentNumber: riderApp?.licenseNumber || 'N/A',
+            documentUrl: (riderApp as any)?.documents?.[0]?.documentUrl || 'N/A',
+            status: 'APPROVED',
+            country: defaultAddress?.country ? [defaultAddress.country] : ['GM']
+          }
+        });
+        // Re-fetch with included relations to satisfy types
+        sellerKyc = await prisma.sellerKyc.findUnique({
+          where: { userId: req.user.id },
+          include: {
+            bankAccounts: { where: { status: 'ACTIVE' } }
+          }
+        });
+        if (!sellerKyc) {
+          return res.status(500).json({
+            message: 'Unable to prepare payout profile for this user'
+          });
+        }
+      } else {
+        return res.status(400).json({
+          message: 'Rider application not found or not approved.'
+        });
+      }
     }
 
     // Check if account number already exists for this seller
@@ -989,7 +1041,7 @@ export const createWallet = async (req: AuthRequest, res: Response) => {
     }
 
     // Get seller's KYC record
-    const sellerKyc = await prisma.sellerKyc.findUnique({
+    let sellerKyc = await prisma.sellerKyc.findUnique({
       where: { userId: req.user.id },
       include: {
         wallets: {
@@ -998,10 +1050,54 @@ export const createWallet = async (req: AuthRequest, res: Response) => {
       }
     });
 
+    // For riders/drivers, allow adding payout methods without seller KYC by deriving from rider application info
     if (!sellerKyc) {
-      return res.status(400).json({
-        message: 'Seller KYC not found. Please complete KYC verification first.'
+      const baseUser = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { firstName: true, lastName: true, phoneNumber: true }
       });
+      const driver = await prisma.driver.findUnique({ where: { userId: req.user.id } });
+      const riderApp = await prisma.riderApplication.findFirst({
+        where: { userId: req.user.id, status: 'APPROVED' },
+        orderBy: { updatedAt: 'desc' }
+      });
+      if (driver || riderApp) {
+        const defaultAddress = await prisma.deliveryAddress.findFirst({
+          where: { userId: req.user.id, isDefault: true }
+        });
+        await prisma.sellerKyc.create({
+          data: {
+            userId: req.user.id,
+            businessName: `${baseUser?.firstName ?? ''} ${baseUser?.lastName ?? ''}`.trim() || 'Individual',
+            businessType: 'INDIVIDUAL',
+            address: defaultAddress?.address || riderApp?.address || 'N/A',
+            city: defaultAddress?.city || riderApp?.city || 'N/A',
+            state: defaultAddress?.state || '',
+            postalCode: defaultAddress?.postalCode || '',
+            documentType: 'DRIVERS_LICENSE',
+            documentNumber: riderApp?.licenseNumber || 'N/A',
+            documentUrl: (riderApp as any)?.documents?.[0]?.documentUrl || 'N/A',
+            status: 'APPROVED',
+            country: defaultAddress?.country ? [defaultAddress.country] : ['GM']
+          }
+        });
+        // Re-fetch with included relations to satisfy types
+        sellerKyc = await prisma.sellerKyc.findUnique({
+          where: { userId: req.user.id },
+          include: {
+            wallets: { where: { status: 'ACTIVE' } }
+          }
+        });
+        if (!sellerKyc) {
+          return res.status(500).json({
+            message: 'Unable to prepare payout profile for this user'
+          });
+        }
+      } else {
+        return res.status(400).json({
+          message: 'Rider application not found or not approved.'
+        });
+      }
     }
 
     // Check if wallet address already exists for this seller
