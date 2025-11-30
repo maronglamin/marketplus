@@ -5,7 +5,7 @@ async function testPaymentMethods() {
     console.log('Testing payment methods endpoint...');
     
     // Test the payment methods endpoint
-    const response = await axios.get('http://localhost:3000/api/payment-methods', {
+    const response = await axios.get('https://api.cloudnexus.biz:3000/api/payment-methods', {
       headers: {
         'Authorization': 'Bearer test-token'
       }

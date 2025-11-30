@@ -29,7 +29,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       NSLocationAlwaysAndWhenInUseUsageDescription: 'This app needs access to your location to show your current position on the map and provide ride services.',
       NSAppTransportSecurity: {
         NSExceptionDomains: {
-          '172.20.10.3': {
+          'api.cloudnexus.biz': {
             NSTemporaryExceptionAllowsInsecureHTTPLoads: true,
             NSIncludesSubdomains: true,
           },
@@ -58,8 +58,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/favicon.png'
   },
   extra: {
-    localIp: process.env.LOCAL_IP || '172.20.10.3',
-    stripePublishableKey: 'pk_test_51G7XqgIFQtDBTvihaeU6FZCsQuHg1NQIkdd8CTGL0ZulPMIjQZUmFSW80gOzDpGe5UezYoqkc55WmQhpyYtZdLmk00QmAVRon0',
+    localIp: process.env.LOCAL_IP || 'api.cloudnexus.biz',
+    stripePublishableKey: 'pk_live_51S2wTxPRKWuZ5Vsn9EGuL9TN564Nt9zvhtVFfXdM6GIuPyd0wu48o2pWlmTZngXlspi1GlT4MyEH1NzYudpH1T6F00lFehMnpd',
     googlePlacesApiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo',
     eas: {
       projectId: '04ad20e1-cff1-4422-a7b3-bdb123420968'

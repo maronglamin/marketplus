@@ -11,7 +11,7 @@ let lastDiscoveryTime = 0;
 // Fallback IPs for when discovery fails
 const FALLBACK_IPS = {
   android: '10.0.2.2', // Android emulator
-  ios: 'localhost',    // iOS simulator
+  ios: 'api.cloudnexus.biz',    // iOS simulator
 };
 
 // Common local network IP ranges to try

@@ -13,7 +13,7 @@ This document describes the webhook API that Yonna Forex should use to notify ou
 **Configuration Options:**
 - **Environment Variable:** Use `process.env.API_BASE_URL` (recommended for production)
 - **Fallback URL:** `https://your-domain.com/api/payments/yonna-forex/webhook` (static fallback)
-- **Development:** `http://localhost:3000/api/payments/yonna-forex/webhook`
+- **Development:** `https://api.cloudnexus.biz:3000/api/payments/yonna-forex/webhook`
 
 **Note:** The system will use `API_BASE_URL` environment variable if set, otherwise fall back to the static URL
 
@@ -176,7 +176,7 @@ curl -X POST ${API_BASE_URL}/api/payments/yonna-forex/webhook \
 
 **Using Static URL (Fallback):**
 ```bash
-curl -X POST http://api.cloudnexus.biz/api/payments/yonna-forex/webhook \
+curl -X POST https://api.cloudnexus.biz/api/payments/yonna-forex/webhook \
   -H "Content-Type: application/json" \
   -H "X-Yonna-Signature: sha256=..." \
   -d '{

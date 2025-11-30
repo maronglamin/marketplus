@@ -34,21 +34,27 @@ export function PaymentGatewayModal({
   };
 
   const getGatewayIcon = (gateway: PaymentGateway) => {
-    if (gateway.type === 'stripe') {
+    if (gateway.type === 'card') {
       return <CreditCard className="w-8 h-8 text-blue-600" />;
-    } else if (gateway.type === 'yonna_forex') {
+    } else if (gateway.type === 'mobile_wallet') {
       return <Smartphone className="w-8 h-8 text-green-600" />;
     }
     return <CreditCard className="w-8 h-8 text-gray-600" />;
   };
 
   const getGatewayDescription = (gateway: PaymentGateway) => {
-    if (gateway.type === 'stripe') {
+    if (gateway.type === 'card') {
       return 'Secure payment processing with credit/debit cards';
-    } else if (gateway.type === 'yonna_forex') {
+    } else if (gateway.type === 'mobile_wallet') {
       return 'Mobile money and local payment methods';
     }
     return 'Payment processing';
+  };
+
+  const getGatewayTitle = (gateway: PaymentGateway) => {
+    if (gateway.type === 'card') return 'Card';
+    if (gateway.type === 'mobile_wallet') return 'Mobile Wallet';
+    return gateway.name;
   };
 
   const formatAmount = (amount: number, currency: string) => {
@@ -101,7 +107,7 @@ export function PaymentGatewayModal({
                 </div>
               ) : (
                 availableGateways.map((gateway) => {
-                  const isYonnaForex = gateway.type === 'yonna_forex';
+                  const isYonnaForex = gateway.type === 'mobile_wallet';
                   const isDisabled = isYonnaForex && !isGMDCurrency;
                   
                   return (
@@ -121,7 +127,7 @@ export function PaymentGatewayModal({
                       {getGatewayIcon(gateway)}
                       <div className="flex-1">
                         <div className="flex items-center justify-between">
-                          <h4 className="font-medium text-gray-900">{gateway.name}</h4>
+                          <h4 className="font-medium text-gray-900">{getGatewayTitle(gateway)}</h4>
                           <div className="flex items-center space-x-2">
                             {isDisabled && (
                               <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">

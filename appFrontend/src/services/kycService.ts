@@ -20,7 +20,7 @@ export interface SellerKycData {
 export interface SellerKycResponse {
   id: string;
   userId: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
   rejectionReason?: string;
   businessName?: string;
   businessType?: string;
@@ -104,6 +104,14 @@ export const kycService = {
     
     // If all retries failed, throw the last error
     throw lastError;
+  },
+  async getKycStatusByUser(userId: string): Promise<SellerKycResponse> {
+    const api = await getApi();
+    const response = await api.get(`/seller-kyc/by-user/${userId}`, { timeout: TIMEOUT });
+    if (!response.data || !response.data.status || !response.data.userId) {
+      throw new Error('Invalid response: Missing required fields');
+    }
+    return response.data;
   },
 
   async submitKyc(data: SellerKycData): Promise<SellerKycResponse> {

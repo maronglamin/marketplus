@@ -125,7 +125,7 @@ The Yonna Forex API currently supports the following basic payload structure:
 
 ### Test Payment Processing
 ```bash
-curl -X POST http://api.cloudnexus.biz/api/payments/yonna-forex/process \
+curl -X POST https://api.cloudnexus.biz/api/payments/yonna-forex/process \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -136,7 +136,7 @@ curl -X POST http://api.cloudnexus.biz/api/payments/yonna-forex/process \
 
 ### Test Payment Verification
 ```bash
-curl -X POST http://api.cloudnexus.biz/api/payments/yonna-forex/verify \
+curl -X POST https://api.cloudnexus.biz/api/payments/yonna-forex/verify \
   -H "Content-Type: application/json" \
   -d '{
     "transactionId": "YF_1234567890_ABC123"

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Eye, ShoppingCart, Star, Edit, Trash2, Package, AlertTriangle, CheckCircle2, Clock, RefreshCw, Shield, History, ArrowRight, BarChart3 } from 'lucide-react';
+import { Plus, Eye, ShoppingCart, Star, Edit, Trash2, Package, AlertTriangle, CheckCircle2, Clock, RefreshCw, Shield, History, ArrowRight, BarChart3, Info } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { kycService, type SellerKycResponse } from '../api/kyc';
 import { salesRepService, type SalesRep } from '../api/salesReps';
@@ -48,6 +48,12 @@ export function SellerDashboard() {
   const headerMenuRef = useRef<HTMLDivElement>(null);
 
   const isSalesRep = !!(salesRep && salesRep.status === 'ACTIVE');
+  const isSalesRepSuspended = salesRep?.status === 'SUSPENDED';
+
+  // Normalize KYC status to be robust against casing/whitespace differences from API
+  const kycStatus = ((kyc?.status || '') as string).toString().trim().toUpperCase();
+  // Only allow access when KYC (own or parent's when sales rep) is APPROVED
+  const canAccessDashboard = kycStatus === 'APPROVED';
 
   const getImageUrl = (image: string) => {
     if (!image) return 'https://via.placeholder.com/64?text=No+Image';
@@ -93,15 +99,19 @@ export function SellerDashboard() {
 
         if (rep && rep.status === 'ACTIVE') {
           setSalesRep(rep);
-          // Grant access via inherited KYC from parent seller
-          setKyc({
-            id: 'inherited-kyc',
-            userId: rep.userId,
-            status: 'APPROVED',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            businessName: rep.inheritedKyc?.businessName,
-          } as SellerKycResponse);
+          // Fetch parent seller's KYC to determine access
+          try {
+            const parentKyc = await kycService.getKycStatusByUser(rep.parentSellerId);
+            setKyc(parentKyc);
+          } catch (err: any) {
+            if (err?.response?.status === 404) {
+              setKyc(null);
+            } else if (err?.response?.status === 401) {
+              setKycError('Please log in to continue');
+            } else {
+              setKycError('Failed to check parent seller verification. Please try again later.');
+            }
+          }
         } else {
           // Not a rep; check user's own KYC
           const res = await kycService.getKycStatus();
@@ -149,25 +159,34 @@ export function SellerDashboard() {
         });
 
         // Load first page of seller products for table
-        setLoadingProducts(true);
-        const productsRes = await sellerService.getSellerProducts(1, PAGE_SIZE);
-        const mapped = productsRes.products.map((p: any) => ({
-          id: p.id,
-          name: p.title,
-          price: `${p.currencyCode} ${Number(p.price).toFixed(2)}`,
-          rating: 0,
-          image: getImageUrl(p.images?.[0]?.imageUrl || ''),
-          views: p.views || 0,
-          orderCount: p.orderCount || 0,
-          stock: p.quantity,
-          status: (p.status || 'inactive').toLowerCase(),
-          createdAt: p.createdAt?.slice(0, 10) || '',
-        }));
-        setProducts(mapped);
-        setProductsPage(productsRes.page);
-        setHasMoreProducts(productsRes.hasMore);
-        setProductsTotal(productsRes.total);
-        setLoadingProducts(false);
+        try {
+          setLoadingProducts(true);
+          const productsRes = await sellerService.getSellerProducts(1, PAGE_SIZE);
+          const mapped = productsRes.products.map((p: any) => ({
+            id: p.id,
+            name: p.title,
+            price: `${p.currencyCode} ${Number(p.price).toFixed(2)}`,
+            rating: 0,
+            image: getImageUrl(p.images?.[0]?.imageUrl || ''),
+            views: p.views || 0,
+            orderCount: p.orderCount || 0,
+            stock: p.quantity,
+            status: (p.status || 'inactive').toLowerCase(),
+            createdAt: p.createdAt?.slice(0, 10) || '',
+          }));
+          setProducts(mapped);
+          setProductsPage(productsRes.page);
+          setHasMoreProducts(productsRes.hasMore);
+          setProductsTotal(productsRes.total);
+        } catch (err) {
+          console.log('Failed to load products for dashboard table, continuing with empty list');
+          setProducts([]);
+          setProductsPage(1);
+          setHasMoreProducts(false);
+          setProductsTotal(0);
+        } finally {
+          setLoadingProducts(false);
+        }
       } catch (e: any) {
         // 404 = no KYC record
         if (e?.response?.status === 404) {
@@ -204,8 +223,13 @@ export function SellerDashboard() {
   const refreshKycStatus = async () => {
     try {
       setRefreshingKyc(true);
-      const res = await kycService.getKycStatus();
-      setKyc(res);
+      if (isSalesRep && salesRep?.parentSellerId) {
+        const res = await kycService.getKycStatusByUser(salesRep.parentSellerId);
+        setKyc(res);
+      } else {
+        const res = await kycService.getKycStatus();
+        setKyc(res);
+      }
     } catch (e: any) {
       if (e?.response?.status === 404) {
         setKyc(null);
@@ -244,6 +268,54 @@ export function SellerDashboard() {
     );
   }
 
+  // If Sales Rep account is suspended, show Suspended UI
+  if (isSalesRepSuspended) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-2xl mx-auto px-4 py-10">
+          <div className="bg-white rounded-xl shadow-sm p-8 border border-red-100">
+            <div className="flex items-start">
+              <div className="p-3 bg-red-50 rounded-lg mr-3">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-gray-900">Account Suspended</h2>
+                <p className="text-gray-700 mt-2">Your account has been suspended. Please contact support for more information.</p>
+                <div className="mt-6 bg-blue-50 rounded-lg p-4 border border-blue-100">
+                  <div className="flex items-start">
+                    <div className="p-2 bg-blue-100 rounded-lg mr-3">
+                      <Info className="w-5 h-5 text-blue-700" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-blue-900">
+                        You cannot access the dashboard while your account is suspended. Contact support for assistance.
+                      </p>
+                      <p className="text-sm text-slate-900 font-semibold mt-3">Contact Support:</p>
+                      <p className="text-sm text-slate-700">
+                        Email: <a href="mailto:customercare@cloudnexus.biz" className="underline text-blue-700">customercare@cloudnexus.biz</a>
+                      </p>
+                      <p className="text-sm text-slate-700">
+                        Phone: <a href="tel:+2206738885" className="underline text-blue-700">+220 673 8885</a>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-6 flex gap-3">
+                  <a href="mailto:customercare@cloudnexus.biz" className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    Contact Support
+                  </a>
+                  <Link to="/home" className="px-5 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                    Go Home
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Handle auth/other errors
   if (kycError) {
     return (
@@ -272,8 +344,36 @@ export function SellerDashboard() {
     );
   }
 
-  // If no KYC record, show Become a Seller prompt and link to KYC form
+  // If no KYC record
   if (!kyc) {
+    if (isSalesRep) {
+      // Sales reps shouldn't see "Become a Seller" – they inherit parent KYC
+      return (
+        <div className="min-h-screen bg-gray-50">
+          <div className="max-w-2xl mx-auto px-4 py-10">
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-yellow-100">
+              <div className="flex items-start">
+                <div className="p-2 bg-yellow-50 rounded-lg mr-3">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Access Restricted</h2>
+                  <p className="text-gray-700 mt-1">We could not verify your parent seller’s status. Please refresh or contact support.</p>
+                  <div className="mt-4 flex gap-3">
+                    <button disabled className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed">
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Refresh Status
+                    </button>
+                    <Link to="/home" className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Go Home</Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    // Non-reps: show Become a Seller prompt and link to KYC form
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -292,8 +392,8 @@ export function SellerDashboard() {
             </ul>
             <div className="flex gap-3">
               <Link to="/seller/kyc" className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Get Started</Link>
-              <button onClick={refreshKycStatus} disabled={refreshingKyc} className="px-5 py-3 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50 inline-flex items-center">
-                <RefreshCw className={`w-4 h-4 mr-2 ${refreshingKyc ? 'animate-spin' : ''}`} /> Refresh
+              <button disabled className="px-5 py-3 bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed inline-flex items-center">
+                <RefreshCw className="w-4 h-4 mr-2" /> Refresh
               </button>
             </div>
           </div>
@@ -303,7 +403,7 @@ export function SellerDashboard() {
   }
 
   // If KYC pending
-  if (kyc.status === 'PENDING') {
+  if (kycStatus === 'PENDING') {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-2xl mx-auto px-4 py-10">
@@ -330,8 +430,8 @@ export function SellerDashboard() {
                   </div>
                 </div>
                 <div className="mt-6 flex gap-3">
-                  <button onClick={refreshKycStatus} disabled={refreshingKyc} className="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg disabled:opacity-50">
-                    <RefreshCw className={`w-4 h-4 mr-2 ${refreshingKyc ? 'animate-spin' : ''}`} />
+                  <button disabled className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed">
+                    <RefreshCw className="w-4 h-4 mr-2" />
                     Refresh Status
                   </button>
                   <Link to="/home" className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Go Home</Link>
@@ -345,7 +445,7 @@ export function SellerDashboard() {
   }
 
   // If suspended
-  if (kyc.status === 'SUSPENDED') {
+  if (kycStatus === 'SUSPENDED') {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-2xl mx-auto px-4 py-10">
@@ -356,9 +456,28 @@ export function SellerDashboard() {
               </div>
               <div className="flex-1">
                 <h2 className="text-xl font-semibold text-gray-900">Account Suspended</h2>
-                <p className="text-gray-700 mt-2">
-                  Your seller account has been suspended. Please contact support for more information.
-                </p>
+                <p className="text-gray-700 mt-2">Your seller account has been suspended. Please contact support for more information.</p>
+
+                {/* Info box similar to mobile implementation */}
+                <div className="mt-6 bg-blue-50 rounded-lg p-4 border border-blue-100">
+                  <div className="flex items-start">
+                    <div className="p-2 bg-blue-100 rounded-lg mr-3">
+                      <Info className="w-5 h-5 text-blue-700" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-blue-900">
+                        You cannot submit a new verification while your account is suspended. Contact support for assistance.
+                      </p>
+                      <p className="text-sm text-slate-900 font-semibold mt-3">Contact Support:</p>
+                      <p className="text-sm text-slate-700">
+                        Email: <a href="mailto:customercare@cloudnexus.biz" className="underline text-blue-700">customercare@cloudnexus.biz</a>
+                      </p>
+                      <p className="text-sm text-slate-700">
+                        Phone: <a href="tel:+2206738885" className="underline text-blue-700">+220 673 8885</a>
+                      </p>
+                    </div>
+                  </div>
+                </div>
                 <div className="mt-6 flex gap-3">
                   <a href="mailto:customercare@cloudnexus.biz" className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                     Contact Support
@@ -376,7 +495,7 @@ export function SellerDashboard() {
   }
 
   // If rejected
-  if (kyc.status === 'REJECTED') {
+  if (kycStatus === 'REJECTED') {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-2xl mx-auto px-4 py-10">
@@ -390,8 +509,8 @@ export function SellerDashboard() {
                 <p className="text-gray-700 mt-2">{kyc.rejectionReason || 'Please review and update your information.'}</p>
                 <div className="mt-6 flex gap-3">
                   <Link to="/seller/kyc" className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Update Verification</Link>
-                  <button onClick={refreshKycStatus} disabled={refreshingKyc} className="px-5 py-3 bg-gray-100 text-gray-800 rounded-lg hover:bg-gray-200 disabled:opacity-50 inline-flex items-center">
-                    <RefreshCw className={`w-4 h-4 mr-2 ${refreshingKyc ? 'animate-spin' : ''}`} /> Refresh
+                  <button disabled className="px-5 py-3 bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed inline-flex items-center">
+                    <RefreshCw className="w-4 h-4 mr-2" /> Refresh
                   </button>
                   <Link to="/home" className="px-5 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">Go Home</Link>
                 </div>
@@ -403,7 +522,34 @@ export function SellerDashboard() {
     );
   }
 
-  // Approved — show dashboard
+  // Approved — show dashboard (guarded)
+  if (!canAccessDashboard) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-2xl mx-auto px-4 py-10">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-yellow-100">
+            <div className="flex items-start">
+              <div className="p-2 bg-yellow-50 rounded-lg mr-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Access Restricted</h2>
+                <p className="text-gray-700 mt-1">Your seller account is not approved yet. Please check your verification status.</p>
+                <div className="mt-4 flex gap-3">
+                  <button disabled className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-400 rounded-lg cursor-not-allowed">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh Status
+                  </button>
+                  <Link to="/home" className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Go Home</Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 relative">
       <div className="max-w-7xl mx-auto p-4">

@@ -4,7 +4,7 @@ const axios = require('axios');
 async function testApiConnection() {
   console.log('🧪 Testing API Connection...\n');
 
-  const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ? `${process.env.EXPO_PUBLIC_API_URL}/api` : 'http://localhost:3000/api';
+  const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ? `${process.env.EXPO_PUBLIC_API_URL}/api` : 'https://api.cloudnexus.biz:3000/api';
   
   try {
     // Test 1: Health check

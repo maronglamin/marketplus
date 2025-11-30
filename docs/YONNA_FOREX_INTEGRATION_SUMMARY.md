@@ -15,7 +15,7 @@
 **Configuration:**
 - Set `API_BASE_URL` environment variable for dynamic configuration
 - System will use environment variable if available, otherwise fall back to static URL
-- For development: `http://localhost:3000`
+- For development: `https://api.cloudnexus.biz:3000`
 
 ### 2. Webhook Secret (for security)
 Provide them with this webhook secret key for signature verification:
@@ -115,7 +115,7 @@ curl -X POST ${API_BASE_URL}/api/payments/yonna-forex/test-webhook \
 
 **Using Static URL (Fallback):**
 ```bash
-curl -X POST http://api.cloudnexus.biz/api/payments/yonna-forex/test-webhook \
+curl -X POST https://api.cloudnexus.biz/api/payments/yonna-forex/test-webhook \
   -H "Content-Type: application/json" \
   -H "X-Yonna-Signature: sha256=APP_WEBHOOK_SECRET_KEY" \
   -d '{
@@ -167,7 +167,7 @@ Stop retrying after 5 attempts or if we return a 4xx status code.
 For technical support or questions:
 - **Email**: tech-support@cloudnexus.biz
 - **Phone**: +220-XXX-XXXX
-- **Documentation**: http://api.cloudnexus.biz/docs/yonna-forex-webhook
+- **Documentation**: https://api.cloudnexus.biz/docs/yonna-forex-webhook
 
 ## Example Implementation
 

@@ -433,7 +433,7 @@ npx ts-node scripts/seed-ride-services.ts
 ### Environment Variables
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/marketplace"
+DATABASE_URL="postgresql://user:password@api.cloudnexus.biz:5432/marketplace"
 
 # API Configuration
 API_PORT=3000

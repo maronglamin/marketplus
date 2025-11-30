@@ -174,7 +174,7 @@ export function AddPaymentMethodModal({ isOpen, onClose, onPaymentMethodAdded, u
             type="text"
             value={formData.provider}
             onChange={(e) => handleInputChange('provider', e.target.value)}
-            placeholder={selectedType === 'CARD' ? 'e.g., Visa, Mastercard, American Express' : 'e.g., MTN Mobile Money, Airtel Money'}
+            placeholder={selectedType === 'CARD' ? 'e.g., Visa, Mastercard, American Express' : 'e.g., Wave Gambia, Yonna Wallet'}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
@@ -221,16 +221,24 @@ export function AddPaymentMethodModal({ isOpen, onClose, onPaymentMethodAdded, u
                   <span className="ml-2 text-gray-600">Loading providers...</span>
                 </div>
               ) : mobileWalletProviders.length > 0 ? (
-                <div className="grid grid-cols-2 gap-3">
+              <div className="overflow-x-auto">
+                <div className="flex gap-3 pb-2">
                   {mobileWalletProviders.map((provider) => {
                     const isUsed = isProviderAlreadyUsed(provider.name);
+                    const providerNameLower = (provider.name || '').toLowerCase();
+                    const publicUrl = process.env.PUBLIC_URL || '';
+                    const iconSrc = providerNameLower.includes('wave')
+                      ? `${publicUrl}/assets/wave.jpg`
+                      : (providerNameLower.includes('yonna') || providerNameLower.includes('aps'))
+                        ? `${publicUrl}/assets/yonna_wallet.svg`
+                        : (provider.logoUrl || '');
                     return (
                       <button
                         key={provider.id}
                         type="button"
                         onClick={() => !isUsed && handleProviderSelect(provider.id)}
                         disabled={isUsed}
-                        className={`p-3 border-2 rounded-lg text-left transition-all ${
+                        className={`min-w-[220px] p-3 border-2 rounded-lg text-left transition-all ${
                           isUsed
                             ? 'border-gray-200 bg-gray-100 cursor-not-allowed opacity-60'
                             : selectedProvider === provider.id
@@ -239,15 +247,11 @@ export function AddPaymentMethodModal({ isOpen, onClose, onPaymentMethodAdded, u
                         }`}
                       >
                         <div className="flex items-center space-x-2">
-                          {provider.logoUrl ? (
-                            <img
-                              src={provider.logoUrl}
-                              alt={provider.name}
-                              className="w-6 h-6 object-contain"
-                            />
-                          ) : (
-                            <Smartphone className="w-6 h-6 text-gray-600" />
-                          )}
+                          {iconSrc ? (
+                            <img src={iconSrc} alt={provider.name} className="w-7 h-7 object-contain rounded" />
+                          ) : provider.logoUrl ? (
+                            <img src={provider.logoUrl} alt={provider.name} className="w-7 h-7 object-contain rounded" />
+                          ) : (<Smartphone className="w-6 h-6 text-gray-600" />)}
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
                               <p className="font-medium text-sm text-gray-900">{provider.name}</p>
@@ -265,6 +269,7 @@ export function AddPaymentMethodModal({ isOpen, onClose, onPaymentMethodAdded, u
                       </button>
                     );
                   })}
+                </div>
                 </div>
               ) : (
                 <div className="text-center py-4">

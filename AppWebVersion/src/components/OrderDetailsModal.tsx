@@ -390,12 +390,12 @@ export function OrderDetailsModal({
       
       // Filter payment methods based on selected gateway type
       let filteredMethods = response.paymentMethods;
-      if (selectedGateway?.type === 'stripe') {
+      if (selectedGateway?.type === 'card') {
         filteredMethods = response.paymentMethods.filter(method => 
           method.type === 'CREDIT_CARD' || method.type === 'DEBIT_CARD'
         );
         console.log('Filtered for Stripe:', filteredMethods);
-      } else if (selectedGateway?.type === 'yonna_forex') {
+      } else if (selectedGateway?.type === 'mobile_wallet') {
         filteredMethods = response.paymentMethods.filter(method => 
           method.type === 'MOBILE_MONEY'
         );
@@ -445,7 +445,7 @@ export function OrderDetailsModal({
     setSelectedPaymentMethod(method);
     
     // For Stripe, show the new Stripe Elements payment modal
-    if (selectedGateway?.type === 'stripe') {
+      if (selectedGateway?.type === 'card') {
       setShowStripePaymentModal(true);
     } else {
       // For Yonna Forex, go directly to payment processing
@@ -1161,7 +1161,7 @@ export function OrderDetailsModal({
 
 
       {/* New Stripe Elements Payment Modal */}
-      {order && selectedGateway?.type === 'stripe' && (
+      {order && selectedGateway?.type === 'card' && (
         <StripePaymentModal
           isOpen={showStripePaymentModal}
           onClose={() => {

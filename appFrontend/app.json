@@ -46,7 +46,7 @@
     },
     "extra": {
       "localIp": "${LOCAL_IP}",
-      "stripePublishableKey": "pk_test_51G7XqgIFQtDBTvihaeU6FZCsQuHg1NQIkdd8CTGL0ZulPMIjQZUmFSW80gOzDpGe5UezYoqkc55WmQhpyYtZdLmk00QmAVRon0",
+      "stripePublishableKey": "pk_live_51S2wTxPRKWuZ5Vsn9EGuL9TN564Nt9zvhtVFfXdM6GIuPyd0wu48o2pWlmTZngXlspi1GlT4MyEH1NzYudpH1T6F00lFehMnpd",
       "googlePlacesApiKey": "AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo",
       "eas": {
         "projectId": "04ad20e1-cff1-4422-a7b3-bdb123420968"

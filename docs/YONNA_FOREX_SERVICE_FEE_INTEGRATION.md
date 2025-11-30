@@ -178,7 +178,7 @@ node scripts/test-yonna-service-fee.js
 
 ```bash
 # Test payment processing
-curl -X POST http://localhost:3000/api/payments/yonna-forex/process \
+curl -X POST https://api.cloudnexus.biz:3000/api/payments/yonna-forex/process \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
@@ -192,7 +192,7 @@ curl -X POST http://localhost:3000/api/payments/yonna-forex/process \
 
 ```bash
 # Test webhook status update
-curl -X POST http://localhost:3000/api/payments/yonna-forex/webhook \
+curl -X POST https://api.cloudnexus.biz:3000/api/payments/yonna-forex/webhook \
   -H "Content-Type: application/json" \
   -H "X-Yonna-Signature: sha256=YOUR_SIGNATURE" \
   -d '{

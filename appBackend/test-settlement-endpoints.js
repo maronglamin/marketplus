@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 // Test configuration
-const BASE_URL = 'http://localhost:3000/api';
+const BASE_URL = 'https://api.cloudnexus.biz:3000/api';
 const TEST_TOKEN = 'your-test-token-here'; // You'll need to replace this with a valid token
 
 async function testSettlementEndpoints() {

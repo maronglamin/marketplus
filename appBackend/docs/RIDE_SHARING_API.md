@@ -4,7 +4,7 @@
 
 This document describes the API endpoints for the Uber-like ride-sharing system. All endpoints require authentication using JWT tokens.
 
-**Base URL:** `http://localhost:3000/api`
+**Base URL:** `https://api.cloudnexus.biz:3000/api`
 
 **Authentication:** Bearer token in Authorization header
 ```
@@ -1037,7 +1037,7 @@ The following WebSocket events will be implemented for real-time updates:
 
 ### Test Ride Request Creation
 ```bash
-curl -X POST http://localhost:3000/api/ride-requests \
+curl -X POST https://api.cloudnexus.biz:3000/api/ride-requests \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1058,7 +1058,7 @@ curl -X POST http://localhost:3000/api/ride-requests \
 
 ### Test Driver Status Update
 ```bash
-curl -X POST http://localhost:3000/api/driver/status \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/status \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{"isOnline": true}'

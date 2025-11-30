@@ -366,7 +366,7 @@ try {
 ### API Testing
 ```bash
 # Test going online with location
-curl -X POST http://localhost:3000/api/driver/status \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/status \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{

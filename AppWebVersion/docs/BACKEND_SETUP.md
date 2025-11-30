@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-1. Make sure the backend server is running on `http://localhost:3000`
+1. Make sure the backend server is running on `https://api.cloudnexus.biz:3000`
 2. Ensure the database is properly configured and migrated
 
 ## Backend Changes Made
@@ -26,7 +26,7 @@
 
 ## Web App Configuration
 
-The web app is configured to connect to `http://localhost:3000/api` by default.
+The web app is configured to connect to `https://api.cloudnexus.biz:3000/api` by default.
 
 To change the API URL, update `src/config/api.ts`:
 
@@ -41,7 +41,7 @@ export const API_CONFIG = {
 
 1. Start the backend server: `cd appBackend && npm run dev`
 2. Start the web app: `cd appWebVersion && npm start`
-3. Visit `http://localhost:3001`
+3. Visit `https://api.cloudnexus.biz:3001`
 4. Enter a phone number of an existing user
 5. Enter the user's PIN
 6. You should be redirected to the home page

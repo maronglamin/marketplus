@@ -12,7 +12,7 @@ export interface CreatePaymentIntentRequest {
 export interface PaymentGateway {
   id: string;
   name: string;
-  type: 'stripe' | 'yonna_forex';
+  type: 'card' | 'mobile_wallet';
   supportedCurrencies: string[];
   isActive: boolean;
 }
@@ -48,9 +48,9 @@ export interface PaymentResponse {
 
 export const paymentGateways: PaymentGateway[] = [
   {
-    id: 'stripe',
-    name: 'Stripe',
-    type: 'stripe',
+    id: 'card',
+    name: 'Card',
+    type: 'card',
     supportedCurrencies: [
       'usd', 'eur', 'gbp', 'cad', 'aud', 'jpy', 'chf', 'sek', 'nok', 'dkk',
       'pln', 'czk', 'huf', 'ron', 'bgn', 'hrk', 'rub', 'try', 'brl', 'mxn',
@@ -61,9 +61,9 @@ export const paymentGateways: PaymentGateway[] = [
     isActive: true
   },
   {
-    id: 'yonna_forex',
-    name: 'Yonna Forex',
-    type: 'yonna_forex',
+    id: 'mobile_wallet',
+    name: 'Mobile Wallet',
+    type: 'mobile_wallet',
     supportedCurrencies: ['gmd'], // Only GMD currency
     isActive: true
   }
@@ -102,9 +102,9 @@ export const paymentService = {
       let gateway: PaymentGateway;
       
       if (paymentMethod.type === 'CREDIT_CARD' || paymentMethod.type === 'DEBIT_CARD') {
-        gateway = paymentGateways.find(g => g.type === 'stripe')!;
+        gateway = paymentGateways.find(g => g.type === 'card')!;
       } else if (paymentMethod.type === 'MOBILE_MONEY') {
-        gateway = paymentGateways.find(g => g.type === 'yonna_forex')!;
+        gateway = paymentGateways.find(g => g.type === 'mobile_wallet')!;
       } else {
         throw new Error(`Unsupported payment method type: ${paymentMethod.type}`);
       }
@@ -117,7 +117,7 @@ export const paymentService = {
       }
 
       // Process payment based on gateway type
-      if (gateway.type === 'stripe') {
+      if (gateway.type === 'card') {
         const paymentIntentData: CreatePaymentIntentRequest = {
           amount,
           currency: currency.toLowerCase(),
@@ -152,7 +152,7 @@ export const paymentService = {
             message: 'Payment processed successfully'
           }
         };
-      } else if (gateway.type === 'yonna_forex') {
+      } else if (gateway.type === 'mobile_wallet') {
         const paymentData: YonnaForexPaymentRequest = {
           amount,
           currency: currency.toUpperCase(),
@@ -199,9 +199,9 @@ export const paymentService = {
     const supportedGateways = this.getSupportedGateways(currency);
     
     return supportedGateways.some(gateway => {
-      if (gateway.type === 'stripe') {
+      if (gateway.type === 'card') {
         return paymentMethodType === 'CREDIT_CARD' || paymentMethodType === 'DEBIT_CARD';
-      } else if (gateway.type === 'yonna_forex') {
+      } else if (gateway.type === 'mobile_wallet') {
         return paymentMethodType === 'MOBILE_MONEY';
       }
       return false;
@@ -216,12 +216,12 @@ export const paymentService = {
     
     // Prefer Stripe for card payments
     if (paymentMethodType === 'CREDIT_CARD' || paymentMethodType === 'DEBIT_CARD') {
-      return supportedGateways.find(g => g.type === 'stripe') || null;
+      return supportedGateways.find(g => g.type === 'card') || null;
     }
     
     // Prefer Yonna Forex for mobile money
     if (paymentMethodType === 'MOBILE_MONEY') {
-      return supportedGateways.find(g => g.type === 'yonna_forex') || null;
+      return supportedGateways.find(g => g.type === 'mobile_wallet') || null;
     }
     
     return null;

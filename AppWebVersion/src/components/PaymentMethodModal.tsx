@@ -10,7 +10,7 @@ interface PaymentMethodModalProps {
   orderTotal: number;
   currencyCode: string;
   userPhoneNumber?: string;
-  gatewayType?: 'stripe' | 'yonna_forex';
+  gatewayType?: 'card' | 'mobile_wallet';
 }
 
 export function PaymentMethodModal({ 
@@ -47,12 +47,12 @@ export function PaymentMethodModal({
       console.log('PaymentMethodModal: All payment methods:', filteredMethods);
       console.log('PaymentMethodModal: Gateway type:', gatewayType);
       
-      if (gatewayType === 'stripe') {
+      if (gatewayType === 'card') {
         filteredMethods = response.paymentMethods.filter(method => 
           method.type === 'CREDIT_CARD' || method.type === 'DEBIT_CARD'
         );
         console.log('PaymentMethodModal: Filtered for Stripe:', filteredMethods);
-      } else if (gatewayType === 'yonna_forex') {
+      } else if (gatewayType === 'mobile_wallet') {
         filteredMethods = response.paymentMethods.filter(method => 
           method.type === 'MOBILE_MONEY'
         );
@@ -92,15 +92,27 @@ export function PaymentMethodModal({
   };
 
   const getPaymentMethodIcon = (type: string) => {
-    switch (type) {
-      case 'CREDIT_CARD':
-      case 'DEBIT_CARD':
-        return <CreditCard className="w-6 h-6" />;
-      case 'MOBILE_MONEY':
-        return <Smartphone className="w-6 h-6" />;
-      default:
-        return <Wallet className="w-6 h-6" />;
+    return null; // will be handled by getPaymentMethodDisplayIcon below
+  };
+
+  const getPaymentMethodDisplayIcon = (method: PaymentMethod) => {
+    const type = (method?.type || '').toString();
+    const providerName = (method as any)?.provider || (method as any)?.metadata?.providerName;
+    const provider = (providerName || '').toString().toLowerCase();
+    const publicUrl = process.env.PUBLIC_URL || '';
+    if (type === 'MOBILE_MONEY') {
+      if (provider.includes('wave')) {
+        return <img src={`${publicUrl}/assets/wave.jpg`} alt="Wave" className="w-7 h-7 rounded" />;
+      }
+      if (provider.includes('yonna') || provider.includes('aps')) {
+        return <img src={`${publicUrl}/assets/yonna_wallet.svg`} alt="Yonna Wallet" className="w-7 h-7" />;
+      }
+      return <Smartphone className="w-6 h-6" />;
     }
+    if (type === 'CREDIT_CARD' || type === 'DEBIT_CARD') {
+      return <CreditCard className="w-6 h-6" />;
+    }
+    return <Wallet className="w-6 h-6" />;
   };
 
   const formatPrice = (amount: number, currency: string) => {
@@ -186,7 +198,7 @@ export function PaymentMethodModal({
                         <div className={`p-2 rounded-lg ${
                           selectedMethod === method.id ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'
                         }`}>
-                          {getPaymentMethodIcon(method.type)}
+                          {getPaymentMethodDisplayIcon(method)}
                         </div>
                         <div>
                           <div className="flex items-center space-x-2">

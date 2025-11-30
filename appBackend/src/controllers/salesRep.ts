@@ -200,6 +200,7 @@ export const getSalesRep = async (req: AuthenticatedRequest, res: Response) => {
     const transformedSalesRep = {
       id: salesRep.id,
       userId: salesRep.userId,
+      parentSellerId: salesRep.parentSellerId,
       firstName: salesRep.user.firstName,
       lastName: salesRep.user.lastName,
       phoneNumber: salesRep.user.phoneNumber,
@@ -286,6 +287,7 @@ export const getSalesRepByUserId = async (req: AuthenticatedRequest, res: Respon
     const transformedSalesRep = {
       id: salesRep.id,
       userId: salesRep.userId,
+      parentSellerId: salesRep.parentSellerId,
       firstName: salesRep.user.firstName,
       lastName: salesRep.user.lastName,
       phoneNumber: salesRep.user.phoneNumber,

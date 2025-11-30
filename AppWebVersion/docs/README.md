@@ -51,7 +51,7 @@ This is the web version of the Marketplace mobile app, focused on e-commerce fun
    npm start
    ```
 
-4. Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+4. Open [https://api.cloudnexus.biz:3000](https://api.cloudnexus.biz:3000) to view it in the browser.
 
 ### Building for Production
 

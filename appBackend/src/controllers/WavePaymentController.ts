@@ -114,15 +114,30 @@ export class WavePaymentController {
       const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } =
         await UCPService.calculateServiceFee('wave_wallet', originalAmount, currencyCode);
 
-      // Build URLs
-      const origin =
+      // Build callback/return URLs from a configured public HTTPS app base
+      // Never fall back to WAVE_API_BASE_URL (that's the upstream, not our app)
+      const rawBase =
+        process.env.APP_PUBLIC_BASE_URL ||
         (req.headers.origin as string) ||
         process.env.CLIENT_BASE_URL ||
         process.env.WEB_APP_URL ||
         process.env.FRONTEND_BASE_URL ||
         '';
-      const successUrl = `${origin || process.env.WAVE_API_BASE_URL}/payments/wave/success`;
-      const errorUrl = `${origin || process.env.WAVE_API_BASE_URL}/payments/wave/error`;
+      let appBase = rawBase ? rawBase.replace(/\/$/, '') : '';
+      if (appBase.startsWith('http://')) {
+        // Coerce to https to satisfy Wave URL scheme requirement
+        appBase = appBase.replace('http://', 'https://');
+      }
+      if (!appBase || !appBase.startsWith('https://')) {
+        res.status(500).json({
+          success: false,
+          message:
+            'APP_PUBLIC_BASE_URL must be configured to a public HTTPS origin for Wave callbacks (e.g. https://your-app.example)',
+        });
+        return;
+      }
+      const successUrl = `${appBase}/payments/wave/success`;
+      const errorUrl = `${appBase}/payments/wave/error`;
 
       const payload: WaveCheckoutSessionRequest = {
         amount: String(Math.round(originalAmount)), // Wave examples show integer string

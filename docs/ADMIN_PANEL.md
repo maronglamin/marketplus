@@ -590,12 +590,12 @@ npm run dev
 ### Environment Variables
 ```env
 # API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:3001
-NEXT_PUBLIC_WS_URL=ws://localhost:3001
+NEXT_PUBLIC_API_URL=https://api.cloudnexus.biz:3001
+NEXT_PUBLIC_WS_URL=ws://api.cloudnexus.biz:3001
 
 # Authentication
 NEXTAUTH_SECRET=your-secret-key
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=https://api.cloudnexus.biz:3000
 
 # Database (if needed)
 DATABASE_URL=postgresql://...

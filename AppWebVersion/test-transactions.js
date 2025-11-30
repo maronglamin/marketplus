@@ -8,7 +8,7 @@ async function testTransactionsAPI() {
     // You'll need to replace this with a valid JWT token
     const token = 'YOUR_JWT_TOKEN_HERE';
     
-    const response = await axios.get('http://localhost:3000/api/seller/transactions/USD', {
+    const response = await axios.get('https://api.cloudnexus.biz:3000/api/seller/transactions/USD', {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

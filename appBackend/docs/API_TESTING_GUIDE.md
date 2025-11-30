@@ -26,7 +26,7 @@
 
 **Get Driver Profile**
 ```bash
-curl -X GET http://localhost:3000/api/driver/profile \
+curl -X GET https://api.cloudnexus.biz:3000/api/driver/profile \
   -H "Authorization: Bearer <jwt_token>"
 ```
 
@@ -34,7 +34,7 @@ curl -X GET http://localhost:3000/api/driver/profile \
 
 **Go Online**
 ```bash
-curl -X POST http://localhost:3000/api/driver/status \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/status \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{"isOnline": true}'
@@ -42,7 +42,7 @@ curl -X POST http://localhost:3000/api/driver/status \
 
 **Go Offline**
 ```bash
-curl -X POST http://localhost:3000/api/driver/status \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/status \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{"isOnline": false}'
@@ -52,7 +52,7 @@ curl -X POST http://localhost:3000/api/driver/status \
 
 **Update Driver Location**
 ```bash
-curl -X POST http://localhost:3000/api/driver/location \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/location \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -69,7 +69,7 @@ curl -X POST http://localhost:3000/api/driver/location \
 
 **Create Ride Request (Customer)**
 ```bash
-curl -X POST http://localhost:3000/api/ride-requests \
+curl -X POST https://api.cloudnexus.biz:3000/api/ride-requests \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -91,19 +91,19 @@ curl -X POST http://localhost:3000/api/ride-requests \
 
 **Get Nearby Requests (Driver)**
 ```bash
-curl -X GET "http://localhost:3000/api/driver/nearby-requests?radius=5" \
+curl -X GET "https://api.cloudnexus.biz:3000/api/driver/nearby-requests?radius=5" \
   -H "Authorization: Bearer <jwt_token>"
 ```
 
 **Accept Ride Request (Driver)**
 ```bash
-curl -X POST http://localhost:3000/api/driver/accept-request/<request_id> \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/accept-request/<request_id> \
   -H "Authorization: Bearer <jwt_token>"
 ```
 
 **Reject Ride Request (Driver)**
 ```bash
-curl -X POST http://localhost:3000/api/driver/reject-request/<request_id> \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/reject-request/<request_id> \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{"reason": "Too far from current location"}'
@@ -113,13 +113,13 @@ curl -X POST http://localhost:3000/api/driver/reject-request/<request_id> \
 
 **Get Active Ride (Driver)**
 ```bash
-curl -X GET http://localhost:3000/api/driver/active-ride \
+curl -X GET https://api.cloudnexus.biz:3000/api/driver/active-ride \
   -H "Authorization: Bearer <jwt_token>"
 ```
 
 **Update Ride Status**
 ```bash
-curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/status \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/ride/<ride_id>/status \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{"status": "IN_PROGRESS"}'
@@ -127,7 +127,7 @@ curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/status \
 
 **Add Ride Location Update**
 ```bash
-curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/location \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/ride/<ride_id>/location \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -143,7 +143,7 @@ curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/location \
 
 **Rate Ride (Driver)**
 ```bash
-curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/rate \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/ride/<ride_id>/rate \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -154,7 +154,7 @@ curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/rate \
 
 **Rate Ride (Customer)**
 ```bash
-curl -X POST http://localhost:3000/api/ride-requests/ride/<ride_id>/rate \
+curl -X POST https://api.cloudnexus.biz:3000/api/ride-requests/ride/<ride_id>/rate \
   -H "Authorization: Bearer <jwt_token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -167,13 +167,13 @@ curl -X POST http://localhost:3000/api/ride-requests/ride/<ride_id>/rate \
 
 **Get Driver Statistics**
 ```bash
-curl -X GET http://localhost:3000/api/driver/stats \
+curl -X GET https://api.cloudnexus.biz:3000/api/driver/stats \
   -H "Authorization: Bearer <jwt_token>"
 ```
 
 **Get Customer Ride History**
 ```bash
-curl -X GET "http://localhost:3000/api/ride-requests/customer/history?limit=10" \
+curl -X GET "https://api.cloudnexus.biz:3000/api/ride-requests/customer/history?limit=10" \
   -H "Authorization: Bearer <jwt_token>"
 ```
 
@@ -187,7 +187,7 @@ Create a new collection in Postman and import the following requests:
 
 #### Environment Variables
 ```
-BASE_URL: http://localhost:3000/api
+BASE_URL: https://api.cloudnexus.biz:3000/api
 JWT_TOKEN: <your_jwt_token>
 ```
 
@@ -285,7 +285,7 @@ Body (raw JSON):
 
 1. **Driver goes online**
    ```bash
-   curl -X POST http://localhost:3000/api/driver/status \
+   curl -X POST https://api.cloudnexus.biz:3000/api/driver/status \
      -H "Authorization: Bearer <driver_token>" \
      -H "Content-Type: application/json" \
      -d '{"isOnline": true}'
@@ -293,7 +293,7 @@ Body (raw JSON):
 
 2. **Customer creates ride request**
    ```bash
-   curl -X POST http://localhost:3000/api/ride-requests \
+   curl -X POST https://api.cloudnexus.biz:3000/api/ride-requests \
      -H "Authorization: Bearer <customer_token>" \
      -H "Content-Type: application/json" \
      -d '{
@@ -314,19 +314,19 @@ Body (raw JSON):
 
 3. **Driver gets nearby requests**
    ```bash
-   curl -X GET "http://localhost:3000/api/driver/nearby-requests?radius=5" \
+   curl -X GET "https://api.cloudnexus.biz:3000/api/driver/nearby-requests?radius=5" \
      -H "Authorization: Bearer <driver_token>"
    ```
 
 4. **Driver accepts request**
    ```bash
-   curl -X POST http://localhost:3000/api/driver/accept-request/<request_id> \
+   curl -X POST https://api.cloudnexus.biz:3000/api/driver/accept-request/<request_id> \
      -H "Authorization: Bearer <driver_token>"
    ```
 
 5. **Driver updates ride status**
    ```bash
-   curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/status \
+   curl -X POST https://api.cloudnexus.biz:3000/api/driver/ride/<ride_id>/status \
      -H "Authorization: Bearer <driver_token>" \
      -H "Content-Type: application/json" \
      -d '{"status": "IN_PROGRESS"}'
@@ -334,7 +334,7 @@ Body (raw JSON):
 
 6. **Driver completes ride**
    ```bash
-   curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/status \
+   curl -X POST https://api.cloudnexus.biz:3000/api/driver/ride/<ride_id>/status \
      -H "Authorization: Bearer <driver_token>" \
      -H "Content-Type: application/json" \
      -d '{"status": "COMPLETED"}'
@@ -343,13 +343,13 @@ Body (raw JSON):
 7. **Both parties rate the ride**
    ```bash
    # Driver rates customer
-   curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/rate \
+   curl -X POST https://api.cloudnexus.biz:3000/api/driver/ride/<ride_id>/rate \
      -H "Authorization: Bearer <driver_token>" \
      -H "Content-Type: application/json" \
      -d '{"rating": 5, "review": "Great customer!"}'
    
    # Customer rates driver
-   curl -X POST http://localhost:3000/api/ride-requests/ride/<ride_id>/rate \
+   curl -X POST https://api.cloudnexus.biz:3000/api/ride-requests/ride/<ride_id>/rate \
      -H "Authorization: Bearer <customer_token>" \
      -H "Content-Type: application/json" \
      -d '{"rating": 5, "review": "Excellent driver!"}'
@@ -359,13 +359,13 @@ Body (raw JSON):
 
 1. **Invalid token**
    ```bash
-   curl -X GET http://localhost:3000/api/driver/profile \
+   curl -X GET https://api.cloudnexus.biz:3000/api/driver/profile \
      -H "Authorization: Bearer invalid_token"
    ```
 
 2. **Missing required fields**
    ```bash
-   curl -X POST http://localhost:3000/api/ride-requests \
+   curl -X POST https://api.cloudnexus.biz:3000/api/ride-requests \
      -H "Authorization: Bearer <jwt_token>" \
      -H "Content-Type: application/json" \
      -d '{}'
@@ -373,7 +373,7 @@ Body (raw JSON):
 
 3. **Invalid ride status**
    ```bash
-   curl -X POST http://localhost:3000/api/driver/ride/<ride_id>/status \
+   curl -X POST https://api.cloudnexus.biz:3000/api/driver/ride/<ride_id>/status \
      -H "Authorization: Bearer <jwt_token>" \
      -H "Content-Type: application/json" \
      -d '{"status": "INVALID_STATUS"}'
@@ -448,7 +448,7 @@ Body (raw JSON):
 4. **Network Issues**
    ```bash
    # Test server connectivity
-   curl -I http://localhost:3000/api/health
+   curl -I https://api.cloudnexus.biz:3000/api/health
    ```
 
 ---
@@ -462,13 +462,13 @@ Body (raw JSON):
 ab -n 100 -c 10 -H "Authorization: Bearer <jwt_token>" \
    -H "Content-Type: application/json" \
    -p status.json \
-   http://localhost:3000/api/driver/status
+   https://api.cloudnexus.biz:3000/api/driver/status
 
 # Test location updates
 ab -n 1000 -c 50 -H "Authorization: Bearer <jwt_token>" \
    -H "Content-Type: application/json" \
    -p location.json \
-   http://localhost:3000/api/driver/location
+   https://api.cloudnexus.biz:3000/api/driver/location
 ```
 
 ### Stress Testing
@@ -476,7 +476,7 @@ ab -n 1000 -c 50 -H "Authorization: Bearer <jwt_token>" \
 ```bash
 # Test concurrent ride requests
 for i in {1..50}; do
-  curl -X POST http://localhost:3000/api/ride-requests \
+  curl -X POST https://api.cloudnexus.biz:3000/api/ride-requests \
     -H "Authorization: Bearer <jwt_token>" \
     -H "Content-Type: application/json" \
     -d '{

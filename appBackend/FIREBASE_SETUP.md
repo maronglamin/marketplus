@@ -29,7 +29,7 @@ Create a `.env` file in the `appBackend` directory with the following variables:
 
 ```env
 # Database
-DATABASE_URL="postgresql://username:password@localhost:5432/snap"
+DATABASE_URL="postgresql://username:password@api.cloudnexus.biz:5432/snap"
 
 # JWT Secret
 JWT_SECRET="your-jwt-secret-key-here"
@@ -88,7 +88,7 @@ The notification service will automatically check if Firebase is configured. If 
 You can test the notification system using the test endpoint:
 
 ```bash
-curl -X POST http://localhost:3000/api/notifications/test \
+curl -X POST https://api.cloudnexus.biz:3000/api/notifications/test \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{

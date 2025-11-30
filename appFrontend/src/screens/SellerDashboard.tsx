@@ -88,11 +88,8 @@ export function SellerDashboard() {
         setRefreshing(true)
       }
 
-      // Check token and KYC status in parallel
-      const [storedToken, kycResponse] = await Promise.all([
-        AsyncStorage.getItem('token'),
-        kycService.getKycStatus()
-      ]);
+      // Check token first
+      const storedToken = await AsyncStorage.getItem('token')
 
       if (!storedToken) {
         console.log('No token found')
@@ -100,7 +97,14 @@ export function SellerDashboard() {
         return
       }
 
-      setKycStatus(kycResponse)
+      // If user is an active sales rep, fetch parent's KYC status instead
+      if (salesRepStatus?.status === 'ACTIVE' && salesRepStatus.parentSellerId) {
+        const parentKyc = await kycService.getKycStatusByUser(salesRepStatus.parentSellerId)
+        setKycStatus(parentKyc)
+      } else {
+        const kycResponse = await kycService.getKycStatus()
+        setKycStatus(kycResponse)
+      }
     } catch (error) {
       console.error('Error checking KYC status:', error)
       if (axios.isAxiosError(error) && error.response?.status === 404) {
@@ -114,7 +118,7 @@ export function SellerDashboard() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [salesRepStatus?.status, salesRepStatus?.parentSellerId])
 
   const checkSalesRepStatus = useCallback(async () => {
     const currentUserId = await getCurrentUserFromToken()
@@ -129,15 +133,14 @@ export function SellerDashboard() {
       if (isSalesRep && salesRepData && salesRepData.status === 'ACTIVE' && salesRepData.userId === currentUserId) {
         console.log('User is an active sales rep:', salesRepData)
         setSalesRepStatus(salesRepData)
-        // Sales reps don't need their own KYC, they inherit access from parent
-        // Set a mock KYC status to allow dashboard access
-        setKycStatus({
-          status: 'APPROVED',
-          id: 'sales-rep-inherited',
-          userId: currentUserId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        })
+        // Fetch parent seller's KYC to determine access (no mock status)
+        try {
+          const parentKyc = await kycService.getKycStatusByUser(salesRepData.parentSellerId)
+          setKycStatus(parentKyc)
+        } catch (err) {
+          console.error('Error fetching parent KYC for sales rep:', err)
+          setKycStatus(null)
+        }
       } else {
         console.log('User is not an active sales rep or user ID mismatch')
         setSalesRepStatus(null)
@@ -497,8 +500,8 @@ export function SellerDashboard() {
     )
   }
 
-  // Show dashboard if KYC is approved OR user is an active sales rep
-  const isApproved = kycStatus?.status === 'APPROVED' || salesRepStatus?.status === 'ACTIVE'
+  // Only show dashboard if KYC (own or parent's when sales rep) is APPROVED
+  const isApproved = kycStatus?.status === 'APPROVED'
   console.log('Dashboard access check:', {
     kycStatus: kycStatus?.status,
     salesRepStatus: salesRepStatus?.status,

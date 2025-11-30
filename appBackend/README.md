@@ -38,7 +38,7 @@ Create a `.env` file in the root directory with the following variables:
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/snap?schema=public"
+DATABASE_URL="postgresql://user:password@api.cloudnexus.biz:5432/snap?schema=public"
 
 # JWT
 JWT_SECRET="your-super-secret-jwt-key"

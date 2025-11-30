@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { X, CreditCard, Smartphone, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { paymentService, PaymentRequest } from '../api/paymentService';
 import YonnaQRPaymentModal from './YonnaQRPaymentModal';
+import WaveQRPaymentModal from './WaveQRPaymentModal';
+import { waveGambiaPaymentService } from '../api/waveGambiaPayment';
+import { getApi } from '../api/config';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -42,6 +45,9 @@ export function PaymentModal({
   const [error, setError] = useState<string | null>(null);
   const [paymentData, setPaymentData] = useState<any>(null);
   const [showYonnaQR, setShowYonnaQR] = useState(false);
+  const [showWaveQR, setShowWaveQR] = useState(false);
+  const [waveSessionId, setWaveSessionId] = useState<string | null>(null);
+  const [wavePaymentUrl, setWavePaymentUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -55,6 +61,29 @@ export function PaymentModal({
     try {
       setPaymentStatus('processing');
       setError(null);
+
+      // Wave: short-circuit to Wave checkout + QR flow when selected under Mobile Wallet
+      if (paymentMethod.type === 'MOBILE_MONEY' && (paymentMethod.provider || '').toLowerCase().includes('wave')) {
+        try {
+          const res = await waveGambiaPaymentService.processPayment({
+            amount,
+            currency,
+            description: description || `Payment for Order ${orderId}`,
+            orderId
+          });
+          if (res.success && res.data?.waveLaunchUrl && res.data.sessionId) {
+            setWaveSessionId(res.data.sessionId);
+            setWavePaymentUrl(res.data.waveLaunchUrl);
+            setShowWaveQR(true);
+            return;
+          }
+          throw new Error(res.message || (res as any)?.error || 'Failed to create Wave checkout session');
+        } catch (e: any) {
+          setError(e?.message || 'Failed to start Wave payment.');
+          setPaymentStatus('error');
+          return;
+        }
+      }
 
       const paymentRequest: PaymentRequest = {
         amount,
@@ -292,6 +321,37 @@ export function PaymentModal({
           // keep modal open; optionally surface error
           console.warn('Yonna payment failed:', msg);
         }}
+      />
+    )}
+    {showWaveQR && waveSessionId && (
+      <WaveQRPaymentModal
+        isOpen={showWaveQR}
+        onClose={() => setShowWaveQR(false)}
+        sessionId={waveSessionId}
+        paymentUrl={wavePaymentUrl || ''}
+        amount={amount}
+        currency={currency}
+        onCompleted={async ({ sessionId, transactionId }) => {
+          try {
+            await getApi().post('/payments/external-success', {
+              provider: 'wave_gambia',
+              transactionReference: transactionId || sessionId,
+              orderId,
+              currencyCode: currency,
+            });
+          } catch (e) {
+            // ignore and continue
+          } finally {
+            setShowWaveQR(false);
+            onPaymentSuccess({
+              transactionId: transactionId || sessionId,
+              amount,
+              currency,
+              paymentMethod: paymentMethod.provider
+            });
+          }
+        }}
+        onFailed={() => {}}
       />
     )}
     </>

@@ -17,7 +17,7 @@ export interface AuthError {
 export const checkUserExists = async (phoneNumber: string): Promise<{ exists: boolean; isRegistered: boolean; user?: any }> => {
   try {
     console.log('Checking if user exists for:', phoneNumber);
-    console.log('API Base URL:', process.env.REACT_APP_API_URL || 'http://172.20.10.3:3000/api');
+    console.log('API Base URL:', process.env.REACT_APP_API_URL || 'https://api.cloudnexus.biz:3000/api');
     
     const api = getApi();
     console.log('Making request to:', `${api.defaults.baseURL}/auth/check-user`);

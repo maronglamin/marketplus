@@ -6,6 +6,10 @@ export interface WaveCheckoutSessionRequest {
   description?: string;
   orderId?: string;
   restrictPayerMobile?: string;
+  successUrl?: string;
+  cancelUrl?: string;
+  returnUrl?: string;
+  callbackUrl?: string;
 }
 
 export interface WaveCheckoutSessionResponse {

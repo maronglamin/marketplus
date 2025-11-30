@@ -68,6 +68,7 @@ export class WaveWebhookController {
         'PENDING';
 
       if (waveSessionId || transactionId) {
+        // Update status on any matching external transactions
         await prisma.externalTransaction.updateMany({
           where: {
             gatewayProvider: 'wave_gambia',
@@ -83,6 +84,69 @@ export class WaveWebhookController {
             } as any,
           },
         });
+
+        // If payment succeeded/complete, ensure a 1% FEE transaction exists
+        if (mapped === 'SUCCESS') {
+          // Fetch the original (latest) external transaction to derive amounts and linkage
+          const original = await prisma.externalTransaction.findFirst({
+            where: {
+              gatewayProvider: 'wave_gambia',
+              OR: [
+                { gatewayTransactionId: transactionId || '' },
+                { gatewayResponse: { path: ['waveSessionId'], equals: waveSessionId || '' } as any },
+              ],
+              transactionType: 'ORIGINAL',
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (original) {
+            // Check if a fee transaction is already present for this appTransactionId
+            const existingFee = await prisma.externalTransaction.findFirst({
+              where: {
+                gatewayProvider: 'wave_gambia',
+                transactionType: 'FEE',
+                appTransactionId: original.appTransactionId,
+              },
+            });
+            if (!existingFee) {
+              const percent = 0.01;
+              const baseAmount = Number(original.amount || 0);
+              const currencyCode = (original.currencyCode || 'GMD').toUpperCase();
+              const zeroDecimalCurrencies = ['jpy', 'bif', 'clp', 'djf', 'gnf', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
+              const isZero = zeroDecimalCurrencies.includes(currencyCode.toLowerCase());
+              const calc = baseAmount * percent;
+              const waveFee = isZero ? Math.round(calc) : Math.round(calc * 100) / 100;
+              await prisma.externalTransaction.create({
+                data: {
+                  orderId: original.orderId || null,
+                  rentalRequestId: (original as any).rentalRequestId || null,
+                  rideRequestId: (original as any).rideRequestId || null,
+                  customerId: original.customerId || null,
+                  sellerId: original.sellerId || null,
+                  gatewayProvider: 'wave_gambia',
+                  gatewayTransactionId: `${original.gatewayTransactionId || transactionId}-fee`,
+                  paymentReference: original.paymentReference || (transactionId || ''),
+                  appTransactionId: original.appTransactionId,
+                  appService: original.appService,
+                  transactionType: 'FEE',
+                  amount: waveFee,
+                  currencyCode,
+                  gatewayChargeFees: waveFee,
+                  processedAmount: 0,
+                  paidThroughGateway: true,
+                  gatewayResponse: {
+                    originalReference: original.gatewayTransactionId || transactionId,
+                    percentage: percent,
+                    calculated: waveFee,
+                    webhookDerived: true,
+                  } as any,
+                  status: 'SUCCESS',
+                  processedAt: new Date(),
+                },
+              });
+            }
+          }
+        }
       }
 
       res.status(200).json({ success: true });

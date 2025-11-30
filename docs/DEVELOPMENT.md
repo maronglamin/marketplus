@@ -4,8 +4,8 @@ This document explains how to run the marketplace application in development mod
 
 ## Port Configuration
 
-- **Backend API**: Port 3000 (`http://localhost:3000`)
-- **Frontend Web App**: Port 8000 (`http://localhost:8000`)
+- **Backend API**: Port 3000 (`https://api.cloudnexus.biz:3000`)
+- **Frontend Web App**: Port 8000 (`https://api.cloudnexus.biz:8000`)
 
 ## Quick Start
 
@@ -39,9 +39,9 @@ npm start
 
 ## Access URLs
 
-- **Frontend**: http://localhost:8000
-- **Backend API**: http://localhost:3000
-- **API Documentation**: http://localhost:3000/api-docs (if available)
+- **Frontend**: https://api.cloudnexus.biz:8000
+- **Backend API**: https://api.cloudnexus.biz:3000
+- **API Documentation**: https://api.cloudnexus.biz:3000/api-docs (if available)
 
 ## Configuration
 
@@ -54,7 +54,7 @@ The frontend is configured to run on port 8000 through:
 The backend runs on port 3000 (default Node.js/Express port)
 
 ### API Configuration
-The frontend automatically connects to the backend API at `http://localhost:3000/api` as configured in:
+The frontend automatically connects to the backend API at `https://api.cloudnexus.biz:3000/api` as configured in:
 - `src/config/api.ts`
 - `src/api/config.ts`
 
@@ -83,7 +83,7 @@ lsof -i :8000
 ## Development Features
 
 - **Hot Reload**: Both frontend and backend support hot reload during development
-- **CORS**: Backend is configured to allow requests from `http://localhost:8000`
+- **CORS**: Backend is configured to allow requests from `https://api.cloudnexus.biz:8000`
 - **Environment Variables**: Frontend uses environment variables for API configuration
 - **Cross-Platform**: Uses `cross-env` for consistent behavior across operating systems
 

@@ -173,7 +173,7 @@ AND /* your approval criteria */;
 ### 1. Test Rider Application
 ```bash
 # Create rider application
-curl -X POST http://localhost:3000/api/rider \
+curl -X POST https://api.cloudnexus.biz:3000/api/rider \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -199,14 +199,14 @@ WHERE userId = 'user123';
 ### 3. Test Driver Profile
 ```bash
 # Get driver profile (should work after approval)
-curl -X GET http://localhost:3000/api/driver/profile \
+curl -X GET https://api.cloudnexus.biz:3000/api/driver/profile \
   -H "Authorization: Bearer <token>"
 ```
 
 ### 4. Test Driver Status
 ```bash
 # Update driver status
-curl -X POST http://localhost:3000/api/driver/status \
+curl -X POST https://api.cloudnexus.biz:3000/api/driver/status \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"isOnline": true}'

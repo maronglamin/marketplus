@@ -18,10 +18,10 @@ export function getWebhookConfig(): WebhookConfig {
   const apiBaseUrl = process.env.API_BASE_URL;
   
   // Fallback: Use static domain
-  const fallbackUrl = 'http://api.cloudnexus.biz';
+  const fallbackUrl = 'https://api.cloudnexus.biz';
   
   // Development fallback
-  const devUrl = 'http://localhost:3000';
+  const devUrl = 'https://api.cloudnexus.biz:3000';
   
   // Determine the base URL to use
   let baseUrl: string;
@@ -48,7 +48,7 @@ export function getWebhookConfig(): WebhookConfig {
 export function getWebhookUrls() {
   const config = getWebhookConfig();
   const envUrl = process.env.API_BASE_URL;
-  const fallbackUrl = 'http://api.cloudnexus.biz';
+  const fallbackUrl = 'https://api.cloudnexus.biz';
   
   return {
     primary: envUrl ? `${envUrl}/api/payments/yonna-forex/webhook` : null,

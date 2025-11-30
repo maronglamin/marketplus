@@ -2,7 +2,7 @@
 
 ## Base URL
 ```
-http://localhost:3000/api
+https://api.cloudnexus.biz:3000/api
 ```
 
 ## Authentication

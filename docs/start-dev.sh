@@ -46,8 +46,8 @@ FRONTEND_PID=$!
 
 echo ""
 echo "✅ Both servers are starting..."
-echo "   Backend:  http://localhost:3000"
-echo "   Frontend: http://localhost:8000"
+echo "   Backend:  https://api.cloudnexus.biz:3000"
+echo "   Frontend: https://api.cloudnexus.biz:8000"
 echo ""
 echo "Press Ctrl+C to stop both servers"
 

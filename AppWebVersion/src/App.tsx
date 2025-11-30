@@ -24,6 +24,7 @@ import { SalesReps } from './pages/SalesReps';
 import { Products } from './pages/Products';
 import { Categories } from './pages/Categories';
 import { Orders } from './pages/Orders';
+import { ShoppingCart } from './pages/ShoppingCart';
 import { RevenueDetails } from './pages/RevenueDetails';
 import { TransactionHistory } from './pages/TransactionHistory';
 import { TransactionCurrencyOverview } from './pages/TransactionCurrencyOverview';
@@ -280,6 +281,18 @@ function App() {
                 <Header />
                 <main className="flex-1">
                   <Orders />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          <Route path="/shopping-cart" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1">
+                  <ShoppingCart />
                 </main>
                 <BottomNavigation />
               </div>

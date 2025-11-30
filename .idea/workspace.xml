@@ -7,40 +7,23 @@
     <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/AppWebVersion/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/App.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/AppWebVersion/src/api/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/api/auth.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/api/kyc.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/api/kyc.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/api/waveGambiaPayment.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/api/waveGambiaPayment.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/components/AddPaymentMethodModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/components/AddPaymentMethodModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/components/PaymentMethodModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/components/PaymentMethodModal.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/components/WelcomeBanner.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/components/WelcomeBanner.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/AppWebVersion/src/config/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/config/api.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/pages/SellerAddProduct.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/pages/SellerAddProduct.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/pages/Home.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/pages/Home.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/AppWebVersion/src/pages/SellerDashboard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/pages/SellerDashboard.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appBackend/prisma/schema.prisma" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/prisma/schema.prisma" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appBackend/src/controllers/YonnaForexWebhookController.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/controllers/YonnaForexWebhookController.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appBackend/src/controllers/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/controllers/auth.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/appBackend/src/controllers/salesRep.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/controllers/salesRep.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appBackend/src/controllers/settlement.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/controllers/settlement.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appBackend/src/routes/users.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/routes/users.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appBackend/src/services/riderService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/services/riderService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/.env" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/.env" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appBackend/src/routes/sellerKyc.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/routes/sellerKyc.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/appFrontend/app.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.config.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/appFrontend/eas.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/eas.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/metro.config.js" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/metro.config.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/package-lock.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/components/MobileWalletPicker.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/components/MobileWalletPicker.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/appFrontend/src/config/env.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/config/env.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/CustomerRides.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/CustomerRides.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/Home.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/Home.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/Login.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/Login.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/OrderDetails.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/OrderDetails.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/RentalDetail.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/RentalDetail.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/RentalRequest.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/RentalRequest.tsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/SellerDashboard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/SellerDashboard.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/ShoppingCart.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/ShoppingCart.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/account-settings/PaymentMethods.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/account-settings/PaymentMethods.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/add-product/ProductBasicInfo.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/add-product/ProductBasicInfo.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/add-product/ProductDescription.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/add-product/ProductDescription.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/add-product/ProductPricing.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/add-product/ProductPricing.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/transactions/RentalSettlementRequest.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/transactions/RentalSettlementRequest.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/transactions/RideSettlementRequest.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/transactions/RideSettlementRequest.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/services/settlementService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/services/settlementService.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/services/kycService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/services/kycService.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/MANUAL_YONNA_TESTING.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/MANUAL_YONNA_TESTING.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

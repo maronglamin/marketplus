@@ -858,6 +858,44 @@ router.post('/bulk-external-success', authenticate, async (req, res) => {
         });
         transactions.push(originalTx);
 
+        // Gateway fee (Wave: 1% fee). Create FEE transaction paid through gateway.
+        try {
+          const orderAmount = Number(order.totalAmount || 0);
+          const percent = 0.01; // 1%
+          const zeroDecimalCurrencies = ['jpy', 'bif', 'clp', 'djf', 'gnf', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
+          const isZero = zeroDecimalCurrencies.includes((currencyCode || '').toLowerCase());
+          const calc = orderAmount * percent;
+          const waveFee = isZero ? Math.round(calc) : Math.round(calc * 100) / 100;
+          const feeTx = await tx.externalTransaction.create({
+            data: {
+              orderId: order.id,
+              customerId: order.userId,
+              sellerId: order.sellerId,
+              gatewayProvider: provider,
+              gatewayTransactionId: `${transactionReference}-fee-${order.id}`,
+              paymentReference: transactionReference,
+              appTransactionId,
+              appService: 'ECOMMERCE',
+              transactionType: 'FEE',
+              amount: waveFee,
+              currencyCode: currencyCode.toUpperCase(),
+              gatewayChargeFees: waveFee,
+              processedAmount: 0,
+              paidThroughGateway: true,
+              gatewayResponse: {
+                originalReference: transactionReference,
+                percentage: percent,
+                calculated: waveFee,
+              } as any,
+              status: 'SUCCESS',
+              processedAt: new Date(),
+            },
+          });
+          transactions.push(feeTx);
+        } catch (e) {
+          console.warn('Wave fee transaction creation failed (bulk):', (e as any)?.message || e);
+        }
+
         // Service fee per order using UCP and provider
         const providerKey = provider.toLowerCase().includes('yonna')
           ? 'yonna'
@@ -918,6 +956,173 @@ router.post('/bulk-external-success', authenticate, async (req, res) => {
   }
 });
 
+// Single external payment success (e.g., Yonna/Wave for one order)
+router.post('/external-success', authenticate, async (req, res) => {
+  try {
+    const { provider, transactionReference, orderId, currencyCode } = req.body as {
+      provider: string;
+      transactionReference: string;
+      orderId: string;
+      currencyCode: string;
+    };
+    const userId = (req as any).user?.id;
+
+    if (!provider || !transactionReference || !orderId || !currencyCode) {
+      return res.status(400).json({ message: 'Missing provider, transactionReference, orderId, or currencyCode' });
+    }
+
+    const order = await prisma.orders.findUnique({
+      where: { id: orderId },
+    });
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    if (order.userId !== userId) {
+      return res.status(403).json({ message: 'Order does not belong to the authenticated user' });
+    }
+    if ((order.paymentStatus || '').toUpperCase() === 'PAID' || (order.status || '').toUpperCase() !== 'AUTHORIZED') {
+      return res.status(400).json({ message: 'Order not eligible for payment' });
+    }
+
+    const appTransactionId = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const currencyUpper = currencyCode.toUpperCase();
+    const amount = Number(order.totalAmount || 0);
+
+    const result = await prisma.$transaction(async tx => {
+      // Update order as paid/confirmed
+      const updatedOrder = await tx.orders.update({
+        where: { id: order.id },
+        data: {
+          paymentStatus: 'PAID',
+          status: 'CONFIRMED',
+          paymentReference: transactionReference,
+          paidAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // ORIGINAL transaction
+      const originalTx = await tx.externalTransaction.create({
+        data: {
+          orderId: order.id,
+          customerId: order.userId,
+          sellerId: order.sellerId,
+          gatewayProvider: provider,
+          gatewayTransactionId: transactionReference,
+          paymentReference: transactionReference,
+          appTransactionId,
+          appService: 'ECOMMERCE',
+          transactionType: 'ORIGINAL',
+          amount,
+          currencyCode: currencyUpper,
+          gatewayChargeFees: null,
+          processedAmount: null,
+          paidThroughGateway: true,
+          gatewayResponse: {
+            provider,
+            transactionReference,
+          } as any,
+          status: 'SUCCESS',
+          processedAt: new Date(),
+        },
+      });
+
+      // FEE transaction (Wave: 1% fee; if provider indicates wave)
+      try {
+        const isWave = provider.toLowerCase().includes('wave');
+        if (isWave) {
+          const percent = 0.01;
+          const zeroDecimalCurrencies = ['jpy', 'bif', 'clp', 'djf', 'gnf', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
+          const isZero = zeroDecimalCurrencies.includes(currencyUpper.toLowerCase());
+          const calc = amount * percent;
+          const waveFee = isZero ? Math.round(calc) : Math.round(calc * 100) / 100;
+          await tx.externalTransaction.create({
+            data: {
+              orderId: order.id,
+              customerId: order.userId,
+              sellerId: order.sellerId,
+              gatewayProvider: provider,
+              gatewayTransactionId: `${transactionReference}-fee`,
+              paymentReference: transactionReference,
+              appTransactionId,
+              appService: 'ECOMMERCE',
+              transactionType: 'FEE',
+              amount: waveFee,
+              currencyCode: currencyUpper,
+              gatewayChargeFees: waveFee,
+              processedAmount: 0,
+              paidThroughGateway: true,
+              gatewayResponse: {
+                originalReference: transactionReference,
+                percentage: percent,
+                calculated: waveFee,
+              } as any,
+              status: 'SUCCESS',
+              processedAt: new Date(),
+            },
+          });
+        }
+      } catch (e) {
+        console.warn('Wave fee transaction creation failed (single):', (e as any)?.message || e);
+      }
+
+      // SERVICE_FEE transaction via UCP
+      const providerKey = provider.toLowerCase().includes('yonna')
+        ? 'yonna'
+        : provider.toLowerCase().includes('wave')
+          ? 'wave_wallet'
+          : provider.toLowerCase();
+      const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } = await UCPService.calculateServiceFee(
+        providerKey,
+        amount,
+        currencyUpper
+      );
+      const serviceFeeTx = await tx.externalTransaction.create({
+        data: {
+          orderId: order.id,
+          customerId: order.userId,
+          sellerId: order.sellerId,
+          gatewayProvider: provider,
+          gatewayTransactionId: `${transactionReference}-servicefee`,
+          paymentReference: transactionReference,
+          appTransactionId,
+          appService: 'ECOMMERCE',
+          transactionType: TransactionType.SERVICE_FEE,
+          amount: serviceFeeAmount,
+          currencyCode: currencyUpper,
+          gatewayChargeFees: null,
+          processedAmount: 0,
+          paidThroughGateway: false,
+          gatewayResponse: {
+            originalReference: transactionReference,
+            serviceFeeConfig: serviceFeeConfig || null,
+            serviceFeePercentage,
+            serviceFeeAmount,
+          } as any,
+          status: 'SUCCESS',
+          processedAt: new Date(),
+        },
+      });
+
+      return { updatedOrder, originalTx, serviceFeeTx };
+    });
+
+    res.json({
+      success: true,
+      order: {
+        id: result.updatedOrder.id,
+        paymentStatus: result.updatedOrder.paymentStatus,
+        status: result.updatedOrder.status,
+        paidAt: result.updatedOrder.paidAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error processing external payment success:', error);
+    res.status(500).json({
+      message: error.message || 'Failed to process external payment success',
+    });
+  }
+});
 // Helper function to calculate Stripe fees
 function calculateStripeFees(amount: number, currency: string): number {
   // Stripe fees: 2.9% + 30 cents for most currencies
