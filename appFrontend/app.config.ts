@@ -45,7 +45,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: './assets/adaptive-icon-foreground.png',
       backgroundColor: '#ffffff'
     },
-    package: 'com.snap.app',
+    package: 'biz.cloudnexus.snap.app',
     versionCode: 2,
     usesCleartextTraffic: true,
     config: {

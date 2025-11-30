@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.snap.app",
+      "bundleIdentifier": "biz.cloudnexus.snap.app",
       "jsEngine": "hermes",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app needs access to location to show your current location on the map and provide ride services.",
@@ -29,7 +29,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.snap.app",
+      "package": "biz.cloudnexus.snap.app",
       "jsEngine": "hermes",
       "permissions": [
         "ACCESS_FINE_LOCATION",

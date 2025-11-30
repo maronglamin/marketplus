@@ -6,25 +6,12 @@
   <component name="ChangeListManager">
     <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/App.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/App.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/api/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/api/auth.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/api/kyc.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/api/kyc.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/api/waveGambiaPayment.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/api/waveGambiaPayment.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/components/AddPaymentMethodModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/components/AddPaymentMethodModal.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/components/PaymentMethodModal.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/components/PaymentMethodModal.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/components/WelcomeBanner.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/components/WelcomeBanner.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/config/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/config/api.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/pages/Home.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/pages/Home.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/src/pages/SellerDashboard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/src/pages/SellerDashboard.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appBackend/src/controllers/salesRep.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/controllers/salesRep.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appBackend/src/routes/sellerKyc.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appBackend/src/routes/sellerKyc.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/app/build.gradle" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/java/com/snap/app/MainActivity.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/java/com/snap/app/MainApplication.kt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/android/gradle.properties" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/gradle.properties" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/appFrontend/app.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.config.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/eas.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/eas.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/config/env.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/config/env.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/screens/SellerDashboard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/screens/SellerDashboard.tsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/services/kycService.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/services/kycService.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/MANUAL_YONNA_TESTING.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/MANUAL_YONNA_TESTING.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/app.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
