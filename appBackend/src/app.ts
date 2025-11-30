@@ -66,15 +66,35 @@ app.use(helmet({
   xssFilter: true
 }));
 
-// CORS configuration
-const corsOptions = {
-  origin: '*', // Temporarily allow all origins for development
+// CORS configuration (allow HTTPS + configurable allowlist)
+const envOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+const defaultOrigins = [
+  'https://api.cloudnexus.biz',
+  'http://api.cloudnexus.biz',
+  'https://207.154.220.128',
+  'http://207.154.220.128',
+  'https://snap.cloudnexus.biz',
+  'http://snap.cloudnexus.biz',
+  'https://snap-admin.cloudnexus.biz',
+  'http://snap-admin.cloudnexus.biz',
+];
+const allowedOrigins = envOrigins.length > 0 ? envOrigins : defaultOrigins;
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow mobile/native requests which often have no origin
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
-  maxAge: 86400 // 24 hours
-};
-app.use(cors(corsOptions));
+  maxAge: 86400
+}));
 
 // Request size limits
 // Wave webhook raw body parser must be before JSON parser
@@ -96,12 +116,7 @@ app.use((req, _res, next) => {
   next();
 });
 
-// allow cors for admin server orgin
-app.use(cors({
-  origin: ["http://207.154.220.128"],
-  methods: ["GET", "POST"],
-  credentials: true,
-}));
+// (CORS is configured above with an allowlist; remove per-origin duplicates)
 
 // Rate limiting - More generous limits to prevent customer frustration
 const limiter = rateLimit({

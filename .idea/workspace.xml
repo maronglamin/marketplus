@@ -5,13 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/app/build.gradle" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/java/com/snap/app/MainActivity.kt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/java/com/snap/app/MainApplication.kt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/android/gradle.properties" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/gradle.properties" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/app.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.config.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/app.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/asset-manifest.json" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/build/asset-manifest.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/build/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/css/main.b0ada4ce.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/css/main.b0ada4ce.css.map" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/js/main.3d684c42.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/js/main.3d684c42.js.LICENSE.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/js/main.3d684c42.js.map" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
