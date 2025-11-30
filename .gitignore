@@ -4,3 +4,4 @@ appBackend/uploads/
 .env
 .env.*
 !**/.env.example
+AppWebVersion/build/
