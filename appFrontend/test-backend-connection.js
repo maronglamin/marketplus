@@ -2,7 +2,7 @@ const axios = require('axios');
 
 // Test backend connection and user profile endpoint
 async function testBackendConnection() {
-  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.cloudnexus.biz:3000';
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.cloudnexus.biz';
   
   console.log('🧪 Testing Backend Connection...\n');
   console.log('📍 API URL:', API_URL);

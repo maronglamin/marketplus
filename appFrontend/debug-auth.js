@@ -5,7 +5,7 @@ const AsyncStorage = require('@react-native-async-storage/async-storage');
 async function debugAuth() {
   console.log('🔍 Debugging Authentication and Driver Profile...\n');
 
-  const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ? `${process.env.EXPO_PUBLIC_API_URL}/api` : 'https://api.cloudnexus.biz:3000/api';
+  const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ? `${process.env.EXPO_PUBLIC_API_URL}/api` : 'https://api.cloudnexus.biz';
   
   try {
     // Check stored token

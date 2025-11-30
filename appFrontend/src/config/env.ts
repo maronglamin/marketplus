@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 // Centralized environment configuration
 export const ENV_CONFIG = {
   // API Configuration
-  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'https://api.cloudnexus.biz:3000',
+  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'https://api.cloudnexus.biz',
   API_TIMEOUT: 30000,
   
   // Local IP for development (used for diagnostics only)

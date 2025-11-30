@@ -5,13 +5,12 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/asset-manifest.json" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/build/asset-manifest.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/build/index.html" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/css/main.b0ada4ce.css" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/css/main.b0ada4ce.css.map" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/js/main.3d684c42.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/js/main.3d684c42.js.LICENSE.txt" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/build/static/js/main.3d684c42.js.map" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/AppWebVersion/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/package.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/debug-auth.js" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/debug-auth.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/eas.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/eas.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/src/config/env.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/config/env.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/test-api-connection.js" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/test-api-connection.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/test-backend-connection.js" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/test-backend-connection.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
