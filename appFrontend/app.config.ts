@@ -46,7 +46,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: '#ffffff'
     },
     package: 'biz.cloudnexus.snap.app',
-    versionCode: 2,
+    versionCode: 3,
     usesCleartextTraffic: true,
     config: {
       googleMaps: {

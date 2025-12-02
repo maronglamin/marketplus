@@ -5,12 +5,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/AppWebVersion/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/AppWebVersion/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/debug-auth.js" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/debug-auth.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/app/build.gradle" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values/strings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/app/src/main/res/values/strings.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/android/settings.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/android/settings.gradle" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/app.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.config.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/appFrontend/app.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/appFrontend/eas.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/eas.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/src/config/env.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/src/config/env.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/test-api-connection.js" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/test-api-connection.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/test-backend-connection.js" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/test-backend-connection.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
