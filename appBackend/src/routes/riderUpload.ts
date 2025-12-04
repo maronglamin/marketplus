@@ -8,7 +8,7 @@ import sharp from 'sharp';
 const router = Router();
 
 // Ensure rider upload directory exists
-const uploadDir = path.join(__dirname, '../../uploads/riders/files');
+const uploadDir = path.join(process.cwd(), 'uploads/riders/files');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }

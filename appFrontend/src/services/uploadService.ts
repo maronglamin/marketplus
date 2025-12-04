@@ -2,7 +2,7 @@ import getApi from '../api/config';
 import axios, { AxiosProgressEvent } from 'axios';
 
 const MAX_RETRIES = 3;
-const UPLOAD_TIMEOUT = 30000; // Reduced from 60s to 30s for faster timeout
+const UPLOAD_TIMEOUT = 60000; // Increase timeout to 60s for large uploads
 const CHUNK_SIZE = 1024 * 1024; // 1MB chunks for better progress tracking
 
 export const uploadService = {
@@ -34,8 +34,9 @@ export const uploadService = {
               console.log(`Upload progress: ${percentCompleted}%`);
             }
           },
-          maxContentLength: 5 * 1024 * 1024, // 5MB max
-          maxBodyLength: 5 * 1024 * 1024, // 5MB max
+          // Allow larger images (RN adapter may ignore these, but keep for Node/web parity)
+          maxContentLength: 15 * 1024 * 1024, // 15MB max response
+          maxBodyLength: 15 * 1024 * 1024, // 15MB max request
         });
 
         if (!response.data || !response.data.url) {

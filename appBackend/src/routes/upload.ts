@@ -7,8 +7,8 @@ import sharp from 'sharp';
 
 const router = Router();
 
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, '../../uploads/products');
+// Ensure upload directory exists at project root (stable across dev/prod)
+const uploadDir = path.join(process.cwd(), 'uploads/products');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }

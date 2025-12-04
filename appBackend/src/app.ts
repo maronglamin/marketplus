@@ -102,8 +102,8 @@ app.use('/api/payments/wave-gambia/webhook', express.raw({ type: 'application/js
 app.use(express.json({ limit: '50mb' })); // Increased for image uploads
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve static files from a stable uploads directory at project root
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Request logging middleware
 app.use((req, _res, next) => {
