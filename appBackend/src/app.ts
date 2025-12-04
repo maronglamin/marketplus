@@ -32,6 +32,9 @@ import appVersionRoutes from './routes/appVersion';
 
 const app = express();
 
+// Trust the first proxy (e.g., Nginx) so req.ip and rate limiting work with X-Forwarded-For
+app.set('trust proxy', 1);
+
 // Get network interfaces
 const networkInterfaces = os.networkInterfaces();
 logger.info('Available network interfaces:', networkInterfaces);
