@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import WavePaymentService from '../services/WavePaymentService';
 
 const prisma = new PrismaClient();
 
@@ -76,8 +77,9 @@ export class WaveWebhookController {
           payload?.data?.client_reference,
           payload?.data?.object?.client_reference,
         ) || undefined;
-      const paymentStatus = payload?.payment_status; // processing | cancelled | succeeded
-      const checkoutStatus = payload?.checkout_status; // open | complete | expired
+      let paymentStatus = payload?.payment_status as string | undefined; // processing | cancelled | succeeded
+      let checkoutStatus = payload?.checkout_status as string | undefined; // open | complete | expired
+      let resolvedTransactionId: string | undefined = transactionId;
 
       const statusMap: Record<string, string> = {
         succeeded: 'SUCCESS',
@@ -87,29 +89,51 @@ export class WaveWebhookController {
         expired: 'FAILED',
         open: 'PENDING',
       };
-      const mapped =
+      let mapped =
         statusMap[paymentStatus as string] ||
         statusMap[checkoutStatus as string] ||
         'PENDING';
+
+      // If we couldn't determine status from payload, try fetching the session from Wave using the session id
+      if ((!paymentStatus && !checkoutStatus) && waveSessionId && mapped === 'PENDING') {
+        try {
+          const baseUrl = process.env.WAVE_API_BASE_URL || 'https://api.wave.com';
+          const bearer = process.env.WAVE_CHECKOUT_BEARER;
+          if (bearer) {
+            const waveApi = new WavePaymentService({ baseUrl, bearerToken: bearer });
+            const session = await waveApi.getCheckoutSession(waveSessionId);
+            paymentStatus = session?.payment_status || paymentStatus;
+            checkoutStatus = session?.checkout_status || checkoutStatus;
+            resolvedTransactionId = resolvedTransactionId || (session?.transaction_id || undefined);
+            // Recompute mapped status
+            mapped =
+              statusMap[paymentStatus as string] ||
+              statusMap[checkoutStatus as string] ||
+              'PENDING';
+          }
+        } catch (e) {
+          console.warn('Wave webhook: session fetch failed:', (e as any)?.message || e);
+        }
+      }
 
       // Log identifiers we received to help with integration issues
       try {
         console.log('Wave webhook ids:', {
           waveSessionId,
-          transactionId,
+          transactionId: resolvedTransactionId || transactionId,
           clientReference,
           paymentStatus,
           checkoutStatus,
         });
       } catch {}
 
-      if (waveSessionId || transactionId || clientReference) {
+      if (waveSessionId || resolvedTransactionId || clientReference) {
         // Update status on any matching external transactions
         await prisma.externalTransaction.updateMany({
           where: {
             gatewayProvider: 'wave_gambia',
             OR: [
-              ...(transactionId ? [{ gatewayTransactionId: transactionId }] : []),
+              ...(resolvedTransactionId ? [{ gatewayTransactionId: resolvedTransactionId }] : []),
               ...(waveSessionId ? [{ gatewayResponse: { path: ['waveSessionId'], equals: waveSessionId } as any }] : []),
               ...(clientReference ? [{ gatewayResponse: { path: ['clientReference'], equals: clientReference } as any }] : []),
             ] as any,
@@ -130,7 +154,7 @@ export class WaveWebhookController {
               where: {
                 gatewayProvider: 'wave_gambia',
                 OR: [
-                  ...(transactionId ? [{ gatewayTransactionId: transactionId }] : []),
+                  ...(resolvedTransactionId ? [{ gatewayTransactionId: resolvedTransactionId }] : []),
                   ...(waveSessionId ? [{ gatewayResponse: { path: ['waveSessionId'], equals: waveSessionId } as any }] : []),
                 ] as any,
                 transactionType: 'ORIGINAL',
@@ -175,8 +199,8 @@ export class WaveWebhookController {
                   customerId: (original.customerId ?? undefined) as any,
                   sellerId: (original.sellerId ?? undefined) as any,
                   gatewayProvider: 'wave_gambia',
-                  gatewayTransactionId: `${original.gatewayTransactionId || transactionId}-fee`,
-                  paymentReference: original.paymentReference || (transactionId || ''),
+                  gatewayTransactionId: `${original.gatewayTransactionId || resolvedTransactionId || 'unknown'}-fee`,
+                  paymentReference: original.paymentReference || (resolvedTransactionId || ''),
                   appTransactionId: original.appTransactionId,
                   appService: original.appService,
                   transactionType: 'FEE',
@@ -186,7 +210,7 @@ export class WaveWebhookController {
                   processedAmount: 0,
                   paidThroughGateway: true,
                   gatewayResponse: {
-                    originalReference: original.gatewayTransactionId || transactionId,
+                    originalReference: original.gatewayTransactionId || resolvedTransactionId,
                     percentage: percent,
                     calculated: waveFee,
                     webhookDerived: true,
@@ -211,7 +235,7 @@ export class WaveWebhookController {
                     data: {
                       paymentStatus: 'PAID',
                       status: 'CONFIRMED',
-                      paymentReference: original.gatewayTransactionId || transactionId || '',
+                      paymentReference: original.gatewayTransactionId || resolvedTransactionId || '',
                       paidAt: new Date(),
                       updatedAt: new Date(),
                     },

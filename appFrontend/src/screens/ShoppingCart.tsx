@@ -168,6 +168,12 @@ export function ShoppingCart() {
     }, [waveSessionId])
   );
 
+  useEffect(() => {
+    if (showPaymentModal && !loadingPaymentMethods && paymentMethods.length === 0) {
+      checkPaymentMethodsWithUserFeedback();
+    }
+  }, [showPaymentModal, loadingPaymentMethods, paymentMethods.length]);
+
   const loadOrders = async () => {
     try {
       setLoading(true);
@@ -740,9 +746,11 @@ export function ShoppingCart() {
             onPress={async () => {
               if (selectedCount === 0 || !selectedCurrencyCode) return;
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              await checkPaymentMethodsWithUserFeedback();
-              // Always open the modal; if no methods, user can click "Add More Payment Methods" inside
+              // Open modal immediately and load methods in the background
               setShowPaymentModal(true);
+              if (!loadingPaymentMethods) {
+                checkPaymentMethodsWithUserFeedback();
+              }
             }}
             disabled={selectedCount === 0 || !selectedCurrencyCode || loadingPaymentMethods}
           >
@@ -814,37 +822,50 @@ export function ShoppingCart() {
 
               <View style={{ paddingHorizontal: 24 }}>
                 <Text style={styles.availablePaymentMethodsTitle}>Available Payment Methods</Text>
-                {paymentMethods.map((method) => (
-                  <TouchableOpacity
-                    key={method.id}
-                    style={[
-                      styles.paymentMethodItem,
-                      selectedPaymentMethod === method.id && styles.selectedPaymentMethodItem,
-                      method.isDefault && styles.defaultPaymentMethodItem,
-                    ]}
-                    onPress={() => handlePaymentMethodSelect(method.id)}
-                  >
-                    <View style={styles.paymentMethodItemIcon}>
-                      {renderPaymentMethodIcon(method)}
-                    </View>
-                    <View style={styles.paymentMethodItemDetails}>
-                      <View style={styles.paymentMethodItemHeader}>
-                        <Text style={styles.paymentMethodItemProvider}>{getPaymentMethodDisplayName(method)}</Text>
-                        <View style={styles.paymentMethodItemMeta}>
-                          {method.isDefault && (
-                            <View style={styles.defaultBadge}>
-                              <Text style={styles.defaultBadgeText}>Default</Text>
-                            </View>
-                          )}
-                          <View style={styles.paymentMethodItemArrow}>
-                            <Ionicons name="chevron-forward" size={16} color="#2563EB" />
+            {loadingPaymentMethods ? (
+              <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+                <ActivityIndicator size="small" color="#2563EB" />
+                <Text style={{ marginTop: 8, color: '#6B7280' }}>Loading payment methods...</Text>
+              </View>
+            ) : paymentMethods.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+                <Text style={{ color: '#6B7280', textAlign: 'center' }}>
+                  No payment methods available. Add one to continue.
+                </Text>
+              </View>
+            ) : (
+              paymentMethods.map((method) => (
+                <TouchableOpacity
+                  key={method.id}
+                  style={[
+                    styles.paymentMethodItem,
+                    selectedPaymentMethod === method.id && styles.selectedPaymentMethodItem,
+                    method.isDefault && styles.defaultPaymentMethodItem,
+                  ]}
+                  onPress={() => handlePaymentMethodSelect(method.id)}
+                >
+                  <View style={styles.paymentMethodItemIcon}>
+                    {renderPaymentMethodIcon(method)}
+                  </View>
+                  <View style={styles.paymentMethodItemDetails}>
+                    <View style={styles.paymentMethodItemHeader}>
+                      <Text style={styles.paymentMethodItemProvider}>{getPaymentMethodDisplayName(method)}</Text>
+                      <View style={styles.paymentMethodItemMeta}>
+                        {method.isDefault && (
+                          <View style={styles.defaultBadge}>
+                            <Text style={styles.defaultBadgeText}>Default</Text>
                           </View>
+                        )}
+                        <View style={styles.paymentMethodItemArrow}>
+                          <Ionicons name="chevron-forward" size={16} color="#2563EB" />
                         </View>
                       </View>
-                      <Text style={styles.paymentMethodItemAccount}>{method.accountName}</Text>
                     </View>
-                  </TouchableOpacity>
-                ))}
+                    <Text style={styles.paymentMethodItemAccount}>{method.accountName}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
               </View>
             </ScrollView>
 
