@@ -142,7 +142,7 @@ export class WaveWebhookController {
 
       if (waveSessionId || resolvedTransactionId || clientReference) {
         // Update status on any matching external transactions
-        await prisma.externalTransaction.updateMany({
+        const updateRes = await prisma.externalTransaction.updateMany({
           where: {
             gatewayProvider: 'wave_gambia',
             OR: [
@@ -158,11 +158,14 @@ export class WaveWebhookController {
             } as any,
           },
         });
+        try {
+          console.log('Wave webhook: updated externalTransaction rows:', updateRes?.count || 0);
+        } catch {}
 
         // If payment succeeded/complete, ensure a 1% FEE transaction exists
         if (mapped === 'SUCCESS') {
           // Fetch the original (latest) external transaction to derive amounts and linkage
-          const original =
+          let original =
             (await prisma.externalTransaction.findFirst({
               where: {
                 gatewayProvider: 'wave_gambia',
@@ -187,6 +190,70 @@ export class WaveWebhookController {
                   orderBy: { createdAt: 'desc' },
                 })
               : null);
+          if (!original && clientReference) {
+            // Fallback resolution via domain entities referenced by clientReference
+            try {
+              // Try order by id or orderNumber
+              const order =
+                (await prisma.orders.findUnique({ where: { id: clientReference } })) ||
+                (await prisma.orders.findUnique({ where: { orderNumber: clientReference } as any }).catch(() => null as any));
+              if (order) {
+                original = await prisma.externalTransaction.findFirst({
+                  where: {
+                    gatewayProvider: 'wave_gambia',
+                    transactionType: 'ORIGINAL',
+                    orderId: order.id,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                });
+              }
+            } catch {}
+          }
+          if (!original && clientReference) {
+            // Try rental by id
+            try {
+              const rental = await prisma.rentalRequest.findUnique({ where: { id: clientReference } });
+              if (rental) {
+                original = await prisma.externalTransaction.findFirst({
+                  where: {
+                    gatewayProvider: 'wave_gambia',
+                    transactionType: 'ORIGINAL',
+                    rentalRequestId: rental.id,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                });
+              }
+            } catch {}
+          }
+          if (!original && clientReference) {
+            // Try rideRequest by id or requestId
+            try {
+              const rideReq = await prisma.rideRequest.findFirst({
+                where: {
+                  OR: [{ id: clientReference } as any, { requestId: clientReference } as any],
+                },
+                select: { id: true },
+              });
+              if (rideReq) {
+                original = await prisma.externalTransaction.findFirst({
+                  where: {
+                    gatewayProvider: 'wave_gambia',
+                    transactionType: 'ORIGINAL',
+                    rideRequestId: rideReq.id,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                });
+              }
+            } catch {}
+          }
+          try {
+            console.log('Wave webhook: original resolved:', {
+              found: !!original,
+              by: original
+                ? original.gatewayTransactionId
+                : 'none',
+            });
+          } catch {}
           if (original) {
             // Check if a fee transaction is already present for this appTransactionId
             const existingFee = await prisma.externalTransaction.findFirst({
