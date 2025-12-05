@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  RefreshControl,
   TouchableOpacity,
   ActivityIndicator,
   StatusBar,
@@ -73,6 +74,7 @@ export function ShoppingCart() {
   const [actioningOrderId, setActioningOrderId] = useState<string | null>(null);
   const yonnaForexService = new YonnaForexPaymentService();
   const wavePaymentService = new WavePaymentService();
+  const [refreshing, setRefreshing] = useState(false);
 
   const pendingOrders = useMemo(() => {
     return orders.filter(o => o.status?.toLowerCase() === 'authorized' && (o.paymentStatus || '').toLowerCase() !== 'paid');
@@ -132,6 +134,15 @@ export function ShoppingCart() {
     loadOrders();
   }, []);
 
+  const onRefresh = async () => {
+    try {
+      setRefreshing(true);
+      await loadOrders();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useFocusEffect(
     React.useCallback(() => {
       (async () => {
@@ -143,7 +154,9 @@ export function ShoppingCart() {
             const paymentStatus = data?.payment_status || data?.data?.payment_status || data?.paymentStatus;
             const checkoutStatus = data?.checkout_status || data?.data?.checkout_status || data?.checkoutStatus;
             const transactionId = data?.transaction_id || data?.data?.transaction_id || data?.transactionId || waveSessionId;
-            if (String(paymentStatus).toUpperCase() === 'PAID' || String(checkoutStatus).toUpperCase() === 'COMPLETED') {
+            const paidByStatus = ['SUCCEEDED', 'SUCCESS', 'PAID'].includes(String(paymentStatus || '').toUpperCase());
+            const paidByCheckout = ['COMPLETE', 'COMPLETED', 'SUCCESS'].includes(String(checkoutStatus || '').toUpperCase());
+            if (paidByStatus || paidByCheckout) {
               try {
                 await api.post('/api/payments/bulk-external-success', {
                   provider: 'wave_gambia',
@@ -544,7 +557,14 @@ export function ShoppingCart() {
 
       {/* Pay Tab Content */}
       {activeTab === 'pay' && (
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 120 }}>
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 120 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           {pendingOrders.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="cart-outline" size={48} color="#9CA3AF" />
@@ -659,7 +679,14 @@ export function ShoppingCart() {
 
       {/* Pending Orders Tab Content */}
       {activeTab === 'orders' && (
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 40 }}>
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 16) + 40 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
           {pendingBuyerOrders.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Ionicons name="time-outline" size={48} color="#9CA3AF" />
