@@ -78,7 +78,7 @@ export class WaveWebhookController {
             ],
           },
           data: {
-            status: mapped,
+            status: mapped as any,
             gatewayResponse: {
               ...(payload || {}),
             } as any,
@@ -121,8 +121,8 @@ export class WaveWebhookController {
                   orderId: original.orderId || null,
                   rentalRequestId: (original as any).rentalRequestId || null,
                   rideRequestId: (original as any).rideRequestId || null,
-                  customerId: original.customerId || null,
-                  sellerId: original.sellerId || null,
+                  customerId: (original.customerId ?? undefined) as any,
+                  sellerId: (original.sellerId ?? undefined) as any,
                   gatewayProvider: 'wave_gambia',
                   gatewayTransactionId: `${original.gatewayTransactionId || transactionId}-fee`,
                   paymentReference: original.paymentReference || (transactionId || ''),
@@ -144,6 +144,62 @@ export class WaveWebhookController {
                   processedAt: new Date(),
                 },
               });
+            }
+
+            // If linked to an ecommerce order, finalize it similar to other providers
+            if (original.orderId) {
+              try {
+                const order = await prisma.orders.findUnique({
+                  where: { id: original.orderId },
+                  select: { id: true, paymentStatus: true, status: true },
+                });
+                const alreadyPaid = (order?.paymentStatus || '').toUpperCase() === 'PAID';
+                if (order && !alreadyPaid) {
+                  await prisma.orders.update({
+                    where: { id: order.id },
+                    data: {
+                      paymentStatus: 'PAID',
+                      status: 'CONFIRMED',
+                      paymentReference: original.gatewayTransactionId || transactionId || '',
+                      paidAt: new Date(),
+                      updatedAt: new Date(),
+                    },
+                  });
+                }
+              } catch (e) {
+                // Do not fail the webhook for order update issues; they can be reconciled later
+                console.warn('Wave webhook: order finalize warning:', (e as any)?.message || e);
+              }
+            }
+
+            // If linked to a rental request, mark rental as PAID
+            if ((original as any).rentalRequestId) {
+              try {
+                await prisma.rentalRequest.update({
+                  where: { id: (original as any).rentalRequestId },
+                  data: { status: 'PAID' as any, updatedAt: new Date() },
+                });
+              } catch (e) {
+                console.warn('Wave webhook: rental finalize warning:', (e as any)?.message || e);
+              }
+            }
+
+            // If linked to a ride request, set Ride.paymentStatus = PAID
+            if ((original as any).rideRequestId) {
+              try {
+                const ride = await prisma.ride.findUnique({
+                  where: { rideRequestId: (original as any).rideRequestId },
+                  select: { id: true },
+                });
+                if (ride) {
+                  await prisma.ride.update({
+                    where: { id: ride.id },
+                    data: { paymentStatus: 'PAID' as any, updatedAt: new Date() },
+                  });
+                }
+              } catch (e) {
+                console.warn('Wave webhook: ride finalize warning:', (e as any)?.message || e);
+              }
             }
           }
         }
