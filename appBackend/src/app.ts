@@ -145,6 +145,14 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Wave success/error landing endpoints (browser redirects from Wave)
+app.get('/payments/wave/success', (_req, res) => {
+  res.status(200).send('Wave payment succeeded. You may close this window and return to the app.');
+});
+app.get('/payments/wave/error', (_req, res) => {
+  res.status(200).send('Wave payment failed or was cancelled. You may close this window and return to the app.');
+});
+
 // API routes
 app.use('/api', routes);
 app.use('/api/auth', authRoutes);
