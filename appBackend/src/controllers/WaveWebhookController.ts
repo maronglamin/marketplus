@@ -54,14 +54,17 @@ export class WaveWebhookController {
         vals.find(v => typeof v === 'string' && v.length > 0) as string | undefined;
       const waveSessionId =
         firstString(
-          payload?.id,
-          payload?.session_id,
-          payload?.session?.id,
+          // Prefer actual checkout session id from payload.data first
+          payload?.data?.id,
+          payload?.data?.object?.id,
+          payload?.data?.session?.id,
+          // Other common fields
           payload?.checkout_session_id,
           payload?.checkout_session?.id,
-          payload?.data?.id,
-          payload?.data?.session?.id,
-          payload?.data?.object?.id,
+          payload?.session_id,
+          payload?.session?.id,
+          // Fallback to top-level id (often event id)
+          payload?.id,
         ) || undefined;
       const transactionId =
         firstString(
@@ -77,8 +80,18 @@ export class WaveWebhookController {
           payload?.data?.client_reference,
           payload?.data?.object?.client_reference,
         ) || undefined;
-      let paymentStatus = payload?.payment_status as string | undefined; // processing | cancelled | succeeded
-      let checkoutStatus = payload?.checkout_status as string | undefined; // open | complete | expired
+      let paymentStatus =
+        firstString(
+          payload?.payment_status,
+          payload?.data?.payment_status,
+          payload?.data?.object?.payment_status,
+        ) || undefined; // processing | cancelled | succeeded
+      let checkoutStatus =
+        firstString(
+          payload?.checkout_status,
+          payload?.data?.checkout_status,
+          payload?.data?.object?.checkout_status,
+        ) || undefined; // open | complete | expired
       let resolvedTransactionId: string | undefined = transactionId;
 
       const statusMap: Record<string, string> = {
