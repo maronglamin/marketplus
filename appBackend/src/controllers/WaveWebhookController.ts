@@ -48,9 +48,34 @@ export class WaveWebhookController {
       }
 
       const payload = JSON.parse(raw);
-      // Attempt to update external transaction status by session or transaction id
-      const waveSessionId = payload?.id;
-      const transactionId = payload?.transaction_id;
+      // Attempt to update external transaction status by session or transaction id (robust extraction)
+      const firstString = (...vals: Array<any>) =>
+        vals.find(v => typeof v === 'string' && v.length > 0) as string | undefined;
+      const waveSessionId =
+        firstString(
+          payload?.id,
+          payload?.session_id,
+          payload?.session?.id,
+          payload?.checkout_session_id,
+          payload?.checkout_session?.id,
+          payload?.data?.id,
+          payload?.data?.session?.id,
+          payload?.data?.object?.id,
+        ) || undefined;
+      const transactionId =
+        firstString(
+          payload?.transaction_id,
+          payload?.transaction?.id,
+          payload?.data?.transaction_id,
+          payload?.data?.object?.transaction_id,
+        ) || undefined;
+      const clientReference =
+        firstString(
+          payload?.client_reference,
+          payload?.clientReference,
+          payload?.data?.client_reference,
+          payload?.data?.object?.client_reference,
+        ) || undefined;
       const paymentStatus = payload?.payment_status; // processing | cancelled | succeeded
       const checkoutStatus = payload?.checkout_status; // open | complete | expired
 
@@ -67,15 +92,27 @@ export class WaveWebhookController {
         statusMap[checkoutStatus as string] ||
         'PENDING';
 
-      if (waveSessionId || transactionId) {
+      // Log identifiers we received to help with integration issues
+      try {
+        console.log('Wave webhook ids:', {
+          waveSessionId,
+          transactionId,
+          clientReference,
+          paymentStatus,
+          checkoutStatus,
+        });
+      } catch {}
+
+      if (waveSessionId || transactionId || clientReference) {
         // Update status on any matching external transactions
         await prisma.externalTransaction.updateMany({
           where: {
             gatewayProvider: 'wave_gambia',
             OR: [
-              { gatewayTransactionId: transactionId || '' },
-              { gatewayResponse: { path: ['waveSessionId'], equals: waveSessionId || '' } as any },
-            ],
+              ...(transactionId ? [{ gatewayTransactionId: transactionId }] : []),
+              ...(waveSessionId ? [{ gatewayResponse: { path: ['waveSessionId'], equals: waveSessionId } as any }] : []),
+              ...(clientReference ? [{ gatewayResponse: { path: ['clientReference'], equals: clientReference } as any }] : []),
+            ] as any,
           },
           data: {
             status: mapped as any,
@@ -88,17 +125,31 @@ export class WaveWebhookController {
         // If payment succeeded/complete, ensure a 1% FEE transaction exists
         if (mapped === 'SUCCESS') {
           // Fetch the original (latest) external transaction to derive amounts and linkage
-          const original = await prisma.externalTransaction.findFirst({
-            where: {
-              gatewayProvider: 'wave_gambia',
-              OR: [
-                { gatewayTransactionId: transactionId || '' },
-                { gatewayResponse: { path: ['waveSessionId'], equals: waveSessionId || '' } as any },
-              ],
-              transactionType: 'ORIGINAL',
-            },
-            orderBy: { createdAt: 'desc' },
-          });
+          const original =
+            (await prisma.externalTransaction.findFirst({
+              where: {
+                gatewayProvider: 'wave_gambia',
+                OR: [
+                  ...(transactionId ? [{ gatewayTransactionId: transactionId }] : []),
+                  ...(waveSessionId ? [{ gatewayResponse: { path: ['waveSessionId'], equals: waveSessionId } as any }] : []),
+                ] as any,
+                transactionType: 'ORIGINAL',
+              },
+              orderBy: { createdAt: 'desc' },
+            })) ||
+            (clientReference
+              ? await prisma.externalTransaction.findFirst({
+                  where: {
+                    gatewayProvider: 'wave_gambia',
+                    transactionType: 'ORIGINAL',
+                    OR: [
+                      { gatewayResponse: { path: ['clientReference'], equals: clientReference } as any },
+                      { appTransactionId: clientReference },
+                    ] as any,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                })
+              : null);
           if (original) {
             // Check if a fee transaction is already present for this appTransactionId
             const existingFee = await prisma.externalTransaction.findFirst({
