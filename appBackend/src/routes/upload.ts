@@ -19,7 +19,7 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 15 * 1024 * 1024, // 15MB limit (align with rider uploads)
   },
   fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
     // Accept only image files

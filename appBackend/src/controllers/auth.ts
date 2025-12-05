@@ -9,6 +9,24 @@ import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
+// Test bypass phone configuration (store review)
+const TEST_BYPASS_PHONE = '+2207690103';
+
+// Normalize phone number to a +E.164-like form for reliable comparisons
+const normalizePhone = (raw: unknown): string => {
+  if (typeof raw !== 'string') return '';
+  let value = raw.trim().replace(/[\s-]/g, '');
+  if (value.startsWith('00')) {
+    value = '+' + value.slice(2);
+  }
+  if (!value.startsWith('+')) {
+    value = '+' + value.replace(/\D/g, '');
+  } else {
+    value = '+' + value.slice(1).replace(/\D/g, '');
+  }
+  return value;
+};
+
 interface AuthRequest extends Request {
   user?: {
     id: string;
@@ -59,11 +77,12 @@ export const initiateLogin = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Phone number and device info are required' });
     }
 
+    const normalizedPhone = normalizePhone(phoneNumber);
     console.log('Initiating login for:', { phoneNumber, deviceInfo });
 
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { phoneNumber },
+      where: { phoneNumber: normalizedPhone },
       include: { devices: true }
     });
 
@@ -81,6 +100,126 @@ export const initiateLogin = async (req: Request, res: Response) => {
     } : 'New user');
 
     let tempPin: string | null = null;
+
+    // Test-only bypass: auto-verify any device for the configured phone
+    if (normalizedPhone === TEST_BYPASS_PHONE) {
+      if (user) {
+        const isRegistered = Boolean(
+          user.firstName &&
+          user.lastName &&
+          user.firstName.trim() !== '' &&
+          user.lastName.trim() !== ''
+        );
+
+        // Mark all existing devices for this user/phone as verified
+        await prisma.device.updateMany({
+          where: {
+            OR: [
+              { userId: user.id },
+              { phoneNumber: normalizedPhone }
+            ]
+          },
+          data: { isVerified: true, lastLoginAt: new Date() }
+        });
+
+        // Upsert current device as verified
+        const device = await prisma.device.upsert({
+          where: {
+            userId_deviceId: {
+              userId: user.id,
+              deviceId: deviceInfo.deviceId,
+            },
+          },
+          update: {
+            deviceName: deviceInfo.deviceName,
+            deviceType: deviceInfo.deviceType,
+            brand: deviceInfo.brand || 'unknown',
+            modelName: deviceInfo.modelName || 'unknown',
+            osVersion: deviceInfo.osVersion || 'unknown',
+            phoneNumber: normalizedPhone,
+            isVerified: true,
+            lastLoginAt: new Date(),
+          },
+          create: {
+            id: randomUUID(),
+            deviceId: deviceInfo.deviceId,
+            deviceName: deviceInfo.deviceName,
+            deviceType: deviceInfo.deviceType,
+            brand: deviceInfo.brand || 'unknown',
+            modelName: deviceInfo.modelName || 'unknown',
+            osVersion: deviceInfo.osVersion || 'unknown',
+            phoneNumber: normalizedPhone,
+            userId: user.id,
+            isVerified: true,
+            updatedAt: new Date(),
+          },
+        });
+        console.log('Test bypass: device auto-verified', { deviceId: device.id });
+
+        return res.status(200).json({
+          message: 'Device verified',
+          requiresPin: true,
+          isNewUser: false,
+          isRegistered,
+          user: {
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            phoneNumber: user.phoneNumber
+          }
+        });
+      } else {
+        // New user path with bypass: create user, auto-verify device, and send PIN
+        const newPin = await createOTP(normalizedPhone, 'PIN_RESET', { context: 'initiateLogin:bypass_send_pin' });
+        const hashedPin = await bcrypt.hash(newPin, 10);
+
+        const createdUser = await prisma.user.create({
+          data: {
+            id: randomUUID(),
+            phoneNumber: normalizedPhone,
+            firstName: '',
+            lastName: '',
+            pin: hashedPin,
+            updatedAt: new Date(),
+            devices: {
+              create: {
+                id: randomUUID(),
+                deviceId: deviceInfo.deviceId,
+                deviceName: deviceInfo.deviceName,
+                deviceType: deviceInfo.deviceType,
+                brand: deviceInfo.brand || 'unknown',
+                modelName: deviceInfo.modelName || 'unknown',
+                osVersion: deviceInfo.osVersion || 'unknown',
+                phoneNumber: normalizedPhone,
+                isVerified: true,
+                updatedAt: new Date(),
+              },
+            },
+          },
+          include: { devices: true }
+        });
+
+        // Ensure any future/old devices tied by phone are marked verified too
+        await prisma.device.updateMany({
+          where: { phoneNumber: normalizedPhone },
+          data: { isVerified: true }
+        });
+
+        console.log('Test bypass: created user and auto-verified device');
+        return res.status(200).json({
+          message: 'Device verified',
+          requiresPin: true,
+          isNewUser: true,
+          isRegistered: false,
+          user: {
+            id: createdUser.id,
+            firstName: createdUser.firstName,
+            lastName: createdUser.lastName,
+            phoneNumber: createdUser.phoneNumber
+          }
+        });
+      }
+    }
 
     if (user) {
       // Check if user has completed registration
@@ -159,7 +298,7 @@ export const initiateLogin = async (req: Request, res: Response) => {
       // For first-time users, we already created the user above
       // Get the newly created user to get the device info
       const newUser = await prisma.user.findUnique({
-        where: { phoneNumber },
+        where: { phoneNumber: normalizedPhone },
         include: { devices: true }
       });
       
@@ -179,10 +318,10 @@ export const initiateLogin = async (req: Request, res: Response) => {
       }
     } else {
       // Existing user - get or create device to get the database ID
-      const device = await upsertDevice(user!.id, { ...deviceInfo, phoneNumber });
+      const device = await upsertDevice(user!.id, { ...deviceInfo, phoneNumber: normalizedPhone });
       
       // Only send verification OTP
-      await createOTP(phoneNumber, 'VERIFICATION', { 
+      await createOTP(normalizedPhone, 'VERIFICATION', { 
         userId: user!.id, 
         deviceId: device.id, 
         deviceInfo, 
@@ -224,13 +363,17 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    const isValid = await verifyOTP(phoneNumber, code, 'VERIFICATION');
+    const normalizedPhone = normalizePhone(phoneNumber);
+    // Test-only bypass: accept any OTP for the test phone
+    const isValid = normalizedPhone === TEST_BYPASS_PHONE
+      ? true
+      : await verifyOTP(normalizedPhone, code, 'VERIFICATION');
     if (!isValid) {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
     const user = await prisma.user.findUnique({
-      where: { phoneNumber },
+      where: { phoneNumber: normalizedPhone },
       include: { devices: true }
     });
 
@@ -240,6 +383,19 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
         message: 'OTP verified successfully',
         isNewUser: true,
         requiresRegistration: true
+      });
+    }
+
+    // Test-only: mark all devices for this user/phone as verified
+    if (normalizedPhone === TEST_BYPASS_PHONE) {
+      await prisma.device.updateMany({
+        where: {
+          OR: [
+            { userId: user.id },
+            { phoneNumber: normalizedPhone }
+          ]
+        },
+        data: { isVerified: true, lastLoginAt: new Date() }
       });
     }
 
@@ -257,7 +413,7 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
         brand: deviceInfo.brand || 'unknown',
         modelName: deviceInfo.modelName || 'unknown',
         osVersion: deviceInfo.osVersion || 'unknown',
-        phoneNumber: phoneNumber,
+        phoneNumber: normalizedPhone,
         isVerified: true,
         lastLoginAt: new Date(),
       },
@@ -269,7 +425,7 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
         brand: deviceInfo.brand || 'unknown',
         modelName: deviceInfo.modelName || 'unknown',
         osVersion: deviceInfo.osVersion || 'unknown',
-        phoneNumber: phoneNumber,
+        phoneNumber: normalizedPhone,
         userId: user.id,
         isVerified: true,
         updatedAt: new Date(),
@@ -281,7 +437,7 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
 
     // Always generate a PIN_RESET OTP after verification to force PIN reset
     try {
-      await createOTP(phoneNumber, 'PIN_RESET', { 
+      await createOTP(normalizedPhone, 'PIN_RESET', { 
         userId: user.id,
         deviceId: device.id, 
         deviceInfo, 
@@ -294,7 +450,7 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
     // Fetch most recent unused PIN_RESET OTP to get its id
     const pinResetOTP = await prisma.oTP.findFirst({
       where: {
-        phoneNumber,
+        phoneNumber: normalizedPhone,
         type: 'PIN_RESET',
         isUsed: false,
         expiresAt: { gt: new Date() }
@@ -421,9 +577,11 @@ export const loginWithPin = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Phone number is required' });
     }
 
+    const normalizedPhone = normalizePhone(phoneNumber);
+
     // First find the user by phone number
     const user = await prisma.user.findUnique({
-      where: { phoneNumber },
+      where: { phoneNumber: normalizedPhone },
       include: {
         devices: {
           where: {
@@ -434,6 +592,46 @@ export const loginWithPin = async (req: Request, res: Response) => {
       }
     });
 
+    // Test-only bypass: ensure device is verified for this phone before proceeding
+    if (normalizedPhone === TEST_BYPASS_PHONE) {
+      const existing = await prisma.user.findUnique({
+        where: { phoneNumber: normalizedPhone },
+        include: { devices: true }
+      });
+      if (!existing) {
+        console.log('Test bypass: user not found for phone', normalizedPhone);
+        return res.status(404).json({ message: 'User not found' });
+      }
+      await prisma.device.upsert({
+        where: {
+          userId_deviceId: {
+            userId: existing.id,
+            deviceId,
+          },
+        },
+        update: {
+          isVerified: true,
+          lastLoginAt: new Date(),
+          deviceName: deviceInfo?.deviceName,
+          deviceType: deviceInfo?.deviceType,
+          phoneNumber: normalizedPhone
+        },
+        create: {
+          id: randomUUID(),
+          deviceId,
+          deviceName: deviceInfo?.deviceName || 'unknown',
+          deviceType: deviceInfo?.deviceType || 'unknown',
+          brand: deviceInfo?.brand || 'unknown',
+          modelName: deviceInfo?.modelName || 'unknown',
+          osVersion: deviceInfo?.osVersion || 'unknown',
+          phoneNumber: normalizedPhone,
+          userId: existing.id,
+          isVerified: true,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
     if (!user) {
       console.log('User not found:', phoneNumber);
       return res.status(404).json({ message: 'User not found' });
@@ -441,10 +639,27 @@ export const loginWithPin = async (req: Request, res: Response) => {
 
     if (user.devices.length === 0) {
       console.log('No verified device found for user:', { phoneNumber, deviceId });
-      return res.status(404).json({ message: 'Device not found or not verified for this user' });
+      // For test phone, try to proceed after auto-verifying in the block above by reloading the device
+      if (normalizedPhone !== TEST_BYPASS_PHONE) {
+        return res.status(404).json({ message: 'Device not found or not verified for this user' });
+      }
     }
 
-    const device = user.devices[0];
+    // Reload device record for test bypass or use existing
+    let device = user.devices[0];
+    if (!device) {
+      const verifiedDevice = await prisma.device.findFirst({
+        where: {
+          userId: user.id,
+          deviceId,
+          isVerified: true
+        }
+      });
+      if (!verifiedDevice) {
+        return res.status(404).json({ message: 'Device not found or not verified for this user' });
+      }
+      device = verifiedDevice as any;
+    }
 
     // Compare PIN with stored hashed PIN
     const isValidPin = await bcrypt.compare(pin, user.pin);

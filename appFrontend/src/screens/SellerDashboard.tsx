@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StatusBar,
   Platform,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
@@ -19,7 +20,7 @@ import {
   TrendingUp,
   AlertCircle,
 } from 'lucide-react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { Ionicons } from '@expo/vector-icons'
 import { Button } from '../components/Button'
@@ -35,9 +36,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 type SellerDashboardNavigationProp = NativeStackNavigationProp<AppStackParamList, 'SellerDashboard'>
 
+const { height: screenHeight, width: screenWidth } = Dimensions.get('window')
+const isLargeTablet = Math.max(screenWidth, screenHeight) >= 1024
+const basePadding = isLargeTablet ? 24 : 16
+const contentMaxWidth = Math.min(900, screenWidth - (isLargeTablet ? 48 : 32))
+
 export function SellerDashboard() {
   const navigation = useNavigation<SellerDashboardNavigationProp>()
   const { user, token } = useAuth()
+  const didInitialLoadRef = useRef(false)
   const [kycStatus, setKycStatus] = useState<SellerKycResponse | null>(null)
   const [salesRepStatus, setSalesRepStatus] = useState<SalesRep | null>(null)
   const [loading, setLoading] = useState(true)
@@ -187,34 +194,27 @@ export function SellerDashboard() {
     }
   }, [kycStatus?.status, salesRepStatus?.status])
 
-  // Add focus listener to refresh data when screen comes into focus
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', async () => {
-      // Always get fresh user from token on focus
-      const currentUserId = await getCurrentUserFromToken()
-      if (!currentUserId) return
-      
-      // Clear state first to ensure fresh data
-      setKycStatus(null)
-      setSalesRepStatus(null)
-      setCustomerInterests([])
-      setStats({
-        totalProducts: 0,
-        activeProducts: 0,
-        totalSales: 0,
-        pendingOrders: 0,
-        totalRevenue: 0,
-        revenueCurrency: 'USD',
-        hasOtherCurrencies: false
-      })
-      
-      // Then check status with fresh data
-      await checkSalesRepStatus()
-      await checkKycStatus(true)
-    })
-
-    return unsubscribe
-  }, [navigation, checkKycStatus, checkSalesRepStatus])
+  // Refresh data when screen gains focus (skip the very first focus to avoid double-init)
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true
+      const run = async () => {
+        if (!didInitialLoadRef.current) {
+          // Initial load effect will handle the first fetch
+          return
+        }
+        const currentUserId = await getCurrentUserFromToken()
+        if (!currentUserId || !isActive) return
+        // Refresh core data without bouncing the base state
+        await checkSalesRepStatus()
+        await checkKycStatus(true)
+      }
+      run()
+      return () => {
+        isActive = false
+      }
+    }, [checkKycStatus, checkSalesRepStatus])
+  )
 
   // Initial load - always get fresh user from token
   useEffect(() => {
@@ -242,6 +242,8 @@ export function SellerDashboard() {
       // Load fresh data
       await checkSalesRepStatus()
       await checkKycStatus()
+      // Mark initial load as done so focus refresh won't double-run
+      didInitialLoadRef.current = true
     }
     
     initializeDashboard()
@@ -377,7 +379,7 @@ export function SellerDashboard() {
               style={styles.backButton}
               activeOpacity={0.7}
             >
-              <Ionicons name="arrow-back" size={24} color="#111827" />
+              <Ionicons name="arrow-back" size={isLargeTablet ? 26 : 24} color="#111827" />
             </TouchableOpacity>
             <Text style={styles.title}>Seller Verification</Text>
             <View style={styles.placeholder} />
@@ -420,7 +422,7 @@ export function SellerDashboard() {
               style={styles.backButton}
               activeOpacity={0.7}
             >
-              <Ionicons name="arrow-back" size={24} color="#111827" />
+              <Ionicons name="arrow-back" size={isLargeTablet ? 26 : 24} color="#111827" />
             </TouchableOpacity>
             <Text style={styles.title}>Seller Verification</Text>
             <View style={styles.placeholder} />
@@ -462,7 +464,7 @@ export function SellerDashboard() {
               style={styles.backButton}
               activeOpacity={0.7}
             >
-              <Ionicons name="arrow-back" size={24} color="#111827" />
+              <Ionicons name="arrow-back" size={isLargeTablet ? 26 : 24} color="#111827" />
             </TouchableOpacity>
             <Text style={styles.title}>Seller Verification</Text>
             <View style={styles.placeholder} />
@@ -522,7 +524,7 @@ export function SellerDashboard() {
               onPress={() => navigation.navigate('Home')}
               style={styles.backButton}
             >
-              <Ionicons name="arrow-back" size={24} color="#111827" />
+              <Ionicons name="arrow-back" size={isLargeTablet ? 26 : 24} color="#111827" />
             </TouchableOpacity>
             <Text style={styles.title}>
               {salesRepStatus?.status === 'ACTIVE' ? 'Sales Rep Dashboard' : 'Seller Dashboard'}
@@ -531,7 +533,7 @@ export function SellerDashboard() {
               style={styles.settingsButton}
               onPress={() => navigation.navigate('Settings')}
             >
-              <Ionicons name="settings-outline" size={24} color="#111827" />
+              <Ionicons name="settings-outline" size={isLargeTablet ? 26 : 24} color="#111827" />
             </TouchableOpacity>
           </View>
 
@@ -555,7 +557,7 @@ export function SellerDashboard() {
                 <Text style={styles.viewAllText}>
                   {stats.hasOtherCurrencies ? 'View All Currencies' : 'View All'}
                 </Text>
-                <Ionicons name="chevron-forward" size={16} color="#FFFFFF" />
+                <Ionicons name="chevron-forward" size={isLargeTablet ? 18 : 16} color="#FFFFFF" />
               </View>
             </View>
             <Text style={styles.revenueValue}>
@@ -615,7 +617,7 @@ export function SellerDashboard() {
                 style={styles.actionButton}
                 onPress={() => navigation.navigate('AddProduct' as any)}
               >
-                <Ionicons name="add-circle-outline" size={24} color="#2563EB" />
+                <Ionicons name="add-circle-outline" size={isLargeTablet ? 26 : 24} color="#2563EB" />
                 <Text style={styles.actionButtonText}>Add New Product</Text>
               </TouchableOpacity>
 
@@ -623,7 +625,7 @@ export function SellerDashboard() {
                 style={styles.actionButton}
                 onPress={() => navigation.navigate('ProductListing')}
               >
-                <Ionicons name="list-outline" size={24} color="#2563EB" />
+                <Ionicons name="list-outline" size={isLargeTablet ? 26 : 24} color="#2563EB" />
                 <Text style={styles.actionButtonText}>Product Listing</Text>
               </TouchableOpacity>
             </View>
@@ -637,7 +639,7 @@ export function SellerDashboard() {
                   onPress={handleViewAllInterests}
                 >
                   <Text style={styles.viewAllText}>View All</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#2563EB" />
+                  <Ionicons name="chevron-forward" size={isLargeTablet ? 18 : 16} color="#2563EB" />
                 </TouchableOpacity>
               </View>
 
@@ -686,7 +688,7 @@ export function SellerDashboard() {
                       </View>
                       <View style={styles.rightColumn}>
                         <View style={styles.chatButton}>
-                          <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
+                          <Ionicons name="chatbubble-outline" size={isLargeTablet ? 22 : 20} color="#FFFFFF" />
                           <Text style={styles.chatButtonText}>Chat</Text>
                         </View>
                         <View style={[
@@ -769,13 +771,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: basePadding,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 16,
     paddingBottom: 16,
     minHeight: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 64 : 64,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   backButton: {
     padding: 12,
@@ -787,7 +792,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 20,
+    fontSize: isLargeTablet ? 24 : 20,
     fontWeight: 'bold',
     color: '#111827',
     flex: 1,
@@ -805,6 +810,10 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'column',
     gap: 16,
+    paddingHorizontal: isLargeTablet ? basePadding : 16,
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   statsRow: {
     flexDirection: 'row',
@@ -826,20 +835,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 24,
+    fontSize: isLargeTablet ? 28 : 24,
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#6B7280',
   },
   revenueCard: {
-    margin: 16,
-    padding: 20,
+    margin: isLargeTablet ? basePadding : 16,
+    padding: isLargeTablet ? 24 : 20,
     backgroundColor: '#2563EB',
     borderRadius: 12,
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   revenueHeader: {
     flexDirection: 'row',
@@ -852,7 +864,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   revenueTitle: {
-    fontSize: 16,
+    fontSize: isLargeTablet ? 18 : 16,
     color: '#FFFFFF',
     opacity: 0.9,
   },
@@ -874,13 +886,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   revenueValue: {
-    fontSize: 32,
+    fontSize: isLargeTablet ? 36 : 32,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginVertical: 8,
   },
   revenueSubtitle: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#FFFFFF',
     opacity: 0.9,
   },
@@ -895,7 +907,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   ratingLabel: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#FFFFFF',
     opacity: 0.9,
     marginLeft: 4,
@@ -906,14 +918,17 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   viewAllText: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     fontWeight: '600',
     color: '#FFFFFF',
     marginRight: 4,
   },
   actionsContainer: {
-    padding: 16,
+    padding: isLargeTablet ? 24 : 16,
     gap: 12,
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   actionButton: {
     flexDirection: 'row',
@@ -924,7 +939,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   actionButtonText: {
-    fontSize: 16,
+    fontSize: isLargeTablet ? 18 : 16,
     fontWeight: '600',
     color: '#2563EB',
   },
@@ -950,14 +965,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
   },
   kycTitle: {
-    fontSize: 24,
+    fontSize: isLargeTablet ? 28 : 24,
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 12,
     textAlign: 'center',
   },
   kycDescription: {
-    fontSize: 16,
+    fontSize: isLargeTablet ? 18 : 16,
     color: '#6B7280',
     textAlign: 'center',
     marginBottom: 24,
@@ -983,7 +998,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#1E40AF',
     lineHeight: 20,
   },
@@ -995,13 +1010,16 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    fontSize: 16,
+    fontSize: isLargeTablet ? 18 : 16,
     color: '#6B7280',
     textAlign: 'center',
   },
   interestsSection: {
-    padding: 16,
+    padding: isLargeTablet ? 24 : 16,
     backgroundColor: '#FFFFFF',
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   interestsHeader: {
     flexDirection: 'row',
@@ -1010,7 +1028,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   interestsTitle: {
-    fontSize: 18,
+    fontSize: isLargeTablet ? 22 : 18,
     fontWeight: 'bold',
     color: '#111827',
   },
@@ -1020,7 +1038,7 @@ const styles = StyleSheet.create({
   },
   interestsLoadingText: {
     marginTop: 8,
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#6B7280',
   },
   interestsList: {
@@ -1050,7 +1068,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   interestProductName: {
-    fontSize: 16,
+    fontSize: isLargeTablet ? 18 : 16,
     fontWeight: '600',
     color: '#111827',
     marginBottom: 4,
@@ -1070,7 +1088,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   interestCustomerName: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#374151',
     marginBottom: 2,
   },
@@ -1094,7 +1112,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   chatButtonText: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     fontWeight: '600',
     color: '#FFFFFF',
   },
@@ -1103,14 +1121,14 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   noInterestsText: {
-    fontSize: 16,
+    fontSize: isLargeTablet ? 18 : 16,
     fontWeight: '600',
     color: '#6B7280',
     marginTop: 12,
     marginBottom: 4,
   },
   noInterestsSubtext: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#9CA3AF',
     textAlign: 'center',
     lineHeight: 20,
@@ -1121,7 +1139,7 @@ const styles = StyleSheet.create({
   },
   statsLoadingText: {
     marginTop: 8,
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#6B7280',
   },
 }) 

@@ -40,7 +40,10 @@ import { userService } from '../services/userService';
 import { AppUpdateBottomSheet } from '../components/AppUpdateBottomSheet';
 import { checkForUpdate, type UpdateCheckResult } from '../services/appUpdateService';
 
-const { height: screenHeight } = Dimensions.get('window');
+const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
+const isLargeTablet = Math.max(screenWidth, screenHeight) >= 1024;
+const basePadding = isLargeTablet ? 24 : 16;
+const contentMaxWidth = Math.min(900, screenWidth - (isLargeTablet ? 48 : 32));
 
 type HomeNavigationProp = NativeStackNavigationProp<AppStackParamList, 'Home'>;
 
@@ -728,7 +731,7 @@ export function Home() {
               {isLoadingLocation ? (
                 <ActivityIndicator size="small" color="#6B7280" />
               ) : (
-                <Ionicons name="location-outline" size={16} color="#6B7280" />
+                <Ionicons name="location-outline" size={isLargeTablet ? 18 : 16} color="#6B7280" />
               )}
               <Text style={styles.locationText}>
                 {isLoadingLocation ? 'Detecting...' : userLocation}
@@ -738,7 +741,7 @@ export function Home() {
               style={styles.notificationButton}
               onPress={handleNotificationPress}
             >
-              <Ionicons name="notifications-outline" size={24} color="#6B7280" />
+              <Ionicons name="notifications-outline" size={isLargeTablet ? 26 : 24} color="#6B7280" />
               {isLoadingNotifications ? (
                 <View style={styles.notificationBadge}>
                   <ActivityIndicator size="small" color="#FFFFFF" />
@@ -755,7 +758,7 @@ export function Home() {
               style={styles.profileButton}
               onPress={() => navigation.navigate('AccountSettings')}
             >
-              <Ionicons name="person-outline" size={20} color="#6B7280" />
+              <Ionicons name="person-outline" size={isLargeTablet ? 22 : 20} color="#6B7280" />
             </TouchableOpacity>
 
           </View>
@@ -769,7 +772,7 @@ export function Home() {
           {/* Search Bar */}
           <View style={styles.searchContainer}>
             <View style={styles.searchBar}>
-              <Ionicons name="search-outline" size={20} color="#6B7280" />
+              <Ionicons name="search-outline" size={isLargeTablet ? 22 : 20} color="#6B7280" />
               <TouchableOpacity 
                 style={styles.searchInput}
                 onPress={openSearchScreen}
@@ -780,7 +783,7 @@ export function Home() {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={openSearchScreen}>
-                <Ionicons name="mic-outline" size={20} color="#14B8A6" />
+                <Ionicons name="mic-outline" size={isLargeTablet ? 22 : 20} color="#14B8A6" />
               </TouchableOpacity>
             </View>
           </View>
@@ -815,12 +818,29 @@ export function Home() {
               >
                 <ImageBackground 
                   source={require('../../assets/ride-image.jpeg')}
-                  style={{ width: '100%', height: 160, justifyContent: 'flex-end' }}
+                  resizeMode="cover"
+                  style={{ width: '100%', aspectRatio: 16 / 9, justifyContent: 'flex-end' }}
                   imageStyle={{ borderRadius: 12 }}
                 >
-                  <View style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 16, alignItems: 'center', borderRadius: 12 }}>
-                    <Text style={[styles.rideButtonTitle, { color: '#FFFFFF', textShadowColor: 'rgba(0, 0, 0, 0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }]}>Book a Ride</Text>
-                    <Text style={[styles.rideButtonSubtitle, { color: '#F8FAFC', textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1 }]}>Fast and reliable rides near you</Text>
+                  <View style={{ backgroundColor: `rgba(0, 0, 0, ${isLargeTablet ? 0.6 : 0.5})`, padding: isLargeTablet ? 20 : 16, alignItems: 'center', borderRadius: 12 }}>
+                    <Text style={[
+                      styles.rideButtonTitle,
+                      { 
+                        color: '#FFFFFF',
+                        textShadowColor: 'rgba(0, 0, 0, 0.55)',
+                        textShadowOffset: { width: 0, height: 1 },
+                        textShadowRadius: 2 
+                      }
+                    ]}>Book a Ride</Text>
+                    <Text style={[
+                      styles.rideButtonSubtitle,
+                      { 
+                        color: '#F8FAFC',
+                        textShadowColor: 'rgba(0,0,0,0.55)',
+                        textShadowOffset: { width: 0, height: 1 },
+                        textShadowRadius: 1 
+                      }
+                    ]}>Fast and reliable rides near you</Text>
                     <View style={styles.rideButtonAction}>
                       <Text style={styles.rideButtonActionText}>Find a Ride</Text>
                     </View>
@@ -834,12 +854,29 @@ export function Home() {
               >
                 <ImageBackground 
                   source={require('../../assets/ecommerce-image.jpeg')}
-                  style={{ width: '100%', height: 160, justifyContent: 'flex-end' }}
+                  resizeMode="cover"
+                  style={{ width: '100%', aspectRatio: 16 / 9, justifyContent: 'flex-end' }}
                   imageStyle={{ borderRadius: 12 }}
                 >
-                  <View style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', padding: 16, alignItems: 'center', borderRadius: 12 }}>
-                    <Text style={[styles.shopButtonTitle, { color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }]}>Shop Online</Text>
-                    <Text style={[styles.shopButtonSubtitle, { color: '#F8FAFC', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 1 }]}>Buy and sell from trusted sellers</Text>
+                  <View style={{ backgroundColor: `rgba(0, 0, 0, ${isLargeTablet ? 0.6 : 0.5})`, padding: isLargeTablet ? 20 : 16, alignItems: 'center', borderRadius: 12 }}>
+                    <Text style={[
+                      styles.shopButtonTitle, 
+                      { 
+                        color: '#FFFFFF',
+                        textShadowColor: 'rgba(0,0,0,0.6)',
+                        textShadowOffset: { width: 0, height: 1 },
+                        textShadowRadius: 2 
+                      }
+                    ]}>Shop Online</Text>
+                    <Text style={[
+                      styles.shopButtonSubtitle, 
+                      { 
+                        color: '#F8FAFC',
+                        textShadowColor: 'rgba(0,0,0,0.5)',
+                        textShadowOffset: { width: 0, height: 1 },
+                        textShadowRadius: 1 
+                      }
+                    ]}>Buy and sell from trusted sellers</Text>
                     <View style={styles.shopButtonAction}>
                       <Text style={styles.shopButtonActionText}>Start Shopping</Text>
                     </View>
@@ -1416,7 +1453,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   locationText: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#6B7280',
     marginLeft: 4,
   },
@@ -1453,17 +1490,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   welcomeBanner: {
-    padding: 16,
+    padding: basePadding,
     backgroundColor: '#FFFFFF',
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   welcomeTitle: {
-    fontSize: 20,
+    fontSize: isLargeTablet ? 28 : 20,
     fontWeight: '500',
     color: '#1F2937',
     marginBottom: 8,
   },
   welcomeSubtitle: {
-    fontSize: 16,
+    fontSize: isLargeTablet ? 18 : 16,
     color: '#6B7280',
     marginBottom: 16,
   },
@@ -1479,13 +1519,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   rideButtonTitle: {
-    fontSize: 16,
+    fontSize: isLargeTablet ? 24 : 16,
     fontWeight: '500',
     color: '#1E40AF',
     marginTop: 8,
   },
   rideButtonSubtitle: {
-    fontSize: 12,
+    fontSize: isLargeTablet ? 16 : 12,
     color: '#1E3A8A',
     marginTop: 4,
     textAlign: 'center',
@@ -1498,7 +1538,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   rideButtonActionText: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     fontWeight: '500',
     color: '#FFFFFF',
   },
@@ -1510,13 +1550,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   shopButtonTitle: {
-    fontSize: 16,
+    fontSize: isLargeTablet ? 24 : 16,
     fontWeight: '500',
     color: '#3B82F6',
     marginTop: 8,
   },
   shopButtonSubtitle: {
-    fontSize: 12,
+    fontSize: isLargeTablet ? 16 : 12,
     color: '#2563EB',
     marginTop: 4,
     textAlign: 'center',
@@ -1529,7 +1569,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   shopButtonActionText: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     fontWeight: '500',
     color: '#FFFFFF',
   },
@@ -1580,41 +1620,48 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   searchContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: basePadding,
     paddingVertical: 12,
     backgroundColor: '#FFFFFF',
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F3F4F6',
-    borderRadius: 25,
+    borderRadius: isLargeTablet ? 28 : 25,
     borderWidth: 2,
     borderColor: '#1E40AF',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: isLargeTablet ? 14 : 12,
   },
   searchInput: {
     flex: 1,
     marginLeft: 8,
-    fontSize: 16,
+    fontSize: isLargeTablet ? 18 : 16,
     color: '#1F2937',
     justifyContent: 'center',
   },
   searchPlaceholder: {
-    fontSize: 16,
+    fontSize: isLargeTablet ? 18 : 16,
     color: '#9CA3AF',
   },
   quickActionsContainer: {
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: isLargeTablet ? basePadding : undefined,
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     fontWeight: '500',
     color: '#6B7280',
     marginBottom: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: basePadding,
   },
   quickActionItem: {
     alignItems: 'center',
@@ -1622,8 +1669,8 @@ const styles = StyleSheet.create({
     minWidth: 70,
   },
   quickActionIcon: {
-    width: 56,
-    height: 56,
+    width: isLargeTablet ? 64 : 56,
+    height: isLargeTablet ? 64 : 56,
     backgroundColor: '#F3F4F6',
     borderRadius: 12,
     alignItems: 'center',
@@ -1631,14 +1678,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   quickActionLabel: {
-    fontSize: 12,
+    fontSize: isLargeTablet ? 14 : 12,
     color: '#374151',
     textAlign: 'center',
   },
   serviceSection: {
-    paddingHorizontal: 16,
+    paddingHorizontal: basePadding,
     paddingVertical: 20,
     backgroundColor: '#FFFFFF',
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   serviceBlock: {
     marginBottom: 24,
@@ -1654,7 +1704,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   serviceTitle: {
-    fontSize: 18,
+    fontSize: isLargeTablet ? 22 : 18,
     fontWeight: '500',
     color: '#1F2937',
   },
@@ -1698,7 +1748,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   recentTitle: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#6B7280',
     marginBottom: 8,
   },
@@ -1919,7 +1969,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   categoriesTitle: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     color: '#6B7280',
   },
   categoryItem: {
@@ -1928,8 +1978,8 @@ const styles = StyleSheet.create({
     minWidth: 60,
   },
   categoryIcon: {
-    width: 48,
-    height: 48,
+    width: isLargeTablet ? 56 : 48,
+    height: isLargeTablet ? 56 : 48,
     backgroundColor: '#F0F4FF',
     borderRadius: 24,
     alignItems: 'center',
@@ -1937,7 +1987,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   categoryName: {
-    fontSize: 12,
+    fontSize: isLargeTablet ? 14 : 12,
     color: '#374151',
     textAlign: 'center',
   },
@@ -1985,16 +2035,20 @@ const styles = StyleSheet.create({
   promotionsContainer: {
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
+    paddingHorizontal: isLargeTablet ? basePadding : undefined,
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   promotionsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: basePadding,
     marginBottom: 12,
   },
   promotionsTitle: {
-    fontSize: 18,
+    fontSize: isLargeTablet ? 24 : 18,
     fontWeight: '500',
     color: '#1F2937',
   },
@@ -2008,8 +2062,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   promotionCard: {
-    width: 280,
-    height: 128,
+    width: isLargeTablet ? 340 : 280,
+    height: isLargeTablet ? 140 : 128,
     borderRadius: 12,
     padding: 16,
     marginLeft: 16,
@@ -2019,18 +2073,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   promotionLabel: {
-    fontSize: 14,
+    fontSize: isLargeTablet ? 16 : 14,
     fontWeight: '500',
     color: '#FFFFFF',
   },
   promotionTitle: {
-    fontSize: 18,
+    fontSize: isLargeTablet ? 22 : 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginTop: 4,
   },
   promotionDescription: {
-    fontSize: 12,
+    fontSize: isLargeTablet ? 14 : 12,
     color: 'rgba(255, 255, 255, 0.8)',
     marginTop: 4,
   },
@@ -2147,7 +2201,7 @@ const styles = StyleSheet.create({
     // Active state styling
   },
   navText: {
-    fontSize: 12,
+    fontSize: isLargeTablet ? 14 : 12,
     color: '#6B7280',
     marginTop: 4,
   },
@@ -2157,11 +2211,14 @@ const styles = StyleSheet.create({
 
   // Become Rider Section Styles
   becomeRiderContainer: {
-    padding: 20,
+    padding: isLargeTablet ? 24 : 20,
     backgroundColor: '#FFFFFF',
     marginTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
+    alignSelf: isLargeTablet ? 'center' : undefined,
+    width: isLargeTablet ? '100%' : undefined,
+    maxWidth: isLargeTablet ? contentMaxWidth : undefined,
   },
   becomeRiderHeader: {
     flexDirection: 'row',
@@ -2169,7 +2226,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   becomeRiderTitle: {
-    fontSize: 22,
+    fontSize: isLargeTablet ? 28 : 22,
     fontWeight: '700',
     color: '#0F172A',
     marginLeft: 8,
