@@ -1,4 +1,16 @@
 // API Configuration
+const normalizeApiBaseUrl = (raw?: string): string => {
+  // Prefer provided value; otherwise compute default
+  const candidate = (raw && raw.trim()) || resolveDefaultBaseUrl();
+  // Remove trailing slashes/colons
+  let cleaned = candidate.replace(/[:/]+$/, '');
+  // Ensure `/api` prefix exists (backend is mounted under /api)
+  if (!/\/api(\/|$)/i.test(cleaned)) {
+    cleaned = `${cleaned}/api`;
+  }
+  return cleaned;
+};
+
 const resolveDefaultBaseUrl = (): string => {
   // Default to same-origin backend path under /api for production hosting
   if (typeof window !== 'undefined' && window.location?.origin) {
@@ -9,7 +21,7 @@ const resolveDefaultBaseUrl = (): string => {
 
 export const API_CONFIG = {
   // Prefer explicit env; otherwise use same-origin + /api
-  BASE_URL: process.env.REACT_APP_API_URL || resolveDefaultBaseUrl(),
+  BASE_URL: normalizeApiBaseUrl(process.env.REACT_APP_API_URL),
   TIMEOUT: 60000, // Increased to 60 seconds for payment processing
 };
 

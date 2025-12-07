@@ -17,7 +17,7 @@ export interface AuthError {
 export const checkUserExists = async (phoneNumber: string): Promise<{ exists: boolean; isRegistered: boolean; user?: any }> => {
   try {
     console.log('Checking if user exists for:', phoneNumber);
-    console.log('API Base URL:', process.env.REACT_APP_API_URL || 'https://snap.cloudnexus.biz:');
+    // API base URL will be logged by the API config at startup
     
     const api = getApi();
     console.log('Making request to:', `${api.defaults.baseURL}/auth/check-user`);
