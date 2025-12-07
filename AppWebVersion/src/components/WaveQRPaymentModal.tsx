@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { X, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { waveGambiaPaymentService } from '../api/waveGambiaPayment';
+import { orderService } from '../api/orders';
 
 interface WaveQRPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
+  orderId?: string;
   sessionId: string;
   paymentUrl: string;
   amount: number;
@@ -18,6 +20,7 @@ type PollStatus = 'idle' | 'polling' | 'completed' | 'failed';
 export function WaveQRPaymentModal({
   isOpen,
   onClose,
+  orderId,
   sessionId,
   paymentUrl,
   amount,
@@ -37,6 +40,7 @@ export function WaveQRPaymentModal({
     let isCancelled = false;
     const interval = setInterval(async () => {
       try {
+        // 1) Check provider session status
         const res = await waveGambiaPaymentService.getSession(sessionId);
         const data = res?.data || res;
         // wave responses can have payment_status / checkout_status
@@ -50,6 +54,7 @@ export function WaveQRPaymentModal({
             clearInterval(interval);
             onCompleted({ sessionId, transactionId: txId });
           }
+          return;
         } else if (paymentStatus === 'FAILED' || checkoutStatus === 'CANCELLED') {
           if (!isCancelled) {
             setPollStatus('failed');
@@ -57,6 +62,24 @@ export function WaveQRPaymentModal({
             const message = (res as any)?.message || 'Payment failed';
             setError(message);
             onFailed && onFailed(message);
+          }
+          return;
+        }
+
+        // 2) Additionally, check our DB order status if orderId was provided
+        if (orderId) {
+          try {
+            const order = await orderService.getOrderById(orderId);
+            const dbStatus = (order?.paymentStatus || order?.status || '').toString().toUpperCase();
+            const isPaid = dbStatus === 'PAID' || !!order?.paidAt;
+            if (isPaid && !isCancelled) {
+              setPollStatus('completed');
+              clearInterval(interval);
+              onCompleted({ sessionId, transactionId: txId });
+              return;
+            }
+          } catch (e) {
+            // swallow db check error; continue polling
           }
         }
       } catch (e: any) {
@@ -68,7 +91,7 @@ export function WaveQRPaymentModal({
       isCancelled = true;
       clearInterval(interval);
     };
-  }, [isOpen, sessionId]);
+  }, [isOpen, sessionId, orderId]);
 
   const qrSrc = useMemo(() => {
     // Use public QR generator service for the launch URL

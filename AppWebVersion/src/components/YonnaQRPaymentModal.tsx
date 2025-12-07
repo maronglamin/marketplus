@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { X, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { yonnaForexPaymentService } from '../api/yonnaForexPayment';
+import { orderService } from '../api/orders';
 
 interface YonnaQRPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
+  orderId?: string;
   transactionId: string; // Yonna/gateway transaction id used for polling
   appTransactionId?: string; // internal tracking
   amount: number;
@@ -22,6 +24,7 @@ type PollStatus = 'idle' | 'polling' | 'completed' | 'failed';
 export function YonnaQRPaymentModal({
   isOpen,
   onClose,
+  orderId,
   transactionId,
   appTransactionId,
   amount,
@@ -45,6 +48,7 @@ export function YonnaQRPaymentModal({
     let isCancelled = false;
     const interval = setInterval(async () => {
       try {
+        // 1) Check provider/gateway transaction status
         const res = await yonnaForexPaymentService.getTransactionStatus(transactionId);
         const status = res?.data?.status || res?.data || (res as any)?.status; // be liberal in reading
 
@@ -56,6 +60,7 @@ export function YonnaQRPaymentModal({
               clearInterval(interval);
               onCompleted({ transactionId, appTransactionId });
             }
+            return;
           } else if (normalized === 'failed' || normalized === 'cancelled') {
             if (!isCancelled) {
               setPollStatus('failed');
@@ -64,6 +69,24 @@ export function YonnaQRPaymentModal({
               setError(message);
               onFailed && onFailed(message);
             }
+            return;
+          }
+        }
+
+        // 2) Additionally check our DB order status if orderId provided
+        if (orderId) {
+          try {
+            const order = await orderService.getOrderById(orderId);
+            const dbStatus = (order?.paymentStatus || order?.status || '').toString().toUpperCase();
+            const isPaid = dbStatus === 'PAID' || !!order?.paidAt;
+            if (isPaid && !isCancelled) {
+              setPollStatus('completed');
+              clearInterval(interval);
+              onCompleted({ transactionId, appTransactionId });
+              return;
+            }
+          } catch (e) {
+            // ignore db polling errors
           }
         }
       } catch (e: any) {
@@ -76,7 +99,7 @@ export function YonnaQRPaymentModal({
       isCancelled = true;
       clearInterval(interval);
     };
-  }, [isOpen, transactionId]);
+  }, [isOpen, transactionId, orderId]);
 
   const formatAmount = (value: number, curr: string) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: curr.toUpperCase() }).format(value);

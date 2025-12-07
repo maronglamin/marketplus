@@ -300,6 +300,7 @@ export function PaymentModal({
       <YonnaQRPaymentModal
         isOpen={showYonnaQR}
         onClose={() => setShowYonnaQR(false)}
+        orderId={orderId}
         transactionId={paymentData.transactionId}
         appTransactionId={paymentData.appTransactionId}
         amount={amount}
@@ -327,6 +328,7 @@ export function PaymentModal({
       <WaveQRPaymentModal
         isOpen={showWaveQR}
         onClose={() => setShowWaveQR(false)}
+        orderId={orderId}
         sessionId={waveSessionId}
         paymentUrl={wavePaymentUrl || ''}
         amount={amount}

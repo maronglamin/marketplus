@@ -764,6 +764,7 @@ export function ShoppingCart() {
       <WaveQRPaymentModal
         isOpen={waveOpen}
         onClose={() => setWaveOpen(false)}
+        orderId={selectedCount === 1 && selectedOrder ? selectedOrder.id : undefined}
         sessionId={waveSessionId || ''}
         paymentUrl={wavePaymentUrl || ''}
         amount={waveAmount}
