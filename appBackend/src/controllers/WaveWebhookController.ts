@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TransactionType } from '@prisma/client';
 import WavePaymentService from '../services/WavePaymentService';
+import UCPService from '../services/ucpService';
 
 const prisma = new PrismaClient();
 
@@ -355,6 +356,54 @@ export class WaveWebhookController {
               } catch (e) {
                 console.warn('Wave webhook: ride finalize warning:', (e as any)?.message || e);
               }
+            }
+
+            // Ensure SERVICE_FEE transaction exists (platform fee via UCP)
+            try {
+              const existingServiceFee = await prisma.externalTransaction.findFirst({
+                where: {
+                  gatewayProvider: 'wave_gambia',
+                  transactionType: 'SERVICE_FEE',
+                  appTransactionId: original.appTransactionId,
+                },
+              });
+              if (!existingServiceFee) {
+                const baseAmount = Number(original.amount || 0);
+                const currencyCode = (original.currencyCode || 'GMD').toUpperCase();
+                const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } =
+                  await UCPService.calculateServiceFee('wave_wallet', baseAmount, currencyCode);
+                await prisma.externalTransaction.create({
+                  data: {
+                    orderId: original.orderId || null,
+                    rentalRequestId: (original as any).rentalRequestId || null,
+                    rideRequestId: (original as any).rideRequestId || null,
+                    customerId: (original.customerId ?? undefined) as any,
+                    sellerId: (original.sellerId ?? undefined) as any,
+                    gatewayProvider: 'wave_gambia',
+                    gatewayTransactionId: `${original.gatewayTransactionId || resolvedTransactionId || 'unknown'}-servicefee`,
+                    paymentReference: original.paymentReference || (resolvedTransactionId || ''),
+                    appTransactionId: original.appTransactionId,
+                    appService: original.appService,
+                    transactionType: TransactionType.SERVICE_FEE,
+                    amount: serviceFeeAmount,
+                    currencyCode,
+                    gatewayChargeFees: null,
+                    processedAmount: 0,
+                    paidThroughGateway: false,
+                    gatewayResponse: {
+                      originalReference: original.gatewayTransactionId || resolvedTransactionId,
+                      serviceFeeConfig: serviceFeeConfig || null,
+                      serviceFeePercentage,
+                      serviceFeeAmount,
+                      webhookDerived: true,
+                    } as any,
+                    status: 'SUCCESS',
+                    processedAt: new Date(),
+                  },
+                });
+              }
+            } catch (e) {
+              console.warn('Wave webhook: service fee creation warning:', (e as any)?.message || e);
             }
           }
         }

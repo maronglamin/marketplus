@@ -16,27 +16,51 @@ export class UCPService {
    */
   static async getServiceFeeConfig(gatewayProvider: string): Promise<UCPServiceFeeConfig | null> {
     try {
-      const ucpName = `service_fee_${gatewayProvider.toLowerCase()}`;
-      
-      const ucp = await prisma.uCP.findFirst({
-        where: {
-          name: ucpName,
-          isActive: true,
-          serviceType: 'payment_gateway'
+      const key = gatewayProvider.toLowerCase();
+      // Support common provider aliases so we don't depend on an exact key
+      const candidates: string[] = (() => {
+        if (key.includes('stripe')) {
+          return ['stripe'];
         }
-      });
+        if (key.includes('wave')) {
+          // Try multiple Wave variants
+          return ['wave_wallet', 'wave_gambia', 'wave'];
+        }
+        if (key.includes('yonna') || key.includes('aps')) {
+          // Try multiple Yonna variants
+          return ['yonna', 'yonna_forex', 'aps'];
+        }
+        // Fallback to given key
+        return [key];
+      })();
 
-      if (!ucp) {
-        console.log(`No service fee configuration found for gateway: ${gatewayProvider}`);
+      let found: any = null;
+      for (const candidate of candidates) {
+        const name = `service_fee_${candidate}`;
+        const ucp = await prisma.uCP.findFirst({
+          where: {
+            name,
+            isActive: true,
+            serviceType: 'payment_gateway'
+          }
+        });
+        if (ucp) {
+          found = ucp;
+          break;
+        }
+      }
+
+      if (!found) {
+        console.log(`No service fee configuration found for gateway: ${gatewayProvider} (tried: ${candidates.join(', ')})`);
         return null;
       }
 
       return {
-        name: ucp.name,
-        value: Number(ucp.value),
-        description: ucp.description || undefined,
-        serviceType: ucp.serviceType || undefined,
-        metadata: ucp.metadata as any
+        name: found.name,
+        value: Number(found.value),
+        description: found.description || undefined,
+        serviceType: found.serviceType || undefined,
+        metadata: found.metadata as any
       };
     } catch (error) {
       console.error('Error getting service fee config:', error);

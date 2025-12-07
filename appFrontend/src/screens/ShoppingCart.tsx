@@ -71,6 +71,9 @@ export function ShoppingCart() {
   const [processingStripePayment, setProcessingStripePayment] = useState(false);
   const [showYonnaPayment, setShowYonnaPayment] = useState(false);
   const [waveSessionId, setWaveSessionId] = useState<string | null>(null);
+  const [waveOrderId, setWaveOrderId] = useState<string | null>(null);
+  const [waveCurrencyCode, setWaveCurrencyCode] = useState<string | null>(null);
+  const [waveBulkOrderIds, setWaveBulkOrderIds] = useState<string[]>([]);
   const [actioningOrderId, setActioningOrderId] = useState<string | null>(null);
   const yonnaForexService = new YonnaForexPaymentService();
   const wavePaymentService = new WavePaymentService();
@@ -180,6 +183,81 @@ export function ShoppingCart() {
       return () => {};
     }, [waveSessionId])
   );
+
+  // Continuous polling for Wave session until paid (supports single and bulk flows)
+  useEffect(() => {
+    if (!waveSessionId) return;
+    let isCancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const sessionRes: any = await wavePaymentService.getSession(waveSessionId);
+        const data = sessionRes?.data || sessionRes;
+        const paymentStatus = data?.payment_status || data?.data?.payment_status || data?.paymentStatus;
+        const checkoutStatus = data?.checkout_status || data?.data?.checkout_status || data?.checkoutStatus;
+        const transactionId = data?.transaction_id || data?.data?.transaction_id || data?.transactionId || waveSessionId;
+        const paidByStatus = ['SUCCEEDED', 'SUCCESS', 'PAID'].includes(String(paymentStatus || '').toUpperCase());
+        const paidByCheckout = ['COMPLETE', 'COMPLETED', 'SUCCESS'].includes(String(checkoutStatus || '').toUpperCase());
+        if ((paidByStatus || paidByCheckout) && !isCancelled) {
+          try {
+            if (waveBulkOrderIds.length > 0 && waveCurrencyCode) {
+              await api.post('/api/payments/bulk-external-success', {
+                provider: 'wave_gambia',
+                transactionReference: transactionId,
+                orderIds: waveBulkOrderIds,
+                currencyCode: waveCurrencyCode,
+              });
+            } else if (waveOrderId && waveCurrencyCode) {
+              await api.post('/api/payments/external-success', {
+                provider: 'wave_gambia',
+                transactionReference: transactionId,
+                orderId: waveOrderId,
+                currencyCode: waveCurrencyCode,
+              });
+            }
+          } catch {
+            // ignore reconciliation errors; UI will refresh anyway
+          } finally {
+            clearInterval(timer);
+            setWaveSessionId(null);
+            setWaveOrderId(null);
+            setWaveBulkOrderIds([]);
+            await loadOrders();
+          }
+        }
+      } catch {
+        // ignore individual poll errors
+      }
+    }, 3000);
+    return () => {
+      isCancelled = true;
+      clearInterval(timer);
+    };
+  }, [waveSessionId, waveOrderId, waveCurrencyCode, waveBulkOrderIds.length]);
+
+  // Continuous polling for Yonna payment: close modal when order reflects paid
+  useEffect(() => {
+    if (!showYonnaPayment || !selectedOrder?.id) return;
+    let isCancelled = false;
+    const timer = setInterval(async () => {
+      try {
+        const res = await api.get(`/api/orders/${selectedOrder.id}`);
+        const o = res?.data;
+        const dbStatus = String(o?.paymentStatus || o?.status || '').toUpperCase();
+        const isPaid = dbStatus === 'PAID' || !!o?.paidAt;
+        if (isPaid && !isCancelled) {
+          clearInterval(timer);
+          setShowYonnaPayment(false);
+          await loadOrders();
+        }
+      } catch {
+        // ignore; keep polling
+      }
+    }, 3000);
+    return () => {
+      isCancelled = true;
+      clearInterval(timer);
+    };
+  }, [showYonnaPayment, selectedOrder?.id]);
 
   useEffect(() => {
     if (showPaymentModal && !loadingPaymentMethods && paymentMethods.length === 0) {
@@ -394,9 +472,11 @@ export function ShoppingCart() {
           (async () => {
             try {
               Alert.alert('Wave Payment', 'Preparing payment data for Wave Gambia...');
+              const amountToPay = selectedCount > 1 && selectedCurrencyCode ? selectedTotalForCurrency : order.totalAmount;
+              const currencyToUse = (selectedCount > 1 && selectedCurrencyCode) ? selectedCurrencyCode : (order.currencyCode || 'GMD');
               const result = await wavePaymentService.processPayment({
-                amount: selectedCount > 1 && selectedCurrencyCode ? selectedTotalForCurrency : order.totalAmount,
-                currency: selectedCount > 1 && selectedCurrencyCode ? selectedCurrencyCode : (order.currencyCode || 'GMD'),
+                amount: amountToPay,
+                currency: currencyToUse,
                 // For bulk, omit orderId to avoid backend lookup errors; we'll reconcile via bulk-external-success
                 orderId: selectedCount > 1 ? undefined : order.id,
                 description: selectedCount > 1
@@ -405,8 +485,17 @@ export function ShoppingCart() {
               });
               if (result.success && result.data?.waveLaunchUrl) {
                 await Linking.openURL(result.data.waveLaunchUrl);
-                if (selectedCount > 1 && selectedCurrencyCode && result.data?.sessionId) {
+                // Track session for both bulk and single so we can poll status
+                if (result.data?.sessionId) {
                   setWaveSessionId(result.data.sessionId);
+                  setWaveCurrencyCode(currencyToUse || null);
+                  if (selectedCount > 1 && selectedCurrencyCode) {
+                    setWaveBulkOrderIds(Array.from(selectedOrderIds));
+                    setWaveOrderId(null);
+                  } else {
+                    setWaveBulkOrderIds([]);
+                    setWaveOrderId(order.id);
+                  }
                 }
               } else {
                 Alert.alert('Wave Payment Error', result.message || result.error || 'Unable to start Wave payment. Please try again.');

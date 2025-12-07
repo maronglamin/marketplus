@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  Modal,
   StatusBar,
   Platform,
   TextInput,
@@ -14,6 +15,9 @@ import {
   ScrollView,
   TouchableWithoutFeedback,
   Keyboard,
+  Linking,
+  AppState,
+  AppStateStatus,
 } from 'react-native'
 import { ArrowLeft, Globe, X, Search } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
@@ -24,6 +28,8 @@ import getApi from '../api/config'
 import type { AuthStackParamList } from '../navigation/AuthNavigator'
 import countryData from '../utils/countryData'; // You will need to create this file with country code/name/flag
 import * as Localization from 'expo-localization';
+import * as Location from 'expo-location';
+import { Camera } from 'expo-camera';
 import { getUserLocationFromGPS } from '../utils/locationService';
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
@@ -44,6 +50,10 @@ export function Login() {
   const [autoDetectedCountry, setAutoDetectedCountry] = useState(false)
   const [apiBaseUrl, setApiBaseUrl] = useState<string>('')
   const [apiHealth, setApiHealth] = useState<{ ok: boolean | null; message?: string }>({ ok: null })
+  const [locationPermission, setLocationPermission] = useState<{ status: 'unknown' | 'granted' | 'denied'; canAskAgain: boolean }>({ status: 'unknown', canAskAgain: true })
+  const [checkingLocationPermission, setCheckingLocationPermission] = useState<boolean>(true)
+  const [cameraPermission, setCameraPermission] = useState<{ status: 'unknown' | 'granted' | 'denied'; canAskAgain: boolean }>({ status: 'unknown', canAskAgain: true })
+  const [showCameraGate, setShowCameraGate] = useState<boolean>(false)
 
   // Initialize API and device info on component mount
   useEffect(() => {
@@ -63,6 +73,124 @@ export function Login() {
     }
     initialize()
   }, [])
+
+  // First-time permission prompts (Location + Camera)
+  useEffect(() => {
+    const requestInitialPermissionsIfNeeded = async () => {
+      try {
+        const alreadyPrompted = await AsyncStorage.getItem('initialPermsRequested');
+        if (alreadyPrompted) return;
+
+        // Request Location permission (foreground)
+        try {
+          await Location.requestForegroundPermissionsAsync();
+        } catch (e) {
+          console.log('Location permission request error:', e);
+        }
+
+        // Mark as done to avoid re-prompting
+        await AsyncStorage.setItem('initialPermsRequested', '1');
+      } catch (err) {
+        console.log('Error in initial permission flow:', err);
+      }
+    };
+    requestInitialPermissionsIfNeeded();
+  }, [])
+
+  // Enforce location permission with a blocking gate
+  useEffect(() => {
+    const checkPerms = async () => {
+      try {
+        setCheckingLocationPermission(true);
+        const fg = await Location.getForegroundPermissionsAsync();
+        const status = (fg?.status as any) || (fg?.granted ? 'granted' : 'denied');
+        const canAskAgain = fg?.canAskAgain !== false;
+        setLocationPermission({
+          status: status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'unknown',
+          canAskAgain,
+        });
+      } catch (e) {
+        console.log('Error checking location permission:', e);
+        setLocationPermission({ status: 'unknown', canAskAgain: true });
+      } finally {
+        setCheckingLocationPermission(false);
+      }
+    };
+    checkPerms();
+
+    const onAppState = (state: AppStateStatus) => {
+      if (state === 'active') {
+        checkPerms();
+      }
+    };
+    const sub = AppState.addEventListener('change', onAppState);
+    return () => {
+      sub.remove();
+    };
+  }, [])
+
+  const requestLocationPermission = async () => {
+    try {
+      const res = await Location.requestForegroundPermissionsAsync();
+      const status = (res?.status as any) || (res?.granted ? 'granted' : 'denied');
+      const canAskAgain = res?.canAskAgain !== false;
+      setLocationPermission({
+        status: status === 'granted' ? 'granted' : 'denied',
+        canAskAgain,
+      });
+    } catch (e) {
+      console.log('Error requesting location permission:', e);
+    }
+  };
+
+  const openSystemSettings = async () => {
+    try {
+      await Linking.openSettings();
+    } catch (e) {
+      console.log('Failed to open settings:', e);
+    }
+  };
+
+  // Camera permission gate: show after location is granted (first-time flow)
+  useEffect(() => {
+    const maybeShowCameraGate = async () => {
+      if (locationPermission.status !== 'granted') return;
+      try {
+        const alreadyPrompted = await AsyncStorage.getItem('cameraPermsRequested');
+        const cam = await Camera.getCameraPermissionsAsync();
+        const status = (cam?.status as any) || (cam?.granted ? 'granted' : 'denied');
+        const canAskAgain = cam?.canAskAgain !== false;
+        setCameraPermission({
+          status: status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'unknown',
+          canAskAgain,
+        });
+        if (!alreadyPrompted && status !== 'granted') {
+          setShowCameraGate(true);
+        }
+      } catch (e) {
+        console.log('Error checking camera permission:', e);
+      }
+    };
+    maybeShowCameraGate();
+  }, [locationPermission.status])
+
+  const requestCameraPermission = async () => {
+    try {
+      const res = await Camera.requestCameraPermissionsAsync();
+      const status = (res?.status as any) || (res?.granted ? 'granted' : 'denied');
+      const canAskAgain = res?.canAskAgain !== false;
+      setCameraPermission({
+        status: status === 'granted' ? 'granted' : 'denied',
+        canAskAgain,
+      });
+      if (status === 'granted') {
+        await AsyncStorage.setItem('cameraPermsRequested', '1');
+        setShowCameraGate(false);
+      }
+    } catch (e) {
+      console.log('Error requesting camera permission:', e);
+    }
+  };
 
   function getDeviceCountryCode() {
     try {
@@ -365,9 +493,90 @@ export function Login() {
 
         </KeyboardAvoidingView>
 
+        {/* Location Permission Gate - blocks app until granted */}
+        <Modal
+          visible={!checkingLocationPermission && locationPermission.status !== 'granted'}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => {}}
+        >
+          <SafeAreaView style={styles.permContainer}>
+            <View style={styles.permBody}>
+              <Text style={styles.permTitle}>Enable Location to Continue</Text>
+              <Text style={styles.permSubtitle}>
+                We use your location to set your country automatically and improve your experience.
+              </Text>
+            </View>
+            <View style={styles.permFooter}>
+              {locationPermission.canAskAgain ? (
+                <TouchableOpacity
+                  onPress={requestLocationPermission}
+                  style={[styles.button, styles.buttonWide]}
+                  disabled={checkingLocationPermission}
+                >
+                  <Text style={styles.buttonText}>
+                    {checkingLocationPermission ? 'Requesting...' : 'Allow Location'}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    onPress={openSystemSettings}
+                    style={[styles.button, styles.buttonSettings, styles.buttonWide]}
+                  >
+                    <Text style={styles.buttonText}>Open Settings</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.permHelpText}>
+                    Permission was denied previously. Please enable Location in system settings to continue.
+                  </Text>
+                </>
+              )}
+            </View>
+          </SafeAreaView>
+        </Modal>
+
+        {/* Camera Permission Gate - shown once after location to allow document capture */}
+        <Modal
+          visible={locationPermission.status === 'granted' && showCameraGate && cameraPermission.status !== 'granted'}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => {}}
+        >
+          <SafeAreaView style={styles.permContainer}>
+            <View style={styles.permBody}>
+              <Text style={styles.permTitle}>Enable Camera for Document Uploads</Text>
+              <Text style={styles.permSubtitle}>
+                To complete registration, you’ll need to capture your onboarding documents using your camera.
+              </Text>
+            </View>
+            <View style={styles.permFooter}>
+              {cameraPermission.canAskAgain ? (
+                <TouchableOpacity
+                  onPress={requestCameraPermission}
+                  style={[styles.button, styles.buttonWide]}
+                >
+                  <Text style={styles.buttonText}>Allow Camera</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    onPress={openSystemSettings}
+                    style={[styles.button, styles.buttonSettings, styles.buttonWide]}
+                  >
+                    <Text style={styles.buttonText}>Open Settings</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.permHelpText}>
+                    Permission was denied previously. Please enable Camera in system settings to continue.
+                  </Text>
+                </>
+              )}
+            </View>
+          </SafeAreaView>
+        </Modal>
+
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.button, !phoneInput && styles.buttonDisabled]}
+            style={[styles.button, styles.buttonWide, !phoneInput && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={!phoneInput || loading}
           >
@@ -538,9 +747,12 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#2563EB',
-    padding: 16,
+    paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
+  },
+  buttonWide: {
+    paddingHorizontal: 28,
   },
   buttonDisabled: {
     backgroundColor: '#93C5FD',
@@ -549,6 +761,46 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Permission gate styles
+  permContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+    justifyContent: 'space-between',
+  },
+  permBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  permSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  permFooter: {
+    width: '100%',
+    gap: 12,
+    paddingBottom: 16,
+  },
+  buttonSettings: {
+    backgroundColor: '#111827',
+  },
+  permHelpText: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 8,
   },
   bottomSheetBackground: {
     backgroundColor: '#FFFFFF',
