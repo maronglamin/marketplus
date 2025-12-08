@@ -13,6 +13,9 @@ export interface YonnaForexWebhookPayload {
   timestamp: string | number;
   message?: string;
   error?: string;
+  // Provider identifiers (if sent by Yonna)
+  transactionId?: string;
+  reference?: string;
   signature?: string; // For webhook signature verification
 }
 
@@ -257,12 +260,19 @@ export class YonnaForexWebhookController {
         };
 
         const newStatus = externalStatusMap[normalized] || 'PENDING';
+        const providerReference =
+          (payload as any).reference ||
+          (payload as any).transactionId ||
+          null;
         
         await prisma.externalTransaction.update({
           where: { id: located.id },
           data: {
             status: newStatus as any,
             updatedAt: new Date(),
+            ...(providerReference
+              ? { paymentReference: providerReference }
+              : {}),
             gatewayResponse: {
               ...((await prisma.externalTransaction.findUnique({ where: { id: located.id } }))?.gatewayResponse as any || {}),
               lastWebhookStatus: payload.status,
@@ -306,6 +316,8 @@ export class YonnaForexWebhookController {
           const ext = await prisma.externalTransaction.findUnique({
             where: { id: located.id },
             select: {
+              gatewayTransactionId: true,
+              appTransactionId: true,
               orderId: true,
               rentalRequestId: true,
               rideRequestId: true
@@ -329,11 +341,18 @@ export class YonnaForexWebhookController {
               'pending': 'PENDING'
             };
 
+            const providerReference =
+              (payload as any).reference ||
+              (payload as any).transactionId ||
+              null;
+
             await prisma.orders.update({
               where: { id: ext.orderId },
               data: {
                 status: (orderStatusMap[normalized] || 'PENDING') as any,
                 paymentStatus: (paymentStatusMap[normalized] || 'PENDING') as any,
+                // Record the provider's payment reference from Yonna payload when available
+                ...(providerReference ? { paymentReference: providerReference } : {}),
                 updatedAt: new Date()
               }
             });
