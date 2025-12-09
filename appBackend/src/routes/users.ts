@@ -58,7 +58,7 @@ router.post('/terminate', authenticate, async (req: AuthRequest, res) => {
       prisma.orders.count({
         where: {
           userId,
-          status: { in: ['PENDING', 'CONFIRMED', 'PROCESSING'] }
+          status: 'PENDING'
         }
       }),
       prisma.rideRequest.count({
@@ -136,7 +136,7 @@ router.get('/deletion-eligibility', authenticate, async (req: AuthRequest, res) 
       prisma.orders.count({
         where: {
           userId,
-          status: { in: ['PENDING', 'CONFIRMED', 'PROCESSING'] }
+          status: 'PENDING'
         }
       }),
       prisma.rideRequest.count({
