@@ -597,9 +597,9 @@ export const loginWithPin = async (req: Request, res: Response) => {
 
     const normalizedPhone = normalizePhone(phoneNumber);
 
-    // First find the user by phone number
-    const user = await prisma.user.findUnique({
-      where: { phoneNumber: normalizedPhone },
+    // First find the user by phone number (prefer non-TERMINATED, newest)
+    let user = await prisma.user.findFirst({
+      where: { phoneNumber: normalizedPhone, NOT: { status: 'TERMINATED' } },
       include: {
         devices: {
           where: {
@@ -607,14 +607,30 @@ export const loginWithPin = async (req: Request, res: Response) => {
             isVerified: true
           }
         }
-      }
+      },
+      orderBy: { createdAt: 'desc' }
     });
+    if (!user) {
+      user = await prisma.user.findFirst({
+        where: { phoneNumber: normalizedPhone },
+        include: {
+          devices: {
+            where: {
+              deviceId,
+              isVerified: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }) as any;
+    }
 
     // Test-only bypass: ensure device is verified for this phone before proceeding
     if (normalizedPhone === TEST_BYPASS_PHONE) {
-      const existing = await prisma.user.findUnique({
+      const existing = await prisma.user.findFirst({
         where: { phoneNumber: normalizedPhone },
-        include: { devices: true }
+        include: { devices: true },
+        orderBy: { createdAt: 'desc' }
       });
       if (!existing) {
         console.log('Test bypass: user not found for phone', normalizedPhone);
