@@ -12,6 +12,10 @@ const prisma = new PrismaClient();
 // Test bypass phone configuration (store review)
 const TEST_BYPASS_PHONE = '+2207690103';
 
+// Temporary constants until Prisma types are regenerated with TERMINATED
+const ACCOUNT_STATUS_TERMINATED = 'TERMINATED' as any;
+const ACCOUNT_STATUS_ACTIVE = 'ACTIVE' as any;
+
 // Normalize phone number to a +E.164-like form for reliable comparisons
 const normalizePhone = (raw: unknown): string => {
   if (typeof raw !== 'string') return '';
@@ -87,7 +91,7 @@ export const initiateLogin = async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' }
     });
     // Prefer any non-terminated user; otherwise treat as new user
-    const user = usersWithPhone.find(u => u.status !== 'TERMINATED') || null;
+    const user = usersWithPhone.find(u => (u.status as any) !== ACCOUNT_STATUS_TERMINATED) || null;
 
     // Blocked status check
     if (user && user.status === 'BLOCKED') {
@@ -96,7 +100,7 @@ export const initiateLogin = async (req: Request, res: Response) => {
     }
 
     // Terminated users should be treated like new users (OTP + registration) and MUST NOT go to PIN login
-    const isTerminated = !!(user && user.status === 'TERMINATED');
+    const isTerminated = !!(user && (user.status as any) === ACCOUNT_STATUS_TERMINATED);
 
     console.log('User lookup result:', user ? {
       id: user.id,
@@ -384,9 +388,9 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' }
     });
     // If multiple users exist and the latest is terminated while an older active exists, prefer the active
-    if (user?.status === 'TERMINATED') {
+    if ((user?.status as any) === ACCOUNT_STATUS_TERMINATED) {
       const active = await prisma.user.findFirst({
-        where: { phoneNumber: normalizedPhone, NOT: { status: 'TERMINATED' } },
+        where: { phoneNumber: normalizedPhone, NOT: { status: ACCOUNT_STATUS_TERMINATED } as any },
         include: { devices: true },
         orderBy: { createdAt: 'desc' }
       });
@@ -527,10 +531,11 @@ export const registerUser = async (req: Request, res: Response) => {
       middleName
     });
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    // Check if user already exists (prefer the most recent record for this phone)
+    const existingUser = await prisma.user.findFirst({
       where: { phoneNumber: normalizedPhone },
-      include: { devices: true }
+      include: { devices: true },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (!existingUser) {
@@ -553,7 +558,7 @@ export const registerUser = async (req: Request, res: Response) => {
         // Ensure stored phone remains normalized (no change if already set)
         phoneNumber: existingUser.phoneNumber || normalizedPhone,
         // Reactivate if previously terminated
-        status: existingUser.status === 'TERMINATED' ? 'ACTIVE' : existingUser.status,
+        status: (existingUser.status as any) === ACCOUNT_STATUS_TERMINATED ? ACCOUNT_STATUS_ACTIVE : existingUser.status,
       }
     });
 
@@ -599,7 +604,7 @@ export const loginWithPin = async (req: Request, res: Response) => {
 
     // First find the user by phone number (prefer non-TERMINATED, newest)
     let user = await prisma.user.findFirst({
-      where: { phoneNumber: normalizedPhone, NOT: { status: 'TERMINATED' } },
+      where: { phoneNumber: normalizedPhone, NOT: { status: ACCOUNT_STATUS_TERMINATED } as any },
       include: {
         devices: {
           where: {
@@ -1071,7 +1076,7 @@ export const checkUserExists = async (req: Request, res: Response) => {
 
     // Check if user exists
     const user = await prisma.user.findFirst({
-      where: { phoneNumber, NOT: { status: 'TERMINATED' } },
+      where: { phoneNumber, NOT: { status: ACCOUNT_STATUS_TERMINATED } as any },
       select: {
         id: true,
         firstName: true,
