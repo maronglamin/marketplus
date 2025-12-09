@@ -48,6 +48,28 @@ export const getApi = (): AxiosInstance => {
       return response;
     },
     (error) => {
+      // Normalize helper to detect terminated/disabled accounts
+      const isTerminatedSignal = (): boolean => {
+        try {
+          const status: number | undefined = error?.response?.status;
+          const code: string | undefined = error?.response?.data?.code;
+          const message: string = String(error?.response?.data?.message || '').toLowerCase();
+          const text: string = String(error?.response?.data || '').toLowerCase();
+          const hasTerminatedWord =
+            message.includes('terminated') ||
+            message.includes('deactivated') ||
+            message.includes('disabled') ||
+            text.includes('terminated') ||
+            text.includes('deactivated') ||
+            text.includes('disabled');
+          const statusIndicatesTermination = status === 410 || status === 423 || status === 403;
+          const codeIndicatesTermination = code === 'USER_TERMINATED' || code === 'ACCOUNT_TERMINATED';
+          return Boolean((statusIndicatesTermination && hasTerminatedWord) || codeIndicatesTermination);
+        } catch {
+          return false;
+        }
+      };
+
       if (error.code === 'ECONNABORTED') {
         console.error('Request timeout:', error);
         throw new Error('Request timeout. Please check your connection and try again.');
@@ -59,6 +81,18 @@ export const getApi = (): AxiosInstance => {
       }
       
       console.error('Response error:', error.response?.status, error.response?.data);
+
+      // Global handling for terminated accounts: clear auth and broadcast event so UI can react
+      if (isTerminatedSignal()) {
+        try {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.setItem('accountTerminated', '1');
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth:terminated'));
+          }
+        } catch {}
+      }
       return Promise.reject(error);
     }
   );

@@ -26,6 +26,14 @@ export const checkUserExists = async (phoneNumber: string): Promise<{ exists: bo
     
     console.log('User check response:', response.data);
     
+    // If backend returns user with a terminated/deactivated status,
+    // treat as non-existent so web flow prompts to register via mobile app.
+    const statusText = String(response?.data?.user?.status || '').toLowerCase();
+    if (statusText && (statusText.includes('terminated') || statusText.includes('deactivated') || statusText === 'deleted')) {
+      try { localStorage.setItem('accountTerminated', '1'); } catch {}
+      return { exists: false, isRegistered: false };
+    }
+    
     return {
       exists: response.data.exists,
       isRegistered: response.data.isRegistered,
@@ -46,6 +54,16 @@ export const checkUserExists = async (phoneNumber: string): Promise<{ exists: bo
     
     if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
       throw new Error('Cannot connect to server. Please make sure the backend is running on port 3000.');
+    }
+    
+    // Handle terminated account signals at this endpoint by treating as non-existent
+    const status = error.response?.status;
+    const message: string = String(error.response?.data?.message || '').toLowerCase();
+    const terminatedSignal =
+      status === 410 || status === 423 || status === 403 || message.includes('terminated') || message.includes('deactivated');
+    if (terminatedSignal) {
+      try { localStorage.setItem('accountTerminated', '1'); } catch {}
+      return { exists: false, isRegistered: false };
     }
     
     if (error.response?.status === 404) {
@@ -79,6 +97,13 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
       throw new Error('Invalid PIN');
     }
 
+    // Do not allow login for terminated/deactivated accounts
+    const statusText = String(response?.data?.user?.status || '').toLowerCase();
+    if (statusText && (statusText.includes('terminated') || statusText.includes('deactivated') || statusText === 'deleted')) {
+      try { localStorage.setItem('accountTerminated', '1'); } catch {}
+      throw new Error('Your account has been terminated. Please contact support if you believe this is a mistake.');
+    }
+
     const { token } = response.data;
     localStorage.setItem('token', token);
     localStorage.setItem('phoneNumber', phoneNumber);
@@ -87,11 +112,21 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
   } catch (error: any) {
     console.error('PIN login error:', error);
     
-    if (error.response?.status === 401) {
+    // Terminated signals
+    const status = error.response?.status;
+    const message: string = String(error.response?.data?.message || '').toLowerCase();
+    const terminatedSignal =
+      status === 410 || status === 423 || status === 403 || message.includes('terminated') || message.includes('deactivated');
+    if (terminatedSignal) {
+      try { localStorage.setItem('accountTerminated', '1'); } catch {}
+      throw new Error('Your account has been terminated. Please contact support if you believe this is a mistake.');
+    }
+
+    if (status === 401) {
       throw new Error('Invalid PIN. Please try again.');
-    } else if (error.response?.status === 404) {
+    } else if (status === 404) {
       throw new Error('User not found. Please register using the mobile app first.');
-    } else if (error.response?.status === 500) {
+    } else if (status === 500) {
       throw new Error('Server error. Please try again in a few moments.');
     } else if (error.response?.data?.message) {
       throw new Error(error.response.data.message);

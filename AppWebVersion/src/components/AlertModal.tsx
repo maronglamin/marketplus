@@ -169,3 +169,20 @@ export function IncompleteRegistrationModal({ isOpen, onClose }: { isOpen: boole
     />
   );
 }
+
+// Specialized modal for terminated accounts
+export function AccountTerminatedModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  return (
+    <AlertModal
+      isOpen={isOpen}
+      onClose={onClose}
+      type="error"
+      title="Account Terminated"
+      message="Your account has been terminated and access has been disabled. If you believe this is a mistake, please contact support."
+      actionText="Contact Support"
+      onAction={() => {
+        window.open('mailto:support@snap.cloudnexus.biz?subject=Account%20Termination', '_blank');
+      }}
+    />
+  );
+}

@@ -54,6 +54,16 @@ export function Login() {
 
     detectCountry();
   }, []);
+  
+  // If previous navigation set a termination flag, show modal on mount
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('accountTerminated') === '1') {
+        setShowDownloadModal(true);
+        localStorage.removeItem('accountTerminated');
+      }
+    } catch {}
+  }, []);
 
   const formatPhoneNumber = (number: string) => {
     return number.replace(/\D/g, '');
@@ -104,8 +114,13 @@ export function Login() {
       setShowPinInput(true);
     } catch (error: any) {
       setLoading(false);
-      // For now, show a simple alert for API errors, but this could be improved with a modal
-      alert(error.message || 'Login failed. Please try again.');
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('terminated') || msg.includes('deactivated') || msg.includes('disabled')) {
+        setShowDownloadModal(true);
+      } else {
+        // For now, show a simple alert for API errors, but this could be improved with a modal
+        alert(error.message || 'Login failed. Please try again.');
+      }
     }
   };
 
@@ -136,7 +151,13 @@ export function Login() {
     } catch (error: any) {
       console.error('PIN verification error:', error);
       setLoading(false);
-      setPinError(error.message || 'PIN verification failed. Please try again.');
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('terminated') || msg.includes('deactivated') || msg.includes('disabled')) {
+        setShowDownloadModal(true);
+        setPinError('');
+      } else {
+        setPinError(error.message || 'PIN verification failed. Please try again.');
+      }
     }
   };
 
@@ -269,6 +290,7 @@ export function Login() {
         isOpen={showIncompleteModal}
         onClose={() => setShowIncompleteModal(false)}
       />
+      
     </div>
   );
 }

@@ -60,6 +60,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkAuth();
   }, []);
 
+  // Listen for global termination events from API layer
+  useEffect(() => {
+    const handleTerminated = () => {
+      try {
+        setUser(null);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('phoneNumber');
+      } catch {}
+    };
+    window.addEventListener('auth:terminated', handleTerminated as EventListener);
+    return () => {
+      window.removeEventListener('auth:terminated', handleTerminated as EventListener);
+    };
+  }, []);
+
   const login = (userData: User) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
