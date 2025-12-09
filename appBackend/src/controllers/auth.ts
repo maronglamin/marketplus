@@ -80,17 +80,23 @@ export const initiateLogin = async (req: Request, res: Response) => {
     const normalizedPhone = normalizePhone(phoneNumber);
     console.log('Initiating login for:', { phoneNumber, deviceInfo });
 
-    // Check if user exists
-    const user = await prisma.user.findUnique({
+    // Check if any users exist for this phone
+    const usersWithPhone = await prisma.user.findMany({
       where: { phoneNumber: normalizedPhone },
-      include: { devices: true }
+      include: { devices: true },
+      orderBy: { createdAt: 'desc' }
     });
+    // Prefer any non-terminated user; otherwise treat as new user
+    const user = usersWithPhone.find(u => u.status !== 'TERMINATED') || null;
 
     // Blocked status check
     if (user && user.status === 'BLOCKED') {
       console.log('Blocked user attempted login:', { userId: user.id, phoneNumber });
       return res.status(401).json({ message: 'Your account is blocked. Please contact support.' });
     }
+
+    // Terminated users should be treated like new users (OTP + registration) and MUST NOT go to PIN login
+    const isTerminated = !!(user && user.status === 'TERMINATED');
 
     console.log('User lookup result:', user ? {
       id: user.id,
@@ -236,7 +242,7 @@ export const initiateLogin = async (req: Request, res: Response) => {
         (existingDevice.isVerified ? 'Verified' : 'Not verified') : 
         'New device');
       
-      if (existingDevice && existingDevice.isVerified) {
+      if (existingDevice && existingDevice.isVerified && !isTerminated) {
         console.log('Device already verified, proceeding to PIN login');
         return res.status(200).json({
           message: 'Device verified',
@@ -335,8 +341,8 @@ export const initiateLogin = async (req: Request, res: Response) => {
     return res.status(200).json({
       message: 'OTP sent successfully',
       requiresPin: false,
-      isNewUser: !user,
-      isRegistered: user ? Boolean(
+      isNewUser: !user || isTerminated,
+      isRegistered: isTerminated ? false : user ? Boolean(
         user.firstName && 
         user.lastName && 
         user.firstName.trim() !== '' && 
@@ -372,10 +378,20 @@ export const verifyOTPAndRegister = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findFirst({
       where: { phoneNumber: normalizedPhone },
-      include: { devices: true }
+      include: { devices: true },
+      orderBy: { createdAt: 'desc' }
     });
+    // If multiple users exist and the latest is terminated while an older active exists, prefer the active
+    if (user?.status === 'TERMINATED') {
+      const active = await prisma.user.findFirst({
+        where: { phoneNumber: normalizedPhone, NOT: { status: 'TERMINATED' } },
+        include: { devices: true },
+        orderBy: { createdAt: 'desc' }
+      });
+      if (active) user = active;
+    }
 
     if (!user) {
       // New user, return success but don't create user yet
@@ -536,6 +552,8 @@ export const registerUser = async (req: Request, res: Response) => {
         lastName: lastName.trim(),
         // Ensure stored phone remains normalized (no change if already set)
         phoneNumber: existingUser.phoneNumber || normalizedPhone,
+        // Reactivate if previously terminated
+        status: existingUser.status === 'TERMINATED' ? 'ACTIVE' : existingUser.status,
       }
     });
 
@@ -1036,15 +1054,16 @@ export const checkUserExists = async (req: Request, res: Response) => {
     console.log('Checking if user exists for:', phoneNumber);
 
     // Check if user exists
-    const user = await prisma.user.findUnique({
-      where: { phoneNumber },
+    const user = await prisma.user.findFirst({
+      where: { phoneNumber, NOT: { status: 'TERMINATED' } },
       select: {
         id: true,
         firstName: true,
         lastName: true,
         phoneNumber: true,
         createdAt: true
-      }
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (!user) {

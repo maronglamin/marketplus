@@ -74,5 +74,39 @@ export const userService = {
       console.error('❌ userService: Error fetching basic user info:', error)
       throw error
     }
+  },
+
+  async terminateAccount(): Promise<void> {
+    try {
+      console.log('🗑️ userService: Requesting account termination...')
+      await api.post('/api/users/terminate')
+      console.log('✅ userService: Account termination request successful')
+    } catch (error: any) {
+      console.error('❌ userService: Error terminating account:', error)
+      if (error.response) {
+        console.error('❌ userService: Response status:', error.response.status)
+        console.error('❌ userService: Response data:', error.response.data)
+      }
+      throw error
+    }
+  },
+
+  async getDeletionEligibility(): Promise<{
+    eligible: boolean;
+    blockers: { orders: number; rides: number; rentalsQuoted: number };
+  }> {
+    try {
+      console.log('🔎 userService: Checking deletion eligibility...')
+      const response = await api.get('/api/users/deletion-eligibility')
+      console.log('✅ userService: Deletion eligibility:', response.data)
+      return response.data
+    } catch (error: any) {
+      console.error('❌ userService: Error checking deletion eligibility:', error)
+      if (error.response) {
+        console.error('❌ userService: Response status:', error.response.status)
+        console.error('❌ userService: Response data:', error.response.data)
+      }
+      throw error
+    }
   }
 };

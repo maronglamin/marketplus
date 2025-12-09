@@ -123,6 +123,7 @@ type RootStackParamList = {
   AboutApp: undefined
   AccountType: undefined
   CustomerRideHistory: undefined
+  AccountDeletion: undefined
 }
 
 type AccountSettingsNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AccountSettings'>
@@ -642,6 +643,15 @@ export function AccountSettings() {
       id: 'account-actions',
       title: '',
       items: [
+        {
+          id: 'delete-account',
+          title: 'Delete Account',
+          icon: <Trash2 size={20} color="#DC2626" />,
+          onPress: () => navigation.navigate('AccountDeletion' as any),
+          isDestructive: true,
+          showChevron: true,
+          subtitle: 'Permanent and irreversible',
+        },
         {
           id: 'logout',
           title: 'Log Out',

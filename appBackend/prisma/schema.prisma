@@ -77,7 +77,7 @@ model User {
   firstName                    String
   middleName                   String?
   lastName                     String
-  phoneNumber                  String                 @unique
+  phoneNumber                  String
   pin                          String
   status                       AccountStatus          @default(ACTIVE)
   createdAt                    DateTime               @default(now())
@@ -1239,6 +1239,7 @@ enum AccountStatus {
   INACTIVE
   SUSPENDED
   BLOCKED
+  TERMINATED
 }
 
 enum WalletType {

@@ -45,6 +45,129 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+// Terminate (delete) the current user's account
+router.post('/terminate', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    const userId = req.user.id;
+
+    // Check blockers before termination
+    const [pendingOrders, pendingRides, quotedRentals] = await Promise.all([
+      prisma.orders.count({
+        where: {
+          userId,
+          status: { in: ['PENDING', 'CONFIRMED', 'PROCESSING'] }
+        }
+      }),
+      prisma.rideRequest.count({
+        where: {
+          customerId: userId,
+          status: { in: ['REQUESTED', 'ARRIVING', 'IN_PROGRESS', 'ACCEPTED'] }
+        }
+      }),
+      prisma.rentalRequest.count({
+        where: {
+          customerId: userId,
+          status: { in: ['QUOTED'] }
+        }
+      })
+    ]);
+
+    if (pendingOrders > 0 || pendingRides > 0 || quotedRentals > 0) {
+      return res.status(409).json({
+        error: 'Account cannot be deleted due to pending items',
+        blockers: {
+          orders: pendingOrders,
+          rides: pendingRides,
+          rentalsQuoted: quotedRentals
+        }
+      });
+    }
+
+    // Set driver offline and suspended (if applicable)
+    try {
+      await prisma.driver.updateMany({
+        where: { userId },
+        data: {
+          isOnline: false,
+          status: 'SUSPENDED'
+        }
+      });
+    } catch (e) {
+      logger.warn('Failed to update driver status during termination', { userId, error: e });
+    }
+
+    // Delete all sessions for the user
+    await prisma.session.deleteMany({
+      where: { userId }
+    });
+
+    // Mark devices as logged out
+    await prisma.device.updateMany({
+      where: { userId },
+      data: { lastLogoutAt: new Date() }
+    });
+
+    // Update user status to TERMINATED
+    await prisma.user.update({
+      where: { id: userId },
+      data: { status: 'TERMINATED' }
+    });
+
+    logger.info('User account terminated successfully', { userId });
+    return res.status(200).json({ message: 'Account terminated' });
+  } catch (error) {
+    logger.error('Error terminating account:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Check account deletion eligibility and blockers
+router.get('/deletion-eligibility', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    const userId = req.user.id;
+
+    const [pendingOrders, pendingRides, quotedRentals] = await Promise.all([
+      prisma.orders.count({
+        where: {
+          userId,
+          status: { in: ['PENDING', 'CONFIRMED', 'PROCESSING'] }
+        }
+      }),
+      prisma.rideRequest.count({
+        where: {
+          customerId: userId,
+          status: { in: ['REQUESTED', 'ARRIVING', 'IN_PROGRESS', 'ACCEPTED'] }
+        }
+      }),
+      prisma.rentalRequest.count({
+        where: {
+          customerId: userId,
+          status: { in: ['QUOTED'] }
+        }
+      })
+    ]);
+
+    const eligible = pendingOrders === 0 && pendingRides === 0 && quotedRentals === 0;
+    return res.status(200).json({
+      eligible,
+      blockers: {
+        orders: pendingOrders,
+        rides: pendingRides,
+        rentalsQuoted: quotedRentals
+      }
+    });
+  } catch (error) {
+    logger.error('Error checking deletion eligibility:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get comprehensive user profile with sellerKyc and driver status
 router.get('/profile', authenticate, async (req: AuthRequest, res) => {
   try {

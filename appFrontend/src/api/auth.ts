@@ -115,12 +115,14 @@ export const initiateLogin = async (phoneNumber: string): Promise<{ isDeviceVeri
       // If user exists in response, check registration status
       if (response.data.user) {
         const isDeviceVerified = response.data.requiresPin === true;
-        const isRegistered = Boolean(
-          response.data.user?.firstName && 
-          response.data.user?.lastName &&
-          response.data.user?.firstName.trim() !== '' &&
-          response.data.user?.lastName.trim() !== ''
-        );
+        const isRegistered = typeof response.data.isRegistered === 'boolean'
+          ? !!response.data.isRegistered
+          : Boolean(
+              response.data.user?.firstName && 
+              response.data.user?.lastName &&
+              response.data.user?.firstName.trim() !== '' &&
+              response.data.user?.lastName.trim() !== ''
+            );
         return { isDeviceVerified, isRegistered };
       }
       
