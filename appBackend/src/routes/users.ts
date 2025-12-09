@@ -136,7 +136,7 @@ router.get('/deletion-eligibility', authenticate, async (req: AuthRequest, res) 
       prisma.orders.count({
         where: {
           userId,
-          status: 'PENDING'
+          status: { in: ['PENDING', 'AUTHORIZED'] }
         }
       }),
       prisma.rideRequest.count({
