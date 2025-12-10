@@ -87,7 +87,8 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
     const api = getApi();
     const response = await api.post('/auth/login-web', { 
       phoneNumber,
-      pin
+      pin,
+      platform: 'web'
     });
     
     console.log('PIN login response:', response.data);
@@ -114,12 +115,18 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
     
     // Terminated signals
     const status = error.response?.status;
-    const message: string = String(error.response?.data?.message || '').toLowerCase();
+    const messageRaw: string = String(error.response?.data?.message || '');
+    const message: string = messageRaw.toLowerCase();
     const terminatedSignal =
       status === 410 || status === 423 || status === 403 || message.includes('terminated') || message.includes('deactivated');
     if (terminatedSignal) {
       try { localStorage.setItem('accountTerminated', '1'); } catch {}
       throw new Error('Your account has been terminated. Please contact support if you believe this is a mistake.');
+    }
+
+    // Map unauthorized/blocked-style errors similar to mobile
+    if (/(blocked|unauthorized|forbidden)/i.test(messageRaw)) {
+      throw new Error('Unauthorized access. Please try again or contact support.');
     }
 
     // Defensive fallback: if server returns 500, re-check user existence.
@@ -131,6 +138,24 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
           try { localStorage.setItem('accountTerminated', '1'); } catch {}
           throw new Error('Please register using the mobile app to continue.');
         }
+        // Try alternative PIN login endpoint aligned with mobile backend
+        try {
+          const api = getApi();
+          const alt = await api.post('/auth/login', {
+            phoneNumber,
+            pin,
+            platform: 'web'
+          });
+          if (alt?.data?.token) {
+            const { token } = alt.data;
+            localStorage.setItem('token', token);
+            localStorage.setItem('phoneNumber', phoneNumber);
+            return alt.data;
+          }
+        } catch (altErr) {
+          // fall through to default handling below
+          console.error('Alternate /auth/login attempt failed:', altErr);
+        }
       } catch {
         // Ignore recheck errors and fall through to default handling
       }
@@ -141,7 +166,7 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
     } else if (status === 404) {
       throw new Error('User not found. Please register using the mobile app first.');
     } else if (status === 500) {
-      throw new Error('Server error. Please try again in a few moments.');
+      throw new Error('Something went wrong. Please try again. If the issue persists, use the mobile app to continue.');
     } else if (error.response?.data?.message) {
       throw new Error(error.response.data.message);
     } else {
