@@ -122,6 +122,20 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
       throw new Error('Your account has been terminated. Please contact support if you believe this is a mistake.');
     }
 
+    // Defensive fallback: if server returns 500, re-check user existence.
+    // If the user is now treated as non-existent (e.g., terminated), guide to mobile app.
+    if (status === 500) {
+      try {
+        const recheck = await checkUserExists(phoneNumber);
+        if (!recheck.exists) {
+          try { localStorage.setItem('accountTerminated', '1'); } catch {}
+          throw new Error('Please register using the mobile app to continue.');
+        }
+      } catch {
+        // Ignore recheck errors and fall through to default handling
+      }
+    }
+
     if (status === 401) {
       throw new Error('Invalid PIN. Please try again.');
     } else if (status === 404) {
