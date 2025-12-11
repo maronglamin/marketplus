@@ -1072,11 +1072,12 @@ export const checkUserExists = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Phone number is required' });
     }
 
-    console.log('Checking if user exists for:', phoneNumber);
+    const normalizedPhone = normalizePhone(phoneNumber);
+    console.log('Checking if user exists for:', normalizedPhone);
 
     // Check if user exists
     const user = await prisma.user.findFirst({
-      where: { phoneNumber, NOT: { status: ACCOUNT_STATUS_TERMINATED } as any },
+      where: { phoneNumber: normalizedPhone, NOT: { status: ACCOUNT_STATUS_TERMINATED } as any },
       select: {
         id: true,
         firstName: true,
@@ -1143,9 +1144,12 @@ export const loginWithPinWeb = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Phone number is required' });
     }
 
-    // Find the user by phone number
-    const user = await prisma.user.findUnique({
-      where: { phoneNumber },
+    // Normalize phone number for consistent lookup (align with mobile flow)
+    const normalizedPhone = normalizePhone(phoneNumber);
+
+    // Find the user by phone number (prefer the most recent record if duplicates exist)
+    const user = await prisma.user.findFirst({
+      where: { phoneNumber: normalizedPhone },
       select: {
         id: true,
         firstName: true,
@@ -1153,11 +1157,12 @@ export const loginWithPinWeb = async (req: Request, res: Response) => {
         phoneNumber: true,
         pin: true,
         createdAt: true
-      }
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (!user) {
-      console.log('User not found for phone number:', phoneNumber);
+      console.log('User not found for phone number:', normalizedPhone);
       return res.status(404).json({ 
         message: 'User not found. Please register using the mobile app first.' 
       });

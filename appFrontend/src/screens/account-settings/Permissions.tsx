@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Switch,
   Alert,
 } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,8 @@ import {
   Target,
   ArrowLeft,
 } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 
 type PermissionsNavigationProp = NativeStackNavigationProp<any, 'Permissions'>;
 
@@ -29,6 +32,35 @@ const Permissions = () => {
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [locationSharing, setLocationSharing] = useState(false);
+
+  // Keys for AsyncStorage
+  const LOCATION_PREF_KEY = 'locationSharingEnabled';
+
+  // Load persisted toggles (only location for now)
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(LOCATION_PREF_KEY);
+        if (stored !== null) {
+          setLocationSharing(stored === 'true');
+        } else {
+          // Also sync with current OS permission to present a sensible default
+          const perm = await Location.getForegroundPermissionsAsync();
+          setLocationSharing(perm.status === 'granted');
+        }
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
+
+  const persistLocationPref = async (value: boolean) => {
+    try {
+      await AsyncStorage.setItem(LOCATION_PREF_KEY, value ? 'true' : 'false');
+    } catch {
+      // ignore persistence errors
+    }
+  };
 
   const handleTwoFactorToggle = (value: boolean) => {
     setTwoFactorEnabled(value);
@@ -64,19 +96,76 @@ const Permissions = () => {
     }
   };
 
-  const handleLocationToggle = (value: boolean) => {
-    setLocationSharing(value);
-    if (value) {
+  const openSystemSettings = async () => {
+    try {
+      await Linking.openSettings();
+    } catch {
       Alert.alert(
-        'Location Sharing',
-        'Location sharing has been enabled. This helps provide better service and accurate delivery.',
-        [{ text: 'OK' }]
+        'Open Settings',
+        'Please open your device settings and enable location for this app.'
       );
+    }
+  };
+
+  const handleLocationToggle = async (value: boolean) => {
+    if (value) {
+      // Enabling: request OS permission first
+      try {
+        const current = await Location.getForegroundPermissionsAsync();
+        if (current.status === 'granted') {
+          setLocationSharing(true);
+          await persistLocationPref(true);
+          Alert.alert(
+            'Location Sharing',
+            'Location sharing is enabled.'
+          );
+          return;
+        }
+
+        const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          setLocationSharing(true);
+          await persistLocationPref(true);
+          Alert.alert(
+            'Location Sharing',
+            'Location sharing is enabled.'
+          );
+        } else {
+          // Permission denied
+          setLocationSharing(false);
+          await persistLocationPref(false);
+          Alert.alert(
+            'Location Permission Needed',
+            'Please enable location in system settings to use location features.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: openSystemSettings },
+            ]
+          );
+        }
+      } catch (e) {
+        setLocationSharing(false);
+        await persistLocationPref(false);
+        Alert.alert(
+          'Location Error',
+          'Unable to change location permission right now.'
+        );
+      }
     } else {
+      // Disabling: cannot revoke OS permission programmatically, persist preference and inform user
+      setLocationSharing(false);
+      await persistLocationPref(false);
       Alert.alert(
         'Location Sharing',
-        'Location sharing has been disabled. Some features may not work optimally.',
-        [{ text: 'OK' }]
+        Platform.select({
+          ios: 'Location sharing is disabled in the app. To fully revoke OS permission, turn it off in Settings > Privacy > Location Services.',
+          android: 'Location sharing is disabled in the app. To fully revoke OS permission, turn it off in App Settings.',
+          default: 'Location sharing is disabled.',
+        }),
+        [
+          { text: 'OK' },
+          { text: 'Open Settings', onPress: openSystemSettings },
+        ]
       );
     }
   };

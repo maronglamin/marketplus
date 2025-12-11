@@ -91,7 +91,9 @@ export function Login() {
     try {
       setLoading(true);
       
-      const fullNumber = `${selectedCountry?.dial_code}${formattedNumber}`;
+      const dial = selectedCountry?.dial_code || '';
+      const normalizedDial = dial.startsWith('+') ? dial : `+${dial.replace(/\D/g, '')}`;
+      const fullNumber = `${normalizedDial}${formattedNumber}`;
       console.log('Checking user for phone number:', fullNumber);
       
       // Check if user exists

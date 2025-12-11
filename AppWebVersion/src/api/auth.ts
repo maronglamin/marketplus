@@ -13,6 +13,22 @@ export interface AuthError {
   errors?: { [key: string]: string[] };
 }
 
+// Normalize various backend token/user response shapes
+const extractAuthPayload = (data: any): { token?: string; user?: any } => {
+  if (!data) return {};
+  const token =
+    data.token ||
+    data.accessToken ||
+    data.jwt ||
+    data.sessionToken ||
+    data?.data?.token ||
+    data?.data?.accessToken ||
+    data?.data?.jwt ||
+    data?.data?.sessionToken;
+  const user = data.user || data?.data?.user || data?.userData;
+  return { token, user };
+};
+
 // Check if user exists by phone number
 export const checkUserExists = async (phoneNumber: string): Promise<{ exists: boolean; isRegistered: boolean; user?: any }> => {
   try {
@@ -93,19 +109,19 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
     
     console.log('PIN login response:', response.data);
     
-    // Validate response
-    if (!response.data.token) {
+    // Validate response (accept multiple token field names)
+    const { token, user } = extractAuthPayload(response.data);
+    if (!token) {
       throw new Error('Invalid PIN');
     }
 
     // Do not allow login for terminated/deactivated accounts
-    const statusText = String(response?.data?.user?.status || '').toLowerCase();
+    const statusText = String(user?.status || '').toLowerCase();
     if (statusText && (statusText.includes('terminated') || statusText.includes('deactivated') || statusText === 'deleted')) {
       try { localStorage.setItem('accountTerminated', '1'); } catch {}
       throw new Error('Your account has been terminated. Please contact support if you believe this is a mistake.');
     }
 
-    const { token } = response.data;
     localStorage.setItem('token', token);
     localStorage.setItem('phoneNumber', phoneNumber);
     
@@ -146,8 +162,14 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
             pin,
             platform: 'web'
           });
-          if (alt?.data?.token) {
-            const { token } = alt.data;
+          const { token, user } = extractAuthPayload(alt?.data);
+          if (token) {
+            // Guard against terminated status on alt path as well
+            const statusText = String(user?.status || '').toLowerCase();
+            if (statusText && (statusText.includes('terminated') || statusText.includes('deactivated') || statusText === 'deleted')) {
+              try { localStorage.setItem('accountTerminated', '1'); } catch {}
+              throw new Error('Your account does not exist. Please contact support if you believe this is a mistake.');
+            }
             localStorage.setItem('token', token);
             localStorage.setItem('phoneNumber', phoneNumber);
             return alt.data;
