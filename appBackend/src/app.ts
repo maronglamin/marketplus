@@ -107,6 +107,8 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve static files from a stable uploads directory at project root
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Serve shared static assets (e.g., logos) directly from the frontend assets folder
+app.use('/static', express.static(path.join(process.cwd(), 'appFrontend/assets')));
 
 // Request logging middleware
 app.use((req, _res, next) => {
@@ -147,10 +149,286 @@ app.use(limiter);
 
 // Wave success/error landing endpoints (browser redirects from Wave)
 app.get('/payments/wave/success', (_req, res) => {
-  res.status(200).send('Wave payment succeeded. You may close this window and return to the app.');
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payment Successful</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #0f172a;
+      --muted: #94a3b8;
+      --fg: #e2e8f0;
+      --brand: #06b6d4; /* cyan-500 */
+      --success: #16a34a;
+      --success-weak: #16a34a22;
+      --ring: #334155;
+      --button: #1e293b;
+      --button-hover: #334155;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(180deg, #0b1220 0%, #0a0f1c 100%);
+      color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
+      height: 100%;
+    }
+    .container {
+      min-height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 460px;
+      background: var(--card);
+      border: 1px solid var(--ring);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.02);
+      text-align: center;
+    }
+    .logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      display: block;
+      margin: 0 auto 14px;
+      box-shadow: 0 8px 28px rgba(6,182,212,.28);
+      border: 1px solid rgba(6,182,212,.35);
+      background: radial-gradient(120px 60px at 20% 10%, rgba(6,182,212,.15), transparent 60%);
+    }
+    .icon-wrap {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 16px;
+      border-radius: 999px;
+      background: var(--success-weak);
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(22,163,74,.35);
+    }
+    h1 {
+      margin: 10px 0 8px;
+      font-size: 22px;
+      line-height: 1.2;
+      letter-spacing: 0.2px;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .actions {
+      margin-top: 20px;
+      display: grid;
+      gap: 10px;
+    }
+    button {
+      -webkit-tap-highlight-color: transparent;
+      appearance: none;
+      border: 1px solid var(--ring);
+      background: var(--button);
+      color: var(--fg);
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: .2px;
+    }
+    button.primary {
+      background: var(--success);
+      border-color: #15803d;
+    }
+    button:hover { background: var(--button-hover); cursor: pointer; }
+    button.primary:hover { filter: brightness(0.95); }
+    .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .footer {
+      margin-top: 18px;
+      font-size: 12px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card" role="status" aria-live="polite">
+      <img class="logo" src="/static/icon.png" alt="App logo"/>
+      <div class="icon-wrap" aria-hidden="true">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" stroke="#16a34a" stroke-width="1.5" fill="none"/>
+          <path d="M7 12.5l3.2 3.2L17 8.8" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1>Payment Successful</h1>
+      <p>Wave payment received. You can now close this window and return to the app.</p>
+      <div class="actions">
+        <button class="primary" onclick="tryClose()">Close this window</button>
+        <button onclick="refresh()">Refresh status</button>
+      </div>
+      <div class="hint">If the window doesn't close, switch back to the app.</div>
+      <div class="footer">Thank you for your payment.</div>
+    </div>
+  </div>
+  <script>
+    function tryClose() {
+      // Attempt to close if opened as a popup
+      window.close();
+    }
+    function refresh() {
+      location.reload();
+    }
+  </script>
+</body>
+</html>`;
+  res.set('Content-Type', 'text/html; charset=utf-8').status(200).send(html);
 });
 app.get('/payments/wave/error', (_req, res) => {
-  res.status(200).send('Wave payment failed or was cancelled. You may close this window and return to the app.');
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payment Not Completed</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #0f172a;
+      --muted: #94a3b8;
+      --fg: #e2e8f0;
+      --brand: #06b6d4;
+      --error: #dc2626;
+      --error-weak: #dc262622;
+      --ring: #334155;
+      --button: #1e293b;
+      --button-hover: #334155;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(180deg, #0b1220 0%, #0a0f1c 100%);
+      color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
+      height: 100%;
+    }
+    .container {
+      min-height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 460px;
+      background: var(--card);
+      border: 1px solid var(--ring);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.02);
+      text-align: center;
+    }
+    .logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      display: block;
+      margin: 0 auto 14px;
+      box-shadow: 0 8px 28px rgba(6,182,212,.22);
+      border: 1px solid rgba(6,182,212,.28);
+      background: radial-gradient(120px 60px at 20% 10%, rgba(6,182,212,.12), transparent 60%);
+    }
+    .icon-wrap {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 16px;
+      border-radius: 999px;
+      background: var(--error-weak);
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(220,38,38,.35);
+    }
+    h1 {
+      margin: 10px 0 8px;
+      font-size: 22px;
+      line-height: 1.2;
+      letter-spacing: 0.2px;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .actions {
+      margin-top: 20px;
+      display: grid;
+      gap: 10px;
+    }
+    button {
+      -webkit-tap-highlight-color: transparent;
+      appearance: none;
+      border: 1px solid var(--ring);
+      background: var(--button);
+      color: var(--fg);
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: .2px;
+    }
+    button:hover { background: var(--button-hover); cursor: pointer; }
+    .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .footer {
+      margin-top: 18px;
+      font-size: 12px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card" role="status" aria-live="polite">
+      <img class="logo" src="/static/icon.png" alt="App logo"/>
+      <div class="icon-wrap" aria-hidden="true">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" stroke="#dc2626" stroke-width="1.5" fill="none"/>
+          <path d="M8 8l8 8M16 8l-8 8" stroke="#dc2626" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1>Payment Not Completed</h1>
+      <p>Wave payment failed or was cancelled. You may close this window and try again from the app.</p>
+      <div class="actions">
+        <button onclick="tryClose()">Close this window</button>
+      </div>
+      <div class="hint">If the window doesn't close, switch back to the app to retry.</div>
+      <div class="footer">No charge was made.</div>
+    </div>
+  </div>
+  <script>
+    function tryClose() {
+      window.close();
+    }
+  </script>
+</body>
+</html>`;
+  res.set('Content-Type', 'text/html; charset=utf-8').status(200).send(html);
 });
 
 // API routes
