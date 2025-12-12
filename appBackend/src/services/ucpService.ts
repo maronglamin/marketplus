@@ -28,7 +28,7 @@ export class UCPService {
         }
         if (key.includes('yonna') || key.includes('aps')) {
           // Try multiple Yonna variants
-          return ['yonna', 'yonna_forex', 'aps'];
+          return ['yonna_wallet', 'yonna', 'yonna_forex', 'yonna_forex_wallet', 'aps'];
         }
         // Fallback to given key
         return [key];

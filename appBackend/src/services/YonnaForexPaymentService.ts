@@ -154,15 +154,21 @@ export class YonnaForexPaymentService {
           // Try to extract a mobile deeplink/URL from the HTML for app redirect
           const html: string = response.data;
           let deeplinkUrl: string | undefined;
-          // Pattern 1: var link = "https://.../corporate?payload=...";
+          // Pattern 1a: var link = "https://.../corporate?payload=...";
           const varLinkMatch = html.match(/var\s+link\s*=\s*"([^"]+)"/);
           if (varLinkMatch && varLinkMatch[1]) {
             deeplinkUrl = varLinkMatch[1];
           } else {
-            // Pattern 2: any https URL to /corporate?...
-            const urlMatch = html.match(/https?:\/\/[^"']+\/corporate\?[^"']+/);
-            if (urlMatch && urlMatch[0]) {
-              deeplinkUrl = urlMatch[0];
+            // Pattern 1b: var link = 'https://.../corporate?payload=...';
+            const varLinkMatchSingle = html.match(/var\s+link\s*=\s*'([^']+)'/);
+            if (varLinkMatchSingle && varLinkMatchSingle[1]) {
+              deeplinkUrl = varLinkMatchSingle[1];
+            } else {
+              // Pattern 2: any https URL to /corporate?...
+              const urlMatch = html.match(/https?:\/\/[^"']+\/corporate\?[^"']+/);
+              if (urlMatch && urlMatch[0]) {
+                deeplinkUrl = urlMatch[0];
+              }
             }
           }
           return {

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { getWebhookConfig, getWebhookUrls } from '../utils/webhookConfig';
 import { PrismaClient } from '@prisma/client';
+import UCPService from '../services/ucpService';
 
 const prisma = new PrismaClient();
 
@@ -398,6 +399,78 @@ export class YonnaForexWebhookController {
           }
         } catch (propError) {
           console.error('Error propagating webhook status to domain records:', propError);
+        }
+
+        // If payment succeeded, ensure SERVICE_FEE transaction exists (platform fee via UCP)
+        try {
+          if (newStatus === 'SUCCESS') {
+            const extFull = await prisma.externalTransaction.findUnique({
+              where: { id: located.id },
+              select: {
+                id: true,
+                orderId: true,
+                rentalRequestId: true,
+                rideRequestId: true,
+                customerId: true,
+                sellerId: true,
+                gatewayProvider: true,
+                gatewayTransactionId: true,
+                paymentReference: true,
+                appTransactionId: true,
+                appService: true,
+                amount: true,
+                currencyCode: true
+              }
+            });
+            if (extFull) {
+              const existingServiceFee = await prisma.externalTransaction.findFirst({
+                where: {
+                  gatewayProvider: 'yonna_forex',
+                  transactionType: 'SERVICE_FEE',
+                  appTransactionId: extFull.appTransactionId
+                }
+              });
+              if (!existingServiceFee) {
+                const baseAmount = Number(extFull.amount || 0);
+                const currencyCode = (extFull.currencyCode || 'GMD').toUpperCase();
+                const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } =
+                  await UCPService.calculateServiceFee('yonna_wallet', baseAmount, currencyCode);
+                if (serviceFeeAmount > 0) {
+                  await prisma.externalTransaction.create({
+                    data: {
+                      orderId: extFull.orderId || null,
+                      rentalRequestId: (extFull as any).rentalRequestId || null,
+                      rideRequestId: (extFull as any).rideRequestId || null,
+                      customerId: (extFull.customerId ?? undefined) as any,
+                      sellerId: (extFull.sellerId ?? undefined) as any,
+                      gatewayProvider: 'yonna_forex',
+                      gatewayTransactionId: `${extFull.gatewayTransactionId || ((payload as any).transactionId || (payload as any).reference) || 'unknown'}-servicefee`,
+                      paymentReference: extFull.paymentReference || ((payload as any).reference || (payload as any).transactionId || ''),
+                      appTransactionId: extFull.appTransactionId,
+                      appService: extFull.appService as any,
+                      transactionType: 'SERVICE_FEE' as any,
+                      amount: serviceFeeAmount,
+                      currencyCode,
+                      gatewayChargeFees: null,
+                      processedAmount: 0,
+                      paidThroughGateway: false,
+                      gatewayResponse: {
+                        originalReference: extFull.gatewayTransactionId || (payload as any).transactionId || (payload as any).reference || null,
+                        serviceFeeConfig: serviceFeeConfig || null,
+                        serviceFeePercentage,
+                        serviceFeeAmount,
+                        webhookDerived: true
+                      } as any,
+                      status: 'SUCCESS',
+                      processedAt: new Date()
+                    }
+                  });
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Yonna webhook: service fee creation warning:', (e as any)?.message || e);
         }
       } else {
         // Update order status
