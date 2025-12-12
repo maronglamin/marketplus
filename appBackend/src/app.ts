@@ -14,6 +14,7 @@ import driverRouter from './routes/driver';
 import rentalRouter from './routes/rental';
 import rentalMessageRoutes from './routes/rentalMessages';
 import path from 'path';
+import fs from 'fs';
 import { RideRequestService } from './services/rideRequestService';
 
 // Import routes
@@ -107,8 +108,18 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve static files from a stable uploads directory at project root
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
-// Serve shared static assets (e.g., logos) directly from the frontend assets folder
-app.use('/static', express.static(path.join(process.cwd(), 'appFrontend/assets')));
+// Serve shared static assets (e.g., logos) from backend public directory
+app.use('/public', express.static(path.join(__dirname, '../public')));
+// Backward compatibility + fallback route for the logo until it is moved to appBackend/public
+app.get('/public/icon.png', (req, res) => {
+  const publicIcon = path.join(__dirname, '../public/icon.png');
+  if (fs.existsSync(publicIcon)) {
+    return res.sendFile(publicIcon);
+  }
+  // Fallback to the frontend asset if public icon is not present
+  const frontendIcon = path.join(__dirname, '..', '..', 'appFrontend', 'assets', 'icon.png');
+  return res.sendFile(frontendIcon);
+});
 
 // Request logging middleware
 app.use((req, _res, next) => {
@@ -264,7 +275,7 @@ app.get('/payments/wave/success', (_req, res) => {
 <body>
   <div class="container">
     <div class="card" role="status" aria-live="polite">
-      <img class="logo" src="/static/icon.png" alt="App logo"/>
+      <img class="logo" src="/public/icon.png" alt="App logo"/>
       <div class="icon-wrap" aria-hidden="true">
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="12" cy="12" r="10" stroke="#16a34a" stroke-width="1.5" fill="none"/>
@@ -405,7 +416,7 @@ app.get('/payments/wave/error', (_req, res) => {
 <body>
   <div class="container">
     <div class="card" role="status" aria-live="polite">
-      <img class="logo" src="/static/icon.png" alt="App logo"/>
+      <img class="logo" src="/public/icon.png" alt="App logo"/>
       <div class="icon-wrap" aria-hidden="true">
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="12" cy="12" r="10" stroke="#dc2626" stroke-width="1.5" fill="none"/>
