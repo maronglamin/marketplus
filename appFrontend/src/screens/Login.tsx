@@ -19,7 +19,7 @@ import {
   AppState,
   AppStateStatus,
 } from 'react-native'
-import { ArrowLeft, Globe, X, Search } from 'lucide-react-native'
+import { ArrowLeft, Globe, X, Search, MapPin, Flag, Route, Camera as CameraIcon, ShieldCheck, Upload } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet'
@@ -54,6 +54,9 @@ export function Login() {
   const [checkingLocationPermission, setCheckingLocationPermission] = useState<boolean>(true)
   const [cameraPermission, setCameraPermission] = useState<{ status: 'unknown' | 'granted' | 'denied'; canAskAgain: boolean }>({ status: 'unknown', canAskAgain: true })
   const [showCameraGate, setShowCameraGate] = useState<boolean>(false)
+  const [cameraGateShown, setCameraGateShown] = useState<boolean>(false)
+  const [dismissedLocationGate, setDismissedLocationGate] = useState<boolean>(false)
+  const [requestingLocation, setRequestingLocation] = useState<boolean>(false)
 
   // Initialize API and device info on component mount
   useEffect(() => {
@@ -74,28 +77,7 @@ export function Login() {
     initialize()
   }, [])
 
-  // First-time permission prompts (Location + Camera)
-  useEffect(() => {
-    const requestInitialPermissionsIfNeeded = async () => {
-      try {
-        const alreadyPrompted = await AsyncStorage.getItem('initialPermsRequested');
-        if (alreadyPrompted) return;
-
-        // Request Location permission (foreground)
-        try {
-          await Location.requestForegroundPermissionsAsync();
-        } catch (e) {
-          console.log('Location permission request error:', e);
-        }
-
-        // Mark as done to avoid re-prompting
-        await AsyncStorage.setItem('initialPermsRequested', '1');
-      } catch (err) {
-        console.log('Error in initial permission flow:', err);
-      }
-    };
-    requestInitialPermissionsIfNeeded();
-  }, [])
+  // Removed auto-request of location permission; we now show our rationale modal first
 
   // Enforce location permission with a blocking gate
   useEffect(() => {
@@ -142,21 +124,31 @@ export function Login() {
       console.log('Error requesting location permission:', e);
     }
   };
-
-  const openSystemSettings = async () => {
+  const handleLocationContinue = async () => {
     try {
-      await Linking.openSettings();
+      setRequestingLocation(true);
+      await requestLocationPermission();
+      const fg = await Location.getForegroundPermissionsAsync();
+      const status = (fg?.status as any) || (fg?.granted ? 'granted' : 'denied');
+      if (status === 'granted') {
+        setDismissedLocationGate(true);
+      } else {
+        setDismissedLocationGate(true);
+      }
     } catch (e) {
-      console.log('Failed to open settings:', e);
+      setDismissedLocationGate(true);
+    } finally {
+      setRequestingLocation(false);
     }
   };
+
+  // Removed direct redirection to system settings to comply with App Review guidance
 
   // Camera permission gate: show after location is granted (first-time flow)
   useEffect(() => {
     const maybeShowCameraGate = async () => {
       if (locationPermission.status !== 'granted') return;
       try {
-        const alreadyPrompted = await AsyncStorage.getItem('cameraPermsRequested');
         const cam = await Camera.getCameraPermissionsAsync();
         const status = (cam?.status as any) || (cam?.granted ? 'granted' : 'denied');
         const canAskAgain = cam?.canAskAgain !== false;
@@ -164,15 +156,17 @@ export function Login() {
           status: status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'unknown',
           canAskAgain,
         });
-        if (!alreadyPrompted && status !== 'granted') {
+        // Show camera gate once per session whenever location is granted and camera isn't
+        if (!cameraGateShown && status !== 'granted') {
           setShowCameraGate(true);
+          setCameraGateShown(true);
         }
       } catch (e) {
         console.log('Error checking camera permission:', e);
       }
     };
     maybeShowCameraGate();
-  }, [locationPermission.status])
+  }, [locationPermission.status, cameraGateShown])
 
   const requestCameraPermission = async () => {
     try {
@@ -189,6 +183,18 @@ export function Login() {
       }
     } catch (e) {
       console.log('Error requesting camera permission:', e);
+    }
+  };
+  const handleCameraContinue = async () => {
+    try {
+      await requestCameraPermission();
+      const cam = await Camera.getCameraPermissionsAsync();
+      const status = (cam?.status as any) || (cam?.granted ? 'granted' : 'denied');
+      if (status !== 'granted') {
+        setShowCameraGate(false);
+      }
+    } catch (e) {
+      setShowCameraGate(false);
     }
   };
 
@@ -224,27 +230,29 @@ export function Login() {
     }
   }
 
-  // On mount, set default country based on location and device locale
+  // Detect country based on granted location or device locale
   useEffect(() => {
     const detectUserCountry = async () => {
       console.log('🌍 Starting country detection...');
       setDetectingCountry(true);
       let found = null;
       
-      // First, try to get country from user's current location
-      try {
-        const locationInfo = await getUserLocationFromGPS();
-        if (locationInfo) {
-          console.log('📍 Location detected from GPS:', locationInfo);
-          found = countryData.find((c: Country) => c.code === locationInfo.countryCode);
-          if (found) {
-            console.log('✅ Found country in our data from location:', found.name);
-          } else {
-            console.log('⚠️ Country from location not found in our data:', locationInfo.countryCode);
+      // Only try GPS if permission has been granted
+      if (locationPermission.status === 'granted') {
+        try {
+          const locationInfo = await getUserLocationFromGPS();
+          if (locationInfo) {
+            console.log('📍 Location detected from GPS:', locationInfo);
+            found = countryData.find((c: Country) => c.code === locationInfo.countryCode);
+            if (found) {
+              console.log('✅ Found country in our data from location:', found.name);
+            } else {
+              console.log('⚠️ Country from location not found in our data:', locationInfo.countryCode);
+            }
           }
+        } catch (error) {
+          console.log('❌ Error getting location from GPS:', error);
         }
-      } catch (error) {
-        console.log('❌ Error getting location from GPS:', error);
       }
       
       // If location detection failed, fall back to device locale
@@ -280,7 +288,7 @@ export function Login() {
     };
 
     detectUserCountry();
-  }, []);
+  }, [locationPermission.status]);
 
   // Remove the auto-detection useEffect completely - it's causing the duplication issue
 
@@ -495,42 +503,52 @@ export function Login() {
 
         {/* Location Permission Gate - blocks app until granted */}
         <Modal
-          visible={!checkingLocationPermission && locationPermission.status !== 'granted'}
+          visible={!dismissedLocationGate && locationPermission.status !== 'granted'}
           animationType="slide"
           transparent={false}
           onRequestClose={() => {}}
         >
           <SafeAreaView style={styles.permContainer}>
             <View style={styles.permBody}>
-              <Text style={styles.permTitle}>Enable Location to Continue</Text>
-              <Text style={styles.permSubtitle}>
-                We use your location to set your country automatically and improve your experience.
-              </Text>
+              <View style={styles.permContent}>
+                <Text style={styles.permTitle}>Enable Location to Continue</Text>
+                <Text style={styles.permSubtitle}>Your location is used to:</Text>
+                <View style={styles.permChips}>
+                  <View style={styles.permChip}>
+                    <View style={styles.permChipIconBox}><MapPin size={18} color="#2563EB" /></View>
+                    <View style={styles.permChipTexts}>
+                      <Text style={styles.permChipTitle}>Find nearby drivers and rentals</Text>
+                      <Text style={styles.permChipDesc}>Faster matching and better ETAs</Text>
+                    </View>
+                  </View>
+                  <View style={styles.permChip}>
+                    <View style={styles.permChipIconBox}><Flag size={18} color="#2563EB" /></View>
+                    <View style={styles.permChipTexts}>
+                      <Text style={styles.permChipTitle}>Accurate pickup & drop‑off</Text>
+                      <Text style={styles.permChipDesc}>Pinned locations for smooth trips</Text>
+                    </View>
+                  </View>
+                  <View style={styles.permChip}>
+                    <View style={styles.permChipIconBox}><Route size={18} color="#2563EB" /></View>
+                    <View style={styles.permChipTexts}>
+                      <Text style={styles.permChipTitle}>Real‑time tracking & fares</Text>
+                      <Text style={styles.permChipDesc}>Live route updates and fair pricing</Text>
+                    </View>
+                  </View>
+                </View>
+                <Text style={styles.permFootnote}>You can change this later in your device settings.</Text>
+              </View>
             </View>
             <View style={styles.permFooter}>
-              {locationPermission.canAskAgain ? (
-                <TouchableOpacity
-                  onPress={requestLocationPermission}
-                  style={[styles.button, styles.buttonWide]}
-                  disabled={checkingLocationPermission}
-                >
-                  <Text style={styles.buttonText}>
-                    {checkingLocationPermission ? 'Requesting...' : 'Allow Location'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <>
-                  <TouchableOpacity
-                    onPress={openSystemSettings}
-                    style={[styles.button, styles.buttonSettings, styles.buttonWide]}
-                  >
-                    <Text style={styles.buttonText}>Open Settings</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.permHelpText}>
-                    Permission was denied previously. Please enable Location in system settings to continue.
-                  </Text>
-                </>
-              )}
+              <TouchableOpacity
+                onPress={handleLocationContinue}
+                style={[styles.button, styles.buttonWide, styles.buttonFull, styles.buttonPill]}
+                disabled={checkingLocationPermission}
+              >
+                <Text style={styles.buttonText}>
+                  {requestingLocation ? 'Requesting...' : 'Continue'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </SafeAreaView>
         </Modal>
@@ -544,32 +562,42 @@ export function Login() {
         >
           <SafeAreaView style={styles.permContainer}>
             <View style={styles.permBody}>
-              <Text style={styles.permTitle}>Enable Camera for Document Uploads</Text>
-              <Text style={styles.permSubtitle}>
-                To complete registration, you’ll need to capture your onboarding documents using your camera.
-              </Text>
+              <View style={styles.permContent}>
+                <Text style={styles.permTitle}>Enable Camera for Document Uploads</Text>
+                <Text style={styles.permSubtitle}>Camera access is used to:</Text>
+                <View style={styles.permChips}>
+                  <View style={styles.permChip}>
+                    <View style={styles.permChipIconBox}><CameraIcon size={18} color="#2563EB" /></View>
+                    <View style={styles.permChipTexts}>
+                      <Text style={styles.permChipTitle}>Capture onboarding documents</Text>
+                      <Text style={styles.permChipDesc}>Smooth, in‑app document capture</Text>
+                    </View>
+                  </View>
+                  <View style={styles.permChip}>
+                    <View style={styles.permChipIconBox}><ShieldCheck size={18} color="#2563EB" /></View>
+                    <View style={styles.permChipTexts}>
+                      <Text style={styles.permChipTitle}>Identity verification (KYC)</Text>
+                      <Text style={styles.permChipDesc}>Required for account approval</Text>
+                    </View>
+                  </View>
+                  <View style={styles.permChip}>
+                    <View style={styles.permChipIconBox}><Upload size={18} color="#2563EB" /></View>
+                    <View style={styles.permChipTexts}>
+                      <Text style={styles.permChipTitle}>Used only when you choose</Text>
+                      <Text style={styles.permChipDesc}>No background camera usage</Text>
+                    </View>
+                  </View>
+                </View>
+                <Text style={styles.permFootnote}>You can change this later in your device settings.</Text>
+              </View>
             </View>
             <View style={styles.permFooter}>
-              {cameraPermission.canAskAgain ? (
-                <TouchableOpacity
-                  onPress={requestCameraPermission}
-                  style={[styles.button, styles.buttonWide]}
-                >
-                  <Text style={styles.buttonText}>Allow Camera</Text>
-                </TouchableOpacity>
-              ) : (
-                <>
-                  <TouchableOpacity
-                    onPress={openSystemSettings}
-                    style={[styles.button, styles.buttonSettings, styles.buttonWide]}
-                  >
-                    <Text style={styles.buttonText}>Open Settings</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.permHelpText}>
-                    Permission was denied previously. Please enable Camera in system settings to continue.
-                  </Text>
-                </>
-              )}
+              <TouchableOpacity
+                onPress={handleCameraContinue}
+                style={[styles.button, styles.buttonWide, styles.buttonFull, styles.buttonPill]}
+              >
+                <Text style={styles.buttonText}>Continue</Text>
+              </TouchableOpacity>
             </View>
           </SafeAreaView>
         </Modal>
@@ -766,35 +794,134 @@ const styles = StyleSheet.create({
   permContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    padding: 24,
+    padding: 32,
     justifyContent: 'space-between',
   },
   permBody: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: 8,
+  },
+  permContent: {
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
   },
   permTitle: {
     fontSize: 22,
     fontWeight: '700',
     color: '#111827',
-    marginBottom: 12,
+    marginBottom: 16,
     textAlign: 'center',
   },
   permSubtitle: {
     fontSize: 14,
     color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 8,
+    textAlign: 'left',
+    marginBottom: 12,
+    paddingHorizontal: 0,
+  },
+  permBullets: {
+    width: '100%',
+    maxWidth: 460,
+    marginTop: 4,
+    marginBottom: 12,
+    alignSelf: 'center',
+  },
+  permBulletRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  permBulletIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  permBulletText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+  },
+  permCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  permFootnote: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'left',
+    marginTop: 16,
+  },
+  // Chip-style rows inspired by Onboarding
+  permChips: {
+    width: '100%',
+    maxWidth: 460,
+    marginTop: 8,
+    rowGap: 10,
+  },
+  permChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  permChipIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permChipTexts: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  permChipTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  permChipDesc: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
   },
   permFooter: {
     width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
     gap: 12,
-    paddingBottom: 16,
+    paddingBottom: 28,
+    paddingHorizontal: 16,
   },
   buttonSettings: {
     backgroundColor: '#111827',
+  },
+  buttonFull: {
+    width: '100%',
+    alignSelf: 'center',
+  },
+  buttonPill: {
+    borderRadius: 24,
   },
   permHelpText: {
     fontSize: 12,

@@ -9,7 +9,7 @@ import {
   Switch,
   Alert,
 } from 'react-native';
-import { Linking, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -96,61 +96,57 @@ const Permissions = () => {
     }
   };
 
-  const openSystemSettings = async () => {
-    try {
-      await Linking.openSettings();
-    } catch {
-      Alert.alert(
-        'Open Settings',
-        'Please open your device settings and enable location for this app.'
-      );
-    }
-  };
+  // Removed direct system settings redirection to comply with App Review guidance
 
   const handleLocationToggle = async (value: boolean) => {
     if (value) {
-      // Enabling: request OS permission first
-      try {
-        const current = await Location.getForegroundPermissionsAsync();
-        if (current.status === 'granted') {
-          setLocationSharing(true);
-          await persistLocationPref(true);
-          Alert.alert(
-            'Location Sharing',
-            'Location sharing is enabled.'
-          );
-          return;
-        }
+      // Enabling: show rationale before requesting OS permission
+      Alert.alert(
+        'Why we need your location',
+        'Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop‑off points, and enable real‑time ride tracking during an active trip. Location data is only accessed while you are using the app.',
+        [
+          { text: 'Not Now', style: 'cancel' },
+          { text: 'Continue', onPress: async () => {
+            try {
+              const current = await Location.getForegroundPermissionsAsync();
+              if (current.status === 'granted') {
+                setLocationSharing(true);
+                await persistLocationPref(true);
+                Alert.alert(
+                  'Location Sharing',
+                  'Location sharing is enabled.'
+                );
+                return;
+              }
 
-        const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          setLocationSharing(true);
-          await persistLocationPref(true);
-          Alert.alert(
-            'Location Sharing',
-            'Location sharing is enabled.'
-          );
-        } else {
-          // Permission denied
-          setLocationSharing(false);
-          await persistLocationPref(false);
-          Alert.alert(
-            'Location Permission Needed',
-            'Please enable location in system settings to use location features.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Open Settings', onPress: openSystemSettings },
-            ]
-          );
-        }
-      } catch (e) {
-        setLocationSharing(false);
-        await persistLocationPref(false);
-        Alert.alert(
-          'Location Error',
-          'Unable to change location permission right now.'
-        );
-      }
+              const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
+              if (status === 'granted') {
+                setLocationSharing(true);
+                await persistLocationPref(true);
+                Alert.alert(
+                  'Location Sharing',
+                  'Location sharing is enabled.'
+                );
+              } else {
+                setLocationSharing(false);
+                await persistLocationPref(false);
+                Alert.alert(
+                  'Location Permission Needed',
+                  'Location is required for ride and rental features. You can manage this later in your device settings.'
+                );
+              }
+            } catch (e) {
+              setLocationSharing(false);
+              await persistLocationPref(false);
+              Alert.alert(
+                'Location Error',
+                'Unable to change location permission right now.'
+              );
+            }
+          }},
+        ]
+      );
+      return;
     } else {
       // Disabling: cannot revoke OS permission programmatically, persist preference and inform user
       setLocationSharing(false);
@@ -158,14 +154,11 @@ const Permissions = () => {
       Alert.alert(
         'Location Sharing',
         Platform.select({
-          ios: 'Location sharing is disabled in the app. To fully revoke OS permission, turn it off in Settings > Privacy > Location Services.',
-          android: 'Location sharing is disabled in the app. To fully revoke OS permission, turn it off in App Settings.',
+          ios: 'Location sharing is disabled in the app. To fully revoke OS permission, use iOS Settings later if you choose.',
+          android: 'Location sharing is disabled in the app. To fully revoke OS permission, use Android Settings later if you choose.',
           default: 'Location sharing is disabled.',
         }),
-        [
-          { text: 'OK' },
-          { text: 'Open Settings', onPress: openSystemSettings },
-        ]
+        [{ text: 'OK' }]
       );
     }
   };
@@ -282,7 +275,7 @@ const Permissions = () => {
             <View style={styles.categoryContainer}>
               {category.items.map(renderMenuItem)}
             </View>
-            {category.showDivider && index < categories.length - 1 && (
+            {index < categories.length - 1 && (
               <View style={styles.divider} />
             )}
           </View>

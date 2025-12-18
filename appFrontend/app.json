@@ -16,8 +16,8 @@
       "bundleIdentifier": "biz.cloudnexus.snap.app",
       "jsEngine": "hermes",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "This app needs access to location to show your current location on the map and provide ride services.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to location to show your current location on the map and provide ride services."
+        "NSLocationWhenInUseUsageDescription": "Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop-off points, and enable real-time ride tracking during an active trip. Location data is only accessed while you are using the app.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop-off points, and enable real-time ride tracking during an active trip. Location data is only accessed while you are using the app."
       },
       "config": {
         "googleMapsApiKey": "AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo"
@@ -57,7 +57,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow SNAP to use your location to show your current position on the map and provide ride services."
+          "locationAlwaysAndWhenInUsePermission": "Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop-off points, and enable real-time ride tracking during an active trip. Location data is only accessed while you are using the app."
         }
       ],
       [

@@ -56,6 +56,7 @@ export function SellerKycVerification() {
   const [isUploading, setIsUploading] = useState(false);
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [oldImageUrl, setOldImageUrl] = useState<string | null>(null);
+  const [requestingPerm, setRequestingPerm] = useState(false);
 
   // Pre-populate form data if existing data is available
   useEffect(() => {
@@ -132,20 +133,69 @@ export function SellerKycVerification() {
     return isValid;
   };
 
-  const pickImage = async () => {
+  // Small helper to show a confirmation-style info alert and wait for user choice
+  const showInfoConfirm = (title: string, message: string, continueLabel = 'Continue'): Promise<boolean> => {
+    return new Promise(resolve => {
+      Alert.alert(
+        title,
+        message,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          { text: continueLabel, onPress: () => resolve(true) },
+        ],
+        { cancelable: true }
+      );
+    });
+  };
+
+  const ensureMediaLibraryPermission = async (): Promise<boolean> => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Sorry, we need camera roll permissions to upload your ID!',
-          [{ text: 'OK' }]
-        );
+      const existing = await ImagePicker.getMediaLibraryPermissionsAsync();
+      if ((existing as any)?.granted) return true;
+      // Provide rationale before OS prompt
+      const proceed = await showInfoConfirm(
+        'Photo Library Access',
+        'We need access to your photo library so you can select an ID image for verification. Access is used only when you choose to upload.',
+        'Continue'
+      );
+      if (!proceed) return false;
+      setRequestingPerm(true);
+      const res = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      return !!(res as any)?.granted;
+    } catch {
+      return false;
+    } finally {
+      setRequestingPerm(false);
+    }
+  };
+
+  const ensureCameraPermission = async (): Promise<boolean> => {
+    try {
+      const existing = await ImagePicker.getCameraPermissionsAsync();
+      if ((existing as any)?.granted) return true;
+      const proceed = await showInfoConfirm(
+        'Camera Access',
+        'Camera access is required to capture your identification document for KYC verification. The camera is used only when you choose to upload.',
+        'Continue'
+      );
+      if (!proceed) return false;
+      setRequestingPerm(true);
+      const res = await ImagePicker.requestCameraPermissionsAsync();
+      return !!(res as any)?.granted;
+    } catch {
+      return false;
+    } finally {
+      setRequestingPerm(false);
+    }
+  };
+
+  const pickFromLibrary = async () => {
+    try {
+      const ok = await ensureMediaLibraryPermission();
+      if (!ok) {
+        Alert.alert('Permission Needed', 'Photo library access is required to select your ID image.');
         return;
       }
-
-      // Launch image picker with optimized options
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -157,25 +207,10 @@ export function SellerKycVerification() {
         allowsMultipleSelection: false,
         selectionLimit: 1,
       });
-
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedAsset = result.assets[0];
-        
-        // Immediately update the UI with the selected image
-        setFormData(prev => ({
-          ...prev,
-          idImage: selectedAsset.uri
-        }));
-
-        // Clear any existing error
-        if (errors.idImage) {
-          setErrors(prev => ({
-            ...prev,
-            idImage: ''
-          }));
-        }
-
-        // Log the selected image details for debugging
+        setFormData(prev => ({ ...prev, idImage: selectedAsset.uri }));
+        if (errors.idImage) setErrors(prev => ({ ...prev, idImage: '' }));
         console.log('Selected image:', {
           uri: selectedAsset.uri,
           width: selectedAsset.width,
@@ -185,12 +220,54 @@ export function SellerKycVerification() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert(
-        'Error',
-        'Failed to select image. Please try again.',
-        [{ text: 'OK' }]
-      );
+      Alert.alert('Error', 'Failed to select image. Please try again.', [{ text: 'OK' }]);
     }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const ok = await ensureCameraPermission();
+      if (!ok) {
+        Alert.alert('Permission Needed', 'Camera access is required to capture your ID image.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.6,
+        base64: false,
+        exif: false,
+        presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN,
+      });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedAsset = result.assets[0];
+        setFormData(prev => ({ ...prev, idImage: selectedAsset.uri }));
+        if (errors.idImage) setErrors(prev => ({ ...prev, idImage: '' }));
+        console.log('Captured image:', {
+          uri: selectedAsset.uri,
+          width: selectedAsset.width,
+          height: selectedAsset.height,
+          type: selectedAsset.type
+        });
+      }
+    } catch (error) {
+      console.error('Error capturing image:', error);
+      Alert.alert('Error', 'Failed to capture image. Please try again.', [{ text: 'OK' }]);
+    }
+  };
+
+  const chooseImageSource = async () => {
+    Alert.alert(
+      'Upload ID Document',
+      'Choose how you want to provide your ID image.',
+      [
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Library', onPress: pickFromLibrary },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
   };
 
   const handleDeleteImage = async () => {
@@ -401,7 +478,7 @@ export function SellerKycVerification() {
                     styles.uploadButton,
                     formData.idImage ? styles.uploadButtonWithImage : null
                   ]} 
-                  onPress={pickImage}
+                  onPress={chooseImageSource}
                   activeOpacity={0.7}
                 >
                   {formData.idImage ? (

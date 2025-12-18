@@ -10,6 +10,7 @@ import {
   StatusBar,
   Platform,
   Alert,
+  Modal,
   ActivityIndicator,
   KeyboardAvoidingView,
   Keyboard,
@@ -25,6 +26,7 @@ import { api } from '../api/api';
 import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { notificationService } from '../services/notificationService';
+import * as Notifications from 'expo-notifications';
 
 // Debounce utility
 const debounce = (func: Function, wait: number) => {
@@ -58,6 +60,8 @@ export function ShowInterest() {
   const [messages, setMessages] = useState<any[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [notifPermission, setNotifPermission] = useState<{ status: 'unknown' | 'granted' | 'denied'; canAskAgain: boolean }>({ status: 'unknown', canAskAgain: true });
+  const [showNotificationGate, setShowNotificationGate] = useState(false);
   
   const messagesRef = useRef<ScrollView | null>(null);
 
@@ -174,17 +178,28 @@ export function ShowInterest() {
         return;
       }
 
-      // Register for push notifications
+      // Notification permission and registration
       try {
-        console.log('ShowInterest: Registering for push notifications');
-        const fcmToken = await notificationService.registerForPushNotifications();
-        if (fcmToken && user?.id) {
-          console.log('ShowInterest: Sending FCM token to backend');
-          await notificationService.sendTokenToBackend(user.id);
+        const alreadyPromptedNotif = await AsyncStorage.getItem('notifPermsRequested');
+        const perm = await Notifications.getPermissionsAsync();
+        const status = (perm as any)?.status || ((perm as any)?.granted ? 'granted' : 'denied');
+        const canAskAgain = (perm as any)?.canAskAgain !== false;
+        setNotifPermission({
+          status: status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'unknown',
+          canAskAgain,
+        });
+        if (status !== 'granted' && !alreadyPromptedNotif) {
+          setShowNotificationGate(true);
+        } else if (status === 'granted') {
+          console.log('ShowInterest: Registering for push notifications');
+          const fcmToken = await notificationService.registerForPushNotifications();
+          if (fcmToken && user?.id) {
+            console.log('ShowInterest: Sending FCM token to backend');
+            await notificationService.sendTokenToBackend(user.id);
+          }
         }
       } catch (notificationError) {
-        console.error('ShowInterest: Error registering for notifications:', notificationError);
-        // Don't fail the request if notification registration fails
+        console.error('ShowInterest: Error handling notification permissions:', notificationError);
       }
 
       // Set a timeout to prevent infinite loading
@@ -428,6 +443,28 @@ export function ShowInterest() {
   const incrementQuantity = () => {
     if (product && quantity < product.stock) {
       setQuantity(quantity + 1);
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    try {
+      const res = await Notifications.requestPermissionsAsync();
+      const status = (res as any)?.status || ((res as any)?.granted ? 'granted' : 'denied');
+      const canAskAgain = (res as any)?.canAskAgain !== false;
+      setNotifPermission({
+        status: status === 'granted' ? 'granted' : 'denied',
+        canAskAgain,
+      });
+      await AsyncStorage.setItem('notifPermsRequested', '1');
+      if (status === 'granted') {
+        setShowNotificationGate(false);
+        const fcmToken = await notificationService.registerForPushNotifications();
+        if (fcmToken && user?.id) {
+          await notificationService.sendTokenToBackend(user.id);
+        }
+      }
+    } catch (e) {
+      // ignore
     }
   };
 
@@ -854,6 +891,42 @@ export function ShowInterest() {
             </>
           )}
         </ScrollView>
+
+        {/* Notification Permission Gate */}
+        <Modal
+          visible={showNotificationGate && notifPermission.status !== 'granted'}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => {}}
+        >
+          <SafeAreaView style={styles.permContainer}>
+            <View style={styles.permBody}>
+              <View style={styles.permContent}>
+                <Text style={styles.permTitle}>Enable Notifications</Text>
+                <Text style={styles.permSubtitle}>
+                  Notifications are used to alert you about new messages from sellers, ride status updates, and important account alerts. You can change this later in your device settings.
+                </Text>
+              </View>
+            </View>
+            <View style={styles.permFooter}>
+              {notifPermission.canAskAgain ? (
+                <TouchableOpacity
+                  onPress={requestNotificationPermission}
+                  style={[styles.button, styles.buttonWide, styles.buttonFull]}
+                >
+                  <Text style={styles.buttonText}>Allow Notifications</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setShowNotificationGate(false)}
+                  style={[styles.button, styles.buttonSettings, styles.buttonWide, styles.buttonFull]}
+                >
+                  <Text style={styles.buttonText}>Not now</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </SafeAreaView>
+        </Modal>
 
         {/* Fixed Chat Input for existing interest */}
         {interestExists && (
@@ -1313,5 +1386,70 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#E5E7EB',
+  },
+  permContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    padding: 32,
+    justifyContent: 'space-between',
+  },
+  permBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 8,
+  },
+  permContent: {
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
+  },
+  permTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 16,
+    textAlign: 'left',
+  },
+  permSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'left',
+    marginBottom: 12,
+    paddingHorizontal: 0,
+  },
+  permFooter: {
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
+    gap: 12,
+    paddingBottom: 24,
+  },
+  button: {
+    backgroundColor: '#2563EB',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  buttonWide: {
+    paddingHorizontal: 28,
+  },
+  buttonFull: {
+    width: '100%',
+    alignSelf: 'center',
+  },
+  buttonSettings: {
+    backgroundColor: '#111827',
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  permHelpText: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 8,
   },
 }); 

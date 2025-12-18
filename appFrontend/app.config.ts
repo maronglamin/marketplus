@@ -21,12 +21,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     infoPlist: {
       UILaunchStoryboardName: 'SplashScreen',
       UIRequiresFullScreen: true,
-      NSCameraUsageDescription: 'This app uses the camera to take photos and videos for profile, receipts, and uploads.',
-      NSPhotoLibraryUsageDescription: 'This app needs access to your photo library so you can select photos to upload.',
+      NSCameraUsageDescription: 'Camera access is required to allow you to capture and upload identification and registration documents for identity verification (KYC) and account approval. The camera is used only when you choose to upload documents.',
+      NSPhotoLibraryUsageDescription: 'This app needs access to your photo library so you can select photos to upload for identity verification (KYC) and account approval.',
       NSPhotoLibraryAddUsageDescription: 'This app may save images or exports to your photo library when you choose to do so.',
       NSMicrophoneUsageDescription: 'This app may use the microphone for features that require audio recording.',
-      NSLocationWhenInUseUsageDescription: 'This app needs access to your location to show your current position on the map and provide ride services.',
-      NSLocationAlwaysAndWhenInUseUsageDescription: 'This app needs access to your location to show your current position on the map and provide ride services.',
+      NSLocationWhenInUseUsageDescription: 'Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop‑off points, and enable real‑time ride tracking during an active trip. Location data is only accessed while you are using the app.',
+      NSLocationAlwaysAndWhenInUseUsageDescription: 'Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop‑off points, and enable real‑time ride tracking during an active trip. Location data is only accessed while you are using the app.',
       NSAppTransportSecurity: {
         NSExceptionDomains: {
           'api.cloudnexus.biz': {
