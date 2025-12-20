@@ -4,7 +4,7 @@
     "slug": "snap",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/luncher.jpg",
     "userInterfaceStyle": "light",
     "jsEngine": "hermes",
     "splash": {
@@ -24,9 +24,10 @@
       }
     },
     "android": {
+      "icon": "./assets/luncher.jpg",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon-foreground.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/luncher.jpg",
+        "backgroundColor": "#00bcd4"
       },
       "edgeToEdgeEnabled": true,
       "package": "biz.cloudnexus.snap.app",

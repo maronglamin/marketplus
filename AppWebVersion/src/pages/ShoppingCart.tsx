@@ -47,6 +47,9 @@ export function ShoppingCart() {
   const [stripeAmount, setStripeAmount] = useState(0);
   const [stripeCurrency, setStripeCurrency] = useState('USD');
   const [stripeOrderId, setStripeOrderId] = useState('');
+  const [stripeCustomerId, setStripeCustomerId] = useState<string | undefined>(undefined);
+  const [stripeCardholderName, setStripeCardholderName] = useState<string | undefined>(undefined);
+  const [stripeDescription, setStripeDescription] = useState<string | undefined>(undefined);
   const [bulkStripeOpen, setBulkStripeOpen] = useState(false);
   const [bulkStripeAmount, setBulkStripeAmount] = useState(0);
   const [bulkStripeCurrency, setBulkStripeCurrency] = useState('USD');
@@ -544,6 +547,9 @@ export function ShoppingCart() {
                 setStripeAmount(amount);
                 setStripeCurrency(currency);
                 setStripeOrderId(anyOrderId);
+                setStripeCustomerId(user?.id);
+                setStripeCardholderName((method as any)?.accountName || undefined);
+                setStripeDescription(selectedOrder ? `Payment for Order #${selectedOrder.orderNumber}` : undefined);
                 setStripeOpen(true);
               }
           } else {
@@ -724,6 +730,9 @@ export function ShoppingCart() {
         orderId={stripeOrderId}
         amount={stripeAmount}
         currency={stripeCurrency}
+        description={stripeDescription}
+        customerId={stripeCustomerId}
+        cardholderName={stripeCardholderName}
       />
       <BulkStripePaymentModal
         isOpen={bulkStripeOpen}

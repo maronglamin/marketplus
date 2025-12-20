@@ -6,7 +6,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: 'marketplace',
   version: '1.0.1',
   orientation: 'portrait',
-  icon: './assets/icon.png',
+  icon: './assets/luncher.jpg',
   userInterfaceStyle: 'light',
   splash: {
     backgroundColor: '#ffffff'
@@ -41,9 +41,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     }
   },
   android: ({
+    icon: './assets/luncher.jpg',
     adaptiveIcon: {
-      foregroundImage: './assets/adaptive-icon-foreground.png',
-      backgroundColor: '#ffffff'
+      foregroundImage: './assets/luncher.jpg',
+      backgroundColor: '#00bcd4'
     },
     package: 'biz.cloudnexus.snap.app',
     versionCode: 3,
