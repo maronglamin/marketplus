@@ -500,11 +500,22 @@ export function AccountSettings() {
   }
 
   const handleLogout = async () => {
+    // Prevent multiple concurrent logout alerts
+    const alertOpenRef = (AccountSettings as any)._logoutAlertOpenRef || (AccountSettings as any)._setLogoutAlertRef?.();
+    if (!alertOpenRef) {
+      // Lazy-init a stable ref attached to the component function object to avoid re-renders
+      (AccountSettings as any)._logoutAlertOpenRef = { current: false };
+    }
+    const ref = (AccountSettings as any)._logoutAlertOpenRef as { current: boolean };
+    if (ref.current) {
+      return;
+    }
+    ref.current = true;
     Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => { ref.current = false } },
         {
           text: 'Logout',
           style: 'destructive',
@@ -518,6 +529,8 @@ export function AccountSettings() {
             } catch (error) {
               console.error('Error during logout:', error)
               Alert.alert('Error', 'Failed to logout. Please try again.')
+            } finally {
+              ref.current = false
             }
           },
         },

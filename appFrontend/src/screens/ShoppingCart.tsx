@@ -259,11 +259,24 @@ export function ShoppingCart() {
     };
   }, [showYonnaPayment, selectedOrder?.id]);
 
-  useEffect(() => {
-    if (showPaymentModal && !loadingPaymentMethods && paymentMethods.length === 0) {
-      checkPaymentMethodsWithUserFeedback();
+  // Force-fetch payment methods while modal is open, retrying briefly until available
+  const ensurePaymentMethodsLoaded = async (maxRetries = 5, delayMs = 700) => {
+    for (let i = 0; i < maxRetries; i++) {
+      if (!showPaymentModal) break;
+      const ok = await checkPaymentMethodsWithUserFeedback();
+      if (ok) break;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
-  }, [showPaymentModal, loadingPaymentMethods, paymentMethods.length]);
+  };
+
+  useEffect(() => {
+    if (!showPaymentModal) return;
+    // Only attempt and retry if we don't already have methods
+    if (paymentMethods.length === 0) {
+      checkPaymentMethodsWithUserFeedback();
+      ensurePaymentMethodsLoaded(5, 800);
+    }
+  }, [showPaymentModal]);
 
   const loadOrders = async () => {
     try {
@@ -944,10 +957,16 @@ export function ShoppingCart() {
                 <Text style={{ marginTop: 8, color: '#6B7280' }}>Loading payment methods...</Text>
               </View>
             ) : paymentMethods.length === 0 ? (
-              <View style={{ alignItems: 'center', paddingVertical: 8 }}>
-                <Text style={{ color: '#6B7280', textAlign: 'center' }}>
-                  No payment methods available. Add one to continue.
+              <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+                <Text style={{ color: '#6B7280', textAlign: 'center', marginBottom: 10 }}>
+                  No payment methods available. Add one to continue, or reload.
                 </Text>
+                <TouchableOpacity
+                  onPress={() => ensurePaymentMethodsLoaded(5, 600)}
+                  style={{ paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#2563EB', borderRadius: 10 }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Reload Payment Methods</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               paymentMethods.map((method) => (
