@@ -107,6 +107,7 @@ export function OrderDetails() {
   console.log('OrderDetails orderId:', orderId);
   
   const { user, token, refreshUser } = useAuth();
+  const isAuthenticated = !!(user?.id) && !!token;
   const [freshUser, setFreshUser] = useState<any>(null);
   
   const [order, setOrder] = useState<Order | null>(null);
@@ -499,6 +500,21 @@ export function OrderDetails() {
   };
 
   const handleProceedToPayment = () => {
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Login required',
+        'Please login to proceed with this order.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Login',
+            onPress: () => navigation.getParent()?.navigate('Auth' as never),
+          },
+        ],
+        { cancelable: true }
+      );
+      return;
+    }
     const currentUserId = freshUser?.id || user?.id;
     if (!order || !currentUserId || !selectedPaymentMethod) {
       Alert.alert('Error', 'Order, user, or payment method information is missing.');
@@ -1335,6 +1351,21 @@ export function OrderDetails() {
   };
 
   const updateOrderStatus = async (newStatus: string) => {
+    if (!isAuthenticated) {
+      Alert.alert(
+        'Login required',
+        'Please login to update this order.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Login',
+            onPress: () => navigation.getParent()?.navigate('Auth' as never),
+          },
+        ],
+        { cancelable: true }
+      );
+      return;
+    }
     try {
       setUpdatingStatus(true);
       

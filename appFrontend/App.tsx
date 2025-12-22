@@ -32,6 +32,7 @@ import { ProductListing } from './src/screens/products/buyer/ProductListing';
 import { CustomerRideService } from './src/screens/CustomerRideService';
 import { ChatList } from './src/screens/ChatList';
 import RentalRequest from './src/screens/RentalRequest';
+import { Order } from './src/screens/Order';
 import * as ExpoNotifications from 'expo-notifications';
 import { realTimeRideService } from './src/services/realTimeRideService';
 import { useEffect } from 'react';
@@ -51,6 +52,7 @@ export type MainStackParamList = {
   Home: undefined;
   ProductDetail: { productId: string };
   ShowInterest: { productId: string };
+  Order: { productId: string };
   AccountSettings: undefined;
   SellerDashboard: undefined;
   AddProduct: undefined;
@@ -149,6 +151,7 @@ function MainNavigator() {
       <MainStack.Screen name="Home" component={Home} />
       <MainStack.Screen name="AccountSettings" component={AccountSettings} />
       <MainStack.Screen name="ProductDetail" component={ProductDetail} />
+      <MainStack.Screen name="Order" component={Order} />
       <MainStack.Screen name="ShowInterest" component={ShowInterest} />
       <MainStack.Screen name="SellerDashboard" component={SellerDashboard} />
       <MainStack.Screen name="AddProduct" component={AddProduct} />
