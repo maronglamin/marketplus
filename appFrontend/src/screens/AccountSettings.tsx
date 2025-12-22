@@ -203,6 +203,32 @@ export function AccountSettings() {
     }
   }, [])
 
+  // Redirect unauthenticated users back to Home with a login prompt
+  React.useEffect(() => {
+    if (!user?.id) {
+      // Navigate back to Home
+      navigation.navigate('Home')
+      // Show prompt to login
+      setTimeout(() => {
+        Alert.alert(
+          'Login required',
+          'Please login to access Account Settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Login',
+              onPress: () => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (navigation as any)?.getParent?.()?.navigate?.('Auth') ?? navigation.navigate('Login')
+              },
+            },
+          ],
+          { cancelable: true }
+        )
+      }, 200)
+    }
+  }, [user?.id, navigation])
+
   // Load user profile data
   const loadUserProfile = React.useCallback(async (forceRefresh = false) => {
     console.log('🔄 loadUserProfile called:', { 

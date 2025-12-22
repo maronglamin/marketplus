@@ -78,3 +78,34 @@ export const validateDevice = async (
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+// Optional authentication: attaches req.user if a valid token is provided,
+// but does NOT reject the request when no/invalid token is present.
+export const authenticateOptional = async (
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
+    if (!token) {
+      return next();
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as {
+      userId: string;
+      deviceId?: string;
+      type?: string;
+    };
+    if (decoded?.userId) {
+      req.user = {
+        id: decoded.userId,
+        deviceId: decoded.deviceId || 'unknown',
+      };
+    }
+    return next();
+  } catch {
+    // Ignore token errors for optional auth and proceed as anonymous
+    return next();
+  }
+};

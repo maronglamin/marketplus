@@ -55,7 +55,17 @@ export default function PopularProductsScreen() {
       setError(null);
       const currentPage = isLoadMore ? page + 1 : 1;
       // Fetch products ordered by highest number of orders
-      const products = await productService.getPopularProducts(currentPage, 30);
+      let products: any;
+      try {
+        products = await productService.getPopularProducts(currentPage, 30);
+      } catch (err: any) {
+        // Fallback for anonymous browsing: use featured products if popular requires auth
+        if (err?.response?.status === 401) {
+          products = await productService.getFeaturedProducts(30, currentPage);
+        } else {
+          throw err;
+        }
+      }
       
       if (isLoadMore) {
         const newProducts = [...popularProducts, ...products.products];

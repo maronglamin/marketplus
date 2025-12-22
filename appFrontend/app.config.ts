@@ -6,7 +6,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   slug: 'marketplace',
   version: '1.0.1',
   orientation: 'portrait',
-  icon: './assets/luncher.jpg',
+  icon: './assets/adaptive-icon.png',
   userInterfaceStyle: 'light',
   splash: {
     backgroundColor: '#ffffff'
@@ -41,13 +41,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     }
   },
   android: ({
-    icon: './assets/luncher.jpg',
+    icon: './assets/adaptive-icon.png',
     adaptiveIcon: {
-      foregroundImage: './assets/luncher.jpg',
+      foregroundImage: './assets/adaptive-icon-foreground.png',
       backgroundColor: '#00bcd4'
     },
     package: 'biz.cloudnexus.snap.app',
-    versionCode: 3,
+    versionCode: 4,
     usesCleartextTraffic: true,
     config: {
       googleMaps: {

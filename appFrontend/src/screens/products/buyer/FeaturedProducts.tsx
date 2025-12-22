@@ -255,8 +255,19 @@ export function FeaturedProducts() {
         setTimeout(() => reject(new Error('Request timeout')), 15000); // 15 second timeout
       });
       
-      const productsPromise = productService.getFeaturedProducts(30, currentPage);
-      const products = await Promise.race([productsPromise, timeoutPromise]) as any;
+      let products: any;
+      try {
+        const productsPromise = productService.getFeaturedProducts(30, currentPage);
+        products = await Promise.race([productsPromise, timeoutPromise]) as any;
+      } catch (err: any) {
+        // Fallback for anonymous browsing: use popular products if featured requires auth
+        if (err?.response?.status === 401) {
+          const fallbackPromise = productService.getPopularProducts(currentPage, 30);
+          products = await Promise.race([fallbackPromise as any, timeoutPromise]) as any;
+        } else {
+          throw err;
+        }
+      }
       
       console.log('Featured products response:', { 
         count: products.products.length, 

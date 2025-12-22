@@ -234,8 +234,35 @@ export default function FeaturedByCategoriesScreen() {
         setTimeout(() => reject(new Error('Request timeout')), 15000); // 15 second timeout
       });
       
-      const productsPromise = productService.getCustomerProducts(currentPage, 30, categoryId);
-      const products = await Promise.race([productsPromise, timeoutPromise]) as any;
+      let products: any;
+      try {
+        const productsPromise = productService.getCustomerProducts(currentPage, 30, categoryId);
+        products = await Promise.race([productsPromise, timeoutPromise]) as any;
+      } catch (err: any) {
+        // Fallback for anonymous browsing: use featured or popular products and filter by category name
+        if (err?.response?.status === 401) {
+          const selectedCategoryData = categories.find(cat => cat.id === categoryId);
+          const categoryName = selectedCategoryData?.name?.toLowerCase();
+          try {
+            const fallbackPromise = productService.getFeaturedProducts(30, currentPage);
+            const fallback = await Promise.race([fallbackPromise as any, timeoutPromise]) as any;
+            const filtered = fallback.products.filter((p: CustomerProduct) => 
+              !categoryName || p.category?.toLowerCase() === categoryName
+            );
+            products = { ...fallback, products: filtered };
+          } catch {
+            // Second fallback to popular
+            const popPromise = productService.getPopularProducts(currentPage, 30);
+            const pop = await Promise.race([popPromise as any, timeoutPromise]) as any;
+            const filtered = pop.products.filter((p: CustomerProduct) => 
+              !categoryName || p.category?.toLowerCase() === categoryName
+            );
+            products = { ...pop, products: filtered };
+          }
+        } else {
+          throw err;
+        }
+      }
       
       console.log('Featured products response:', { 
         count: products.products.length, 

@@ -2,7 +2,7 @@
   "expo": {
     "name": "SNAP",
     "slug": "snap",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/luncher.jpg",
     "userInterfaceStyle": "light",
@@ -24,9 +24,9 @@
       }
     },
     "android": {
-      "icon": "./assets/luncher.jpg",
+      "icon": "./assets/adaptive-icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/luncher.jpg",
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
         "backgroundColor": "#00bcd4"
       },
       "edgeToEdgeEnabled": true,

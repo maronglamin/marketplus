@@ -16,6 +16,7 @@ import { loginWithPin, requestNewPin } from '../api/auth'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getDeviceInfo } from '../api/auth'
 import type { AuthStackParamList } from '../navigation/AuthNavigator'
+import { useAuth } from '../contexts/AuthContext'
 import PinInput from '../components/PinInput'
 
 type LoginPinNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'LoginPin'>
@@ -26,6 +27,7 @@ export function LoginPin() {
   const [loading, setLoading] = useState(false)
   const navigation = useNavigation<LoginPinNavigationProp>()
   const route = useRoute<LoginPinRouteProp>()
+  const { refreshUser } = useAuth()
 
   // Prevent going back to login screens after successful login
   useEffect(() => {
@@ -57,9 +59,18 @@ export function LoginPin() {
         throw new Error('No authentication token received')
       }
 
-      // Store the token
+      // Store the token and update AuthContext immediately
       await AsyncStorage.setItem('token', response.token)
       console.log('Login successful, token stored')
+      try {
+        // Persist user if provided
+        if ((response as any)?.user) {
+          await AsyncStorage.setItem('user', JSON.stringify((response as any).user))
+        }
+        await refreshUser()
+      } catch (e) {
+        console.log('Auth refresh from storage failed (continuing):', e)
+      }
 
       // Check if PIN reset is required
       if (response.requiresPinReset) {
@@ -85,11 +96,10 @@ export function LoginPin() {
           }],
         })
       } else {
-        // Navigate to App navigator
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'App' }],
-        })
+        // Navigate to root "Main" (exit Auth stack cleanly)
+        const parent = (navigation as any)?.getParent?.(); // Auth stack
+        const root = parent?.getParent?.() || parent;
+        root?.navigate?.('Main');
       }
     } catch (error: any) {
       console.error('Login error:', error)

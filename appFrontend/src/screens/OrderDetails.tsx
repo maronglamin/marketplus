@@ -112,6 +112,7 @@ export function OrderDetails() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unauthorized, setUnauthorized] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
@@ -697,6 +698,7 @@ export function OrderDetails() {
     try {
       setLoading(true);
       setError(null);
+      setUnauthorized(false);
       
       console.log('Loading order details for orderId:', orderId);
       const response = await api.get(`/api/orders/${orderId}`);
@@ -726,7 +728,13 @@ export function OrderDetails() {
         message: error.response?.data?.message,
         url: error.config?.url
       });
-      setError('Failed to load order details');
+      if (error.response?.status === 401) {
+        // Allow read-only access to screen without forcing login; show friendly prompt instead of error
+        setUnauthorized(true);
+        setOrder(null);
+      } else {
+        setError('Failed to load order details');
+      }
     } finally {
       setLoading(false);
     }
@@ -1483,10 +1491,12 @@ export function OrderDetails() {
     }
   };
 
-  // Load mobile wallet providers on component mount
+  // Load mobile wallet providers only when user is authenticated (not needed for read-only view)
   useEffect(() => {
-    fetchMobileWalletProviders();
-  }, []);
+    if (user) {
+      fetchMobileWalletProviders();
+    }
+  }, [user]);
 
   // Filter providers based on search
   const filteredProviders = useMemo(() => {
@@ -1533,6 +1543,37 @@ export function OrderDetails() {
   }
 
   if (error || !order) {
+    // If unauthorized, show a friendly login prompt while keeping screen accessible
+    if (unauthorized) {
+      return (
+        <SafeAreaView style={styles.container}>
+          <StatusBar 
+            barStyle="dark-content" 
+            backgroundColor="#FFFFFF" 
+            translucent={Platform.OS === 'android'}
+          />
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={24} color="#1F2937" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Order Details</Text>
+            <View style={styles.headerSpacer} />
+          </View>
+          <View style={styles.errorContainer}>
+            <Ionicons name="lock-closed-outline" size={48} color="#2563EB" />
+            <Text style={styles.errorText}>
+              Please login to view this order’s details.
+            </Text>
+            <TouchableOpacity
+              onPress={() => navigation.getParent()?.navigate('Auth' as never)}
+              style={styles.retryButton}
+            >
+              <Text style={styles.retryButtonText}>Login</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar 

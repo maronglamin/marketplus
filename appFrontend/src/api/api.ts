@@ -67,11 +67,17 @@ api.interceptors.response.use(
     });
 
     if (error.response?.status === 401) {
-      console.warn('Authentication failed - removing stored credentials');
-      // Handle unauthorized error (e.g., token expired)
-      await AsyncStorage.removeItem('token');
-      await AsyncStorage.removeItem('user');
-      // You might want to navigate to the login screen here
+      const hadAuthHeader = !!error.config?.headers?.Authorization;
+      const url = error.config?.url || '';
+      // For anonymous/public browsing (no auth header) do NOT clear credentials
+      // Only clear when a real token was sent (expired/invalid session)
+      if (hadAuthHeader) {
+        console.warn('Authentication failed with token - clearing stored credentials');
+        await AsyncStorage.removeItem('token');
+        await AsyncStorage.removeItem('user');
+      } else {
+        console.warn('401 received for anonymous request, leaving credentials untouched:', url);
+      }
     }
     return Promise.reject(error);
   }

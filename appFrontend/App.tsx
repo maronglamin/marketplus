@@ -19,6 +19,19 @@ import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { TokenNotificationProvider } from './src/contexts/TokenNotificationContext';
 import { useTokenNotification } from './src/contexts/TokenNotificationContext';
 import AuthNavigator from './src/navigation/AuthNavigator';
+import { FeaturedProducts } from './src/screens/products/buyer/FeaturedProducts';
+import PopularProductsScreen from './src/screens/PopularProducts';
+import NewArrivalsScreen from './src/screens/NewArrivals';
+import FeaturedByCategoriesScreen from './src/screens/FeaturedByCategories';
+import { ProductCategoryOptions } from './src/screens/ProductCategoryOptions';
+import UserSearch from './src/screens/UserSearch';
+import { ShoppingCart } from './src/screens/ShoppingCart';
+import { CustomerRides } from './src/screens/CustomerRides';
+import { CustomerRideHistory } from './src/screens/CustomerRideHistory';
+import { ProductListing } from './src/screens/products/buyer/ProductListing';
+import { CustomerRideService } from './src/screens/CustomerRideService';
+import { ChatList } from './src/screens/ChatList';
+import RentalRequest from './src/screens/RentalRequest';
 import * as ExpoNotifications from 'expo-notifications';
 import { realTimeRideService } from './src/services/realTimeRideService';
 import { useEffect } from 'react';
@@ -45,6 +58,19 @@ export type MainStackParamList = {
   Notifications: undefined;
   Settings: undefined;
   InterestManagement: undefined;
+  FeaturedProducts: undefined;
+  PopularProducts: undefined;
+  NewArrivals: undefined;
+  FeaturedByCategories: { categoryId: string; categoryName: string };
+  ProductCategoryOptions: undefined;
+  UserSearch: undefined;
+  ShoppingCart: undefined;
+  CustomerRides: undefined;
+  CustomerRideHistory: undefined;
+  ProductListing: undefined | { searchQuery?: string; filteredProducts?: any[] };
+  CustomerRideService: undefined;
+  ChatList: undefined;
+  RentalRequest: undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -130,6 +156,19 @@ function MainNavigator() {
       <MainStack.Screen name="Notifications" component={Notifications} />
       <MainStack.Screen name="Settings" component={Settings} />
       <MainStack.Screen name="InterestManagement" component={InterestManagement} />
+      <MainStack.Screen name="FeaturedProducts" component={FeaturedProducts} />
+      <MainStack.Screen name="PopularProducts" component={PopularProductsScreen} />
+      <MainStack.Screen name="NewArrivals" component={NewArrivalsScreen} />
+      <MainStack.Screen name="FeaturedByCategories" component={FeaturedByCategoriesScreen} />
+      <MainStack.Screen name="ProductCategoryOptions" component={ProductCategoryOptions} />
+      <MainStack.Screen name="UserSearch" component={UserSearch} />
+      <MainStack.Screen name="ShoppingCart" component={ShoppingCart} />
+      <MainStack.Screen name="CustomerRides" component={CustomerRides} />
+      <MainStack.Screen name="CustomerRideHistory" component={CustomerRideHistory} />
+      <MainStack.Screen name="ProductListing" component={ProductListing} />
+      <MainStack.Screen name="CustomerRideService" component={CustomerRideService} />
+      <MainStack.Screen name="ChatList" component={ChatList} />
+      <MainStack.Screen name="RentalRequest" component={RentalRequest} />
     </MainStack.Navigator>
   );
 }

@@ -17,6 +17,7 @@ import * as Device from 'expo-device'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import PinInput from '../components/PinInput'
 import { AuthStackParamList } from '../navigation/AuthNavigator'
+import { useAuth } from '../contexts/AuthContext'
 
 type PinVerificationNavigationProp = NativeStackNavigationProp<AuthStackParamList, 'PinVerification'>
 type PinVerificationRouteProp = RouteProp<AuthStackParamList, 'PinVerification'>
@@ -29,6 +30,7 @@ export function PinVerification() {
   const navigation = useNavigation<PinVerificationNavigationProp>()
   const route = useRoute<PinVerificationRouteProp>()
   const { phoneNumber } = route.params
+  const { refreshUser } = useAuth()
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>
@@ -72,9 +74,18 @@ export function PinVerification() {
         throw new Error('No authentication token received');
       }
 
-      // Store the token
+      // Store the token and immediately refresh AuthContext from backend
       await AsyncStorage.setItem('token', response.token);
       console.log('Token stored successfully');
+      // Persist user if provided to speed up UI
+      if ((response as any)?.user) {
+        await AsyncStorage.setItem('user', JSON.stringify((response as any).user));
+      }
+      try {
+        await refreshUser();
+      } catch (e) {
+        console.log('Auth refresh failed (will proceed):', e);
+      }
 
       // Decide next step based on server flags.
       // Goal:

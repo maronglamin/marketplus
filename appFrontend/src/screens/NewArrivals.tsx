@@ -66,13 +66,32 @@ export default function NewArrivalsScreen() {
       // Use the selected category ID for filtering
       const categoryId = selectedCategory === 'all' ? undefined : selectedCategory || undefined;
       
-      const products = await productService.getCustomerProducts(currentPage, 30, categoryId);
+      let products: any = null;
+      try {
+        // Primary endpoint (may require auth)
+        products = await productService.getCustomerProducts(currentPage, 30, categoryId);
+      } catch (err: any) {
+        // Fallback for anonymous browsing: use featured products (public) and filter client-side
+        if (err?.response?.status === 401) {
+          const fallback = await productService.getFeaturedProducts(30, currentPage);
+          products = {
+            ...fallback,
+            products: fallback.products.filter((p: any) => {
+              if (!categoryId) return true;
+              // Try match by category id or name when available
+              return p.categoryId === categoryId || (p.category && categories.find(c => c.id === categoryId)?.name?.toLowerCase() === p.category?.toLowerCase());
+            }),
+          };
+        } else {
+          throw err;
+        }
+      }
       
       // Filter to show only products from the last 2 weeks
       const twoWeeksAgo = new Date();
       twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
       
-      const recentProducts = products.products.filter(product => {
+      const recentProducts = products.products.filter((product: any) => {
         const productDate = new Date(product.createdAt);
         return productDate >= twoWeeksAgo;
       });
@@ -80,11 +99,11 @@ export default function NewArrivalsScreen() {
       if (isLoadMore) {
         setNewArrivals(prev => [...prev, ...recentProducts]);
         setPage(currentPage);
-        setHasMore(products.hasMore && recentProducts.length > 0);
+        setHasMore((products.hasMore ?? false) && recentProducts.length > 0);
       } else {
         setNewArrivals(recentProducts);
         setPage(1);
-        setHasMore(products.hasMore && recentProducts.length > 0);
+        setHasMore((products.hasMore ?? false) && recentProducts.length > 0);
       }
     } catch (error) {
       console.error('Error loading new arrivals:', error);

@@ -1,7 +1,7 @@
 import express from 'express';
 import { logger } from '../utils/logger';
 import { PrismaClient, ProductCondition, ProductStatus, TransactionType } from '@prisma/client';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authenticateOptional } from '../middleware/auth';
 import { notificationService } from '../services/notificationService';
 
 const router = express.Router();
@@ -230,13 +230,9 @@ router.get('/seller', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-// Get all products for customers (excluding current user's products)
-router.get('/customer', authenticate, async (req: AuthRequest, res) => {
+// Get all products for customers (public; exclude current user's products if authenticated)
+router.get('/customer', authenticateOptional, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
@@ -244,7 +240,7 @@ router.get('/customer', authenticate, async (req: AuthRequest, res) => {
     const search = req.query.search as string;
 
     logger.info('Fetching customer products:', { 
-      userId: req.user.id,
+      userId: req.user?.id ?? 'anonymous',
       page,
       limit,
       categoryId,
@@ -253,12 +249,12 @@ router.get('/customer', authenticate, async (req: AuthRequest, res) => {
 
     // Build where clause
     const whereClause: any = {
-      sellerId: {
-        not: req.user.id // Exclude current user's products
-      },
       status: 'ACTIVE', // Only show active products
       deletedAt: null // Exclude deleted products
     };
+    if (req.user?.id) {
+      whereClause.sellerId = { not: req.user.id };
+    }
 
     if (categoryId) {
       whereClause.categoryId = categoryId;
@@ -335,7 +331,7 @@ router.get('/customer', authenticate, async (req: AuthRequest, res) => {
       }));
 
     logger.info('Customer products fetched successfully:', { 
-      userId: req.user.id,
+      userId: req.user?.id ?? 'anonymous',
       count: transformedProducts.length,
       total
     });
@@ -356,33 +352,31 @@ router.get('/customer', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-// Get featured products for customers (excluding current user's products)
-router.get('/featured', authenticate, async (req: AuthRequest, res) => {
+// Get featured products for customers (public; exclude current user's products if authenticated)
+router.get('/featured', authenticateOptional, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
     const limit = parseInt(req.query.limit as string) || 4;
     const page = parseInt(req.query.page as string) || 1;
     const skip = (page - 1) * limit;
 
     logger.info('Fetching featured products:', { 
-      userId: req.user.id,
+      userId: req.user?.id ?? 'anonymous',
       limit,
       page
     });
 
+    const whereForFeatured: any = {
+      status: 'ACTIVE',
+      deletedAt: null,
+      isFeatured: true
+    };
+    if (req.user?.id) {
+      whereForFeatured.sellerId = { not: req.user.id };
+    }
+
     const [products, total] = await Promise.all([
       prisma.product.findMany({
-        where: {
-          sellerId: {
-            not: req.user.id // Exclude current user's products
-          },
-          status: 'ACTIVE',
-          deletedAt: null,
-          isFeatured: true
-        },
+        where: whereForFeatured,
         include: {
           images: {
             where: { isPrimary: true },
@@ -417,16 +411,7 @@ router.get('/featured', authenticate, async (req: AuthRequest, res) => {
         skip,
         take: limit
       }),
-      prisma.product.count({
-        where: {
-          sellerId: {
-            not: req.user.id // Exclude current user's products
-          },
-          status: 'ACTIVE',
-          deletedAt: null,
-          isFeatured: true
-        }
-      })
+      prisma.product.count({ where: whereForFeatured })
     ]);
 
     // Transform the data for frontend consumption and filter out products with invalid sellers
@@ -451,7 +436,7 @@ router.get('/featured', authenticate, async (req: AuthRequest, res) => {
       }));
 
     logger.info('Featured products fetched successfully:', { 
-      userId: req.user.id,
+      userId: req.user?.id ?? 'anonymous',
       count: transformedProducts.length,
       total,
       page,
@@ -474,31 +459,27 @@ router.get('/featured', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
-// Get popular products for customers ordered by total orders (highest first)
-router.get('/popular', authenticate, async (req: AuthRequest, res) => {
+// Get popular products for customers ordered by total orders (highest first) - public; exclude own if authenticated
+router.get('/popular', authenticateOptional, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 30;
     const skip = (page - 1) * limit;
 
     logger.info('Fetching popular products (by orders):', {
-      userId: req.user.id,
+      userId: req.user?.id ?? 'anonymous',
       page,
       limit
     });
 
     // Base visibility filter for customer
     const whereClause: any = {
-      sellerId: {
-        not: req.user.id // Exclude current user's products
-      },
       status: 'ACTIVE',
       deletedAt: null
     };
+    if (req.user?.id) {
+      whereClause.sellerId = { not: req.user.id };
+    }
 
     // Get total count of visible products (for pagination metadata)
     const total = await prisma.product.count({ where: whereClause });
@@ -564,7 +545,7 @@ router.get('/popular', authenticate, async (req: AuthRequest, res) => {
       }));
 
     logger.info('Popular products fetched successfully:', {
-      userId: req.user.id,
+      userId: req.user?.id ?? 'anonymous',
       count: transformedProducts.length,
       total
     });
@@ -1009,18 +990,14 @@ router.get('/seller/:productId', authenticate, async (req: AuthRequest, res) => 
   }
 });
 
-// Get a single product by ID
-router.get('/:productId', authenticate, async (req: AuthRequest, res) => {
+// Get a single product by ID (public; exclude own if authenticated unless explicitly allowed)
+router.get('/:productId', authenticateOptional, async (req: AuthRequest, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
     const { productId } = req.params;
     const { context, allowOwn } = req.query; // Add allowOwn parameter to allow sellers to view their own products
 
     logger.info('Fetching product details:', { 
-      userId: req.user.id,
+      userId: req.user?.id ?? 'anonymous',
       productId,
       context,
       allowOwn
@@ -1034,10 +1011,8 @@ router.get('/:productId', authenticate, async (req: AuthRequest, res) => {
     };
 
     // If allowOwn is not 'true' and context is not 'seller', exclude current user's products (for customer view)
-    if (allowOwn !== 'true' && context !== 'seller') {
-      whereClause.sellerId = {
-        not: req.user.id
-      };
+    if (allowOwn !== 'true' && context !== 'seller' && req.user?.id) {
+      whereClause.sellerId = { not: req.user.id };
     }
 
     const product = await prisma.product.findFirst({
@@ -1118,7 +1093,7 @@ router.get('/:productId', authenticate, async (req: AuthRequest, res) => {
     };
 
     logger.info('Product details fetched successfully:', { 
-      userId: req.user.id,
+      userId: req.user?.id ?? 'anonymous',
       productId
     });
 

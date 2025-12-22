@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native'
+import { Alert } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import {
   Package,
@@ -44,6 +45,27 @@ const contentMaxWidth = Math.min(900, screenWidth - (isLargeTablet ? 48 : 32))
 export function SellerDashboard() {
   const navigation = useNavigation<SellerDashboardNavigationProp>()
   const { user, token } = useAuth()
+  // Prompt login if unauthenticated - seller access is not public
+  useEffect(() => {
+    if (!user) {
+      Alert.alert(
+        'Login required',
+        'Please login to access the seller dashboard.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Login',
+            onPress: () => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (navigation as any)?.getParent?.()?.navigate?.('Auth') ?? navigation.navigate('Auth' as never)
+            }
+          }
+        ],
+        { cancelable: true }
+      )
+    }
+  }, [user, navigation])
+
   const didInitialLoadRef = useRef(false)
   const [kycStatus, setKycStatus] = useState<SellerKycResponse | null>(null)
   const [salesRepStatus, setSalesRepStatus] = useState<SalesRep | null>(null)
@@ -717,6 +739,52 @@ export function SellerDashboard() {
               )}
             </View>
           </ScrollView>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // If not logged in, block seller access entirely with a login CTA
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor="#FFFFFF"
+          translucent={false}
+        />
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <Ionicons name="arrow-back" size={24} color="#000" />
+            </TouchableOpacity>
+            <Text style={styles.title}>Seller Dashboard</Text>
+            <View style={styles.placeholder} />
+          </View>
+          <ScrollView style={styles.content}>
+            <View style={styles.kycContainer}>
+              <View style={styles.kycIconContainer}>
+                <Ionicons name="lock-closed-outline" size={64} color="#2563EB" />
+              </View>
+              <Text style={styles.kycTitle}>Login Required</Text>
+              <Text style={styles.kycDescription}>
+                Please login to access seller features like product listing and interests.
+              </Text>
+            </View>
+          </ScrollView>
+          <View style={styles.buttonContainer}>
+            <Button
+              label="Login"
+              onPress={() => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (navigation as any)?.getParent?.()?.navigate?.('Auth') ?? navigation.navigate('Auth' as never)
+              }}
+              style={styles.kycButton}
+            />
+          </View>
         </View>
       </SafeAreaView>
     )

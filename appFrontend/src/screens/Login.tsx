@@ -57,6 +57,7 @@ export function Login() {
   const [cameraGateShown, setCameraGateShown] = useState<boolean>(false)
   const [dismissedLocationGate, setDismissedLocationGate] = useState<boolean>(false)
   const [requestingLocation, setRequestingLocation] = useState<boolean>(false)
+  const [showLocationGate, setShowLocationGate] = useState<boolean>(false)
 
   // Initialize API and device info on component mount
   useEffect(() => {
@@ -156,9 +157,9 @@ export function Login() {
           status: status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'unknown',
           canAskAgain,
         });
-        // Show camera gate once per session whenever location is granted and camera isn't
+        // Do not auto-show a blocking camera gate; only show when user continues an action that requires it
+        // Keep cameraGateShown to prevent repeated prompts if later triggered explicitly
         if (!cameraGateShown && status !== 'granted') {
-          setShowCameraGate(true);
           setCameraGateShown(true);
         }
       } catch (e) {
@@ -362,6 +363,12 @@ export function Login() {
       return;
     }
 
+    // Gate location permission only when the user continues (do not block the input beforehand)
+    if (locationPermission.status !== 'granted' && !dismissedLocationGate) {
+      setShowLocationGate(true);
+      return;
+    }
+
     // Always normalize to E.164 with leading +
     const dial = selectedCountry.dial_code || '';
     const normalizedDial = dial.startsWith('+') ? dial : `+${dial.replace(/\D/g, '')}`;
@@ -501,9 +508,9 @@ export function Login() {
 
         </KeyboardAvoidingView>
 
-        {/* Location Permission Gate - blocks app until granted */}
+        {/* Location Permission Gate - only shown when user continues and permission is not granted */}
         <Modal
-          visible={!dismissedLocationGate && locationPermission.status !== 'granted'}
+          visible={showLocationGate && locationPermission.status !== 'granted'}
           animationType="slide"
           transparent={false}
           onRequestClose={() => {}}
@@ -549,13 +556,22 @@ export function Login() {
                   {requestingLocation ? 'Requesting...' : 'Continue'}
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setDismissedLocationGate(true);
+                  setShowLocationGate(false);
+                }}
+                style={[styles.button, styles.buttonWide, styles.buttonFull, styles.buttonPill, { backgroundColor: '#111827', marginTop: 12 }]}
+              >
+                <Text style={styles.buttonText}>Not now</Text>
+              </TouchableOpacity>
             </View>
           </SafeAreaView>
         </Modal>
 
-        {/* Camera Permission Gate - shown once after location to allow document capture */}
+        {/* Camera Permission Gate - do not auto-block; only show if explicitly required elsewhere */}
         <Modal
-          visible={locationPermission.status === 'granted' && showCameraGate && cameraPermission.status !== 'granted'}
+          visible={showCameraGate && cameraPermission.status !== 'granted'}
           animationType="slide"
           transparent={false}
           onRequestClose={() => {}}

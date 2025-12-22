@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -50,7 +50,7 @@ type HomeNavigationProp = NativeStackNavigationProp<AppStackParamList, 'Home'>;
 export function Home() {
   const navigation = useNavigation<HomeNavigationProp>();
   const route = useRoute();
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const { checkActiveTokens } = useTokenNotification();
   
 
@@ -121,15 +121,24 @@ export function Home() {
 
   // Check rider application status on component mount
   useEffect(() => {
-    loadFreshUserData();
-    checkRiderApplicationStatus();
-    loadRecentDestinations();
+    if (user?.id) {
+      loadFreshUserData();
+      checkRiderApplicationStatus();
+      loadRecentDestinations();
+      loadUnreadNotificationsCount();
+      loadPendingPaymentCount();
+      // Check for active tokens when component mounts
+      checkActiveTokens();
+    } else {
+      // For anonymous users, only load public data
+      setFreshUserData(null);
+      setRiderApplication(null);
+      setRecentDestinations([]);
+      setUnreadNotificationsCount(0);
+      setPendingPaymentCount(0);
+    }
     loadCategories();
     getUserLocation();
-    loadUnreadNotificationsCount();
-    loadPendingPaymentCount();
-    // Check for active tokens when component mounts
-    checkActiveTokens();
     // Check for app updates on mount (no-op if backend endpoint not present)
     (async () => {
       const result = await checkForUpdate();
@@ -140,30 +149,50 @@ export function Home() {
     })();
   }, []);
 
+  // Helper: wait for token to be written to storage (handles async write timing after login)
+  const waitForStoredToken = useCallback(async (maxAttempts: number = 10, delayMs: number = 100) => {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const stored = await AsyncStorage.getItem('token');
+      if (stored) return true;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    return false;
+  }, []);
+
   // Re-run data loading when user changes
   useEffect(() => {
-    if (user?.id) {
-      console.log('🔄 User changed in Home, refreshing data for user:', user.id);
-      loadFreshUserData();
-      checkRiderApplicationStatus();
-      loadRecentDestinations();
-      loadPendingPaymentCount();
-      loadUnreadNotificationsCount();
-    } else {
-      console.log('⚠️ No user in Home, clearing user-specific data');
-      setFreshUserData(null);
-      setRiderApplication(null);
-      setRecentDestinations([]);
-      setUnreadNotificationsCount(0);
-      setPendingPaymentCount(0);
-    }
-  }, [user?.id]);
+    const run = async () => {
+      if (user?.id) {
+        console.log('🔄 User changed in Home, refreshing data for user:', user.id);
+        // Ensure token is available to the API interceptor before making authenticated requests
+        await waitForStoredToken();
+        await loadFreshUserData();
+        checkRiderApplicationStatus();
+        loadRecentDestinations();
+        loadPendingPaymentCount();
+        loadUnreadNotificationsCount();
+      } else {
+        console.log('⚠️ No user in Home, clearing user-specific data');
+        setFreshUserData(null);
+        setRiderApplication(null);
+        setRecentDestinations([]);
+        setUnreadNotificationsCount(0);
+        setPendingPaymentCount(0);
+      }
+    };
+    run();
+  }, [user?.id, waitForStoredToken]);
 
   // Load unread notifications count when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      loadUnreadNotificationsCount();
-      loadPendingPaymentCount();
+      if (user?.id) {
+        loadUnreadNotificationsCount();
+        loadPendingPaymentCount();
+      } else {
+        setUnreadNotificationsCount(0);
+        setPendingPaymentCount(0);
+      }
     }, [])
   );
 
@@ -288,6 +317,10 @@ export function Home() {
   const loadPendingPaymentCount = async () => {
     try {
       setIsLoadingPendingCount(true);
+      if (!user?.id) {
+        setPendingPaymentCount(0);
+        return;
+      }
       // Using shared API client to fetch current user's orders
       const response = await api.get('/api/orders/my-orders');
       const orders = response?.data?.orders || [];
@@ -307,6 +340,10 @@ export function Home() {
   const loadRecentDestinations = async () => {
     try {
       setIsLoadingDestinations(true);
+      if (!user?.id) {
+        setRecentDestinations([]);
+        return;
+      }
       const destinations = await RideRequestService.getRecentDestinations(3);
       setRecentDestinations(destinations);
     } catch (error) {
@@ -646,19 +683,82 @@ export function Home() {
     navigation.navigate('UserSearch');
   };
 
+  const promptLogin = (message?: string) => {
+    Alert.alert(
+      'Login required',
+      message ?? 'Please login to access this service.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Login',
+          onPress: () => {
+            // Try navigating to root Auth stack; fall back if nested
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (navigation as any)?.getParent?.()?.navigate?.('Auth') ?? navigation.navigate('Auth' as never);
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleRideBannerPress = () => {
+    if (!user && !token) {
+      promptLogin('Login to book a ride.');
+      return;
+    }
+    navigation.navigate('CustomerRideService');
+  };
+
+  const handleRideHistoryPress = () => {
+    if (!user && !token) {
+      promptLogin('Login to view your ride history.');
+      return;
+    }
+    navigation.navigate('CustomerRideHistory');
+  };
+
+  const handleRideRequestPress = () => {
+    if (!user && !token) {
+      promptLogin('Login to request a ride.');
+      return;
+    }
+    navigation.navigate('RideRequest');
+  };
+
+  const handleBookFirstRidePress = () => {
+    if (!user && !token) {
+      promptLogin('Login to book your first ride.');
+      return;
+    }
+    navigation.navigate('CustomerRideService');
+  };
+
   const handleQuickActionPress = (action: string) => {
+    const requireAuth = (message: string) => {
+      if (!user && !token) {
+        promptLogin(message);
+        return true;
+      }
+      return false;
+    };
+
     switch (action) {
       case 'Rental':
+        if (requireAuth('Login to request a rental.')) return;
         navigation.navigate('RentalRequest');
         break;
       case 'Ride History':
         // Directly navigate to Requested Rides for faster access
+        if (requireAuth('Login to view your ride history.')) return;
         navigation.navigate('CustomerRides');
         break;
       case 'My Orders':
+        if (requireAuth('Login to view your orders.')) return;
         navigation.navigate('CustomerOrders');
         break;
       case 'Interest':
+        if (requireAuth('Login to manage your interests.')) return;
         navigation.navigate('InterestManagement');
         break;
       default:
@@ -672,12 +772,20 @@ export function Home() {
         // Already on home
         break;
       case 'rides':
+        if (!user && !token) {
+          promptLogin('Login to access ride services.');
+          return;
+        }
         navigation.navigate('CustomerRideService');
         break;
       case 'shop':
         navigation.navigate('FeaturedProducts');
         break;
       case 'messages':
+        if (!user && !token) {
+          promptLogin('Login to view your messages.');
+          return;
+        }
         navigation.navigate('ChatList');
         break;
       case 'profile':
@@ -687,6 +795,10 @@ export function Home() {
   };
 
   const handleNotificationPress = () => {
+    if (!user && !token) {
+      promptLogin('Login to view your notifications.');
+      return;
+    }
     navigation.navigate('Notifications');
   };
 
@@ -813,7 +925,7 @@ export function Home() {
             <View style={styles.welcomeButtons}>
               <TouchableOpacity 
                 style={styles.rideButton}
-                onPress={() => navigation.navigate('CustomerRideService')}
+                onPress={handleRideBannerPress}
                 activeOpacity={0.9}
               >
                 <ImageBackground 
@@ -927,7 +1039,7 @@ export function Home() {
                   </View>
                   <TouchableOpacity 
                     style={styles.viewAllButton}
-                    onPress={() => navigation.navigate('CustomerRideHistory')}
+                    onPress={handleRideHistoryPress}
                   >
                     <Text style={styles.viewAllText}>View All</Text>
                     <Ionicons name="chevron-forward" size={16} color="#0EA5E9" />
@@ -982,7 +1094,7 @@ export function Home() {
                     </Text>
                     <TouchableOpacity 
                       style={styles.bookFirstRideButton}
-                      onPress={() => navigation.navigate('CustomerRideService')}
+                    onPress={handleBookFirstRidePress}
                     >
                       <Text style={styles.bookFirstRideButtonText}>Book a Ride</Text>
                     </TouchableOpacity>
@@ -998,7 +1110,7 @@ export function Home() {
                   </View>
                   <TouchableOpacity 
                     style={styles.bookNowButton}
-                    onPress={() => navigation.navigate('RideRequest')}
+                    onPress={handleRideRequestPress}
                   >
                     <Text style={styles.bookNowButtonText}>Book Now</Text>
                   </TouchableOpacity>
@@ -1310,7 +1422,13 @@ export function Home() {
         {/* Floating Shopping Cart Button */}
         <TouchableOpacity
           activeOpacity={0.85}
-          onPress={() => navigation.navigate('ShoppingCart')}
+          onPress={() => {
+            if (!user && !token) {
+              promptLogin('Login to view your shopping cart.');
+              return;
+            }
+            navigation.navigate('ShoppingCart');
+          }}
           style={styles.floatingCartButton}
         >
           <Ionicons name="cart" size={24} color="#FFFFFF" />
