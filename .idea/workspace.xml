@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="NONE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/appFrontend/app.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.config.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/appFrontend/app.json" beforeDir="false" afterPath="$PROJECT_DIR$/appFrontend/app.json" afterDir="false" />
-    </list>
+    <list default="true" id="89bd1e94-e945-484b-a060-ba498daa95de" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />

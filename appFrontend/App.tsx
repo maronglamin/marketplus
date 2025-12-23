@@ -33,6 +33,17 @@ import { CustomerRideService } from './src/screens/CustomerRideService';
 import { ChatList } from './src/screens/ChatList';
 import RentalRequest from './src/screens/RentalRequest';
 import { Order } from './src/screens/Order';
+import { CustomerOrders } from './src/screens/CustomerOrders';
+import ChangePin from './src/screens/ChangePin';
+import { RideRequest } from './src/screens/RideRequest';
+import { BecomeRider } from './src/screens/riders/BecomeRider';
+import PermissionsScreen from './src/screens/account-settings/Permissions';
+import { PaymentMethods } from './src/screens/account-settings/PaymentMethods';
+import Delivery from './src/screens/account-settings/Delivery';
+import { ServiceTerms } from './src/screens/account-settings/ServiceTerms';
+import PrivacyPolicy from './src/screens/PrivacyPolicy';
+import { AccountDeletion } from './src/screens/account-settings/AccountDeletion';
+import { AccountType } from './src/screens/account-settings/AccountType';
 import * as ExpoNotifications from 'expo-notifications';
 import { realTimeRideService } from './src/services/realTimeRideService';
 import { useEffect } from 'react';
@@ -73,6 +84,18 @@ export type MainStackParamList = {
   CustomerRideService: undefined;
   ChatList: undefined;
   RentalRequest: undefined;
+  RideRequest: undefined | { [key: string]: any };
+  BecomeRider: { type: string; existingData?: any };
+  CustomerOrders: undefined;
+  ChangePin: undefined;
+  Permissions: undefined;
+  PaymentMethods: undefined;
+  Delivery: undefined;
+  NotificationsSettings: undefined;
+  ServiceTerms: undefined;
+  PrivacyPolicy: undefined;
+  AccountDeletion: undefined;
+  AccountType: undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -172,6 +195,20 @@ function MainNavigator() {
       <MainStack.Screen name="CustomerRideService" component={CustomerRideService} />
       <MainStack.Screen name="ChatList" component={ChatList} />
       <MainStack.Screen name="RentalRequest" component={RentalRequest} />
+      <MainStack.Screen name="RideRequest" component={RideRequest} />
+      <MainStack.Screen name="BecomeRider" component={BecomeRider} />
+      {/* Account & settings related routes (require login via upstream guards) */}
+      <MainStack.Screen name="CustomerOrders" component={CustomerOrders} />
+      <MainStack.Screen name="ChangePin" component={ChangePin} />
+      <MainStack.Screen name="Permissions" component={PermissionsScreen} />
+      <MainStack.Screen name="PaymentMethods" component={PaymentMethods} />
+      <MainStack.Screen name="Delivery" component={Delivery} />
+      {/* Route notifications settings to Permissions to manage OS-level permissions */}
+      <MainStack.Screen name="NotificationsSettings" component={PermissionsScreen} />
+      <MainStack.Screen name="ServiceTerms" component={ServiceTerms} />
+      <MainStack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
+      <MainStack.Screen name="AccountDeletion" component={AccountDeletion} />
+      <MainStack.Screen name="AccountType" component={AccountType} />
     </MainStack.Navigator>
   );
 }

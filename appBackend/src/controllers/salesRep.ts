@@ -12,6 +12,21 @@ interface AuthenticatedRequest extends Request {
   }
 }
 
+// Normalize phone number to a +E.164-like form for reliable comparisons
+const normalizePhone = (raw: unknown): string => {
+  if (typeof raw !== 'string') return ''
+  let value = raw.trim().replace(/[\s-]/g, '')
+  if (value.startsWith('00')) {
+    value = '+' + value.slice(2)
+  }
+  if (!value.startsWith('+')) {
+    value = '+' + value.replace(/\D/g, '')
+  } else {
+    value = '+' + value.slice(1).replace(/\D/g, '')
+  }
+  return value
+}
+
 // Get all sales reps for the authenticated parent seller
 export const getSalesReps = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -326,9 +341,10 @@ export const createSalesRep = async (req: AuthenticatedRequest, res: Response) =
     }
 
     const { firstName, lastName, phoneNumber, email, branchId, pin } = req.body
+    const normalizedPhone = normalizePhone(phoneNumber)
 
     // Validate required fields
-    if (!firstName || !lastName || !phoneNumber || !branchId || !pin) {
+    if (!firstName || !lastName || !normalizedPhone || !branchId || !pin) {
       return res.status(400).json({ 
         error: 'Missing required fields: firstName, lastName, phoneNumber, branchId, pin' 
       })
@@ -345,7 +361,7 @@ export const createSalesRep = async (req: AuthenticatedRequest, res: Response) =
       parentSellerId, 
       firstName, 
       lastName, 
-      phoneNumber, 
+      phoneNumber: normalizedPhone, 
       branchId 
     })
 
@@ -378,79 +394,157 @@ export const createSalesRep = async (req: AuthenticatedRequest, res: Response) =
 
     // Check if user with this phone number already exists
     const existingUser = await prisma.user.findUnique({
-      where: { phoneNumber }
+      where: { phoneNumber: normalizedPhone }
     })
 
     let userId: string
 
     if (existingUser) {
-      // Check if this user is already a sales rep for any seller
+      // Allow TERMINATED users to be created as sales rep (per requirements)
+
+      // Check if this user is already a sales rep
       const existingSalesRep = await prisma.salesRep.findUnique({
         where: { userId: existingUser.id }
       })
 
       if (existingSalesRep) {
+        // If already a rep for this parent seller, return existing rep (idempotent)
+        if (existingSalesRep.parentSellerId === parentSellerId) {
+          const repWithDetails = await prisma.salesRep.findUnique({
+            where: { id: existingSalesRep.id },
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  phoneNumber: true,
+                  createdAt: true,
+                }
+              },
+              branch: {
+                select: {
+                  id: true,
+                  name: true,
+                  city: true,
+                  state: true
+                }
+              }
+            }
+          })
+          const parentKycDetails = await prisma.sellerKyc.findUnique({
+            where: { userId: parentSellerId },
+            select: {
+              businessName: true,
+              businessType: true,
+              address: true,
+              city: true,
+              state: true,
+              country: true,
+              postalCode: true
+            }
+          })
+          const transformedSalesRep = repWithDetails && {
+            id: repWithDetails.id,
+            userId: repWithDetails.userId,
+            firstName: repWithDetails.user.firstName,
+            lastName: repWithDetails.user.lastName,
+            phoneNumber: repWithDetails.user.phoneNumber,
+            branchName: repWithDetails.branch.name,
+            branchId: repWithDetails.branch.id,
+            branchLocation: `${repWithDetails.branch.city || ''}${repWithDetails.branch.city && repWithDetails.branch.state ? ', ' : ''}${repWithDetails.branch.state || ''}`,
+            status: repWithDetails.status,
+            createdAt: repWithDetails.createdAt,
+            updatedAt: repWithDetails.updatedAt,
+            inheritedKyc: parentKycDetails ? {
+              businessName: parentKycDetails.businessName,
+              businessType: parentKycDetails.businessType,
+              address: parentKycDetails.address,
+              city: parentKycDetails.city,
+              state: parentKycDetails.state,
+              country: parentKycDetails.country,
+              postalCode: parentKycDetails.postalCode
+            } : null
+          }
+          return res.status(200).json(transformedSalesRep)
+        }
+        // Already a rep for another seller
         return res.status(400).json({ 
           error: 'User is already a sales representative for another seller' 
         })
       }
 
-      // Check if this user is already a parent seller (has Seller KYC)
+      // Prevent adding a user who already has Seller KYC as a sales representative
       const existingSellerKyc = await prisma.sellerKyc.findUnique({
         where: { userId: existingUser.id }
       })
-
       if (existingSellerKyc) {
         return res.status(400).json({
           error: 'User already has Seller KYC and cannot be added as a sales representative'
         })
       }
 
+      // Proceed using existing user
       userId = existingUser.id
     } else {
       // Hash the PIN before storing
       const hashedPin = await hashPin(pin)
       
-      // Create new user for the sales rep
-      const newUser = await prisma.user.create({
-        data: {
-          firstName,
-          lastName,
-          phoneNumber,
-          pin: hashedPin, // Hashed PIN for security
+      try {
+        // Create new user for the sales rep
+        const newUser = await prisma.user.create({
+          data: {
+            firstName,
+            lastName,
+            phoneNumber: normalizedPhone,
+            pin: hashedPin, // Hashed PIN for security
+          }
+        })
+        userId = newUser.id
+      } catch (err: any) {
+        if (err?.code === 'P2002') {
+          return res.status(400).json({ error: 'Phone number already in use' })
         }
-      })
-      userId = newUser.id
+        throw err
+      }
     }
 
     // Create sales rep record
-    const salesRep = await prisma.salesRep.create({
-      data: {
-        userId,
-        parentSellerId,
-        branchId,
-        status: 'ACTIVE'
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phoneNumber: true,
-            createdAt: true,
-          }
+    let salesRep
+    try {
+      salesRep = await prisma.salesRep.create({
+        data: {
+          userId,
+          parentSellerId,
+          branchId,
+          status: 'ACTIVE'
         },
-        branch: {
-          select: {
-            id: true,
-            name: true,
-            city: true,
-            state: true
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phoneNumber: true,
+              createdAt: true,
+            }
+          },
+          branch: {
+            select: {
+              id: true,
+              name: true,
+              city: true,
+              state: true
+            }
           }
         }
+      })
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        return res.status(400).json({ error: 'User is already a sales representative' })
       }
-    })
+      throw err
+    }
 
     // Get parent seller's KYC details for response
     const parentKycDetails = await prisma.sellerKyc.findUnique({
