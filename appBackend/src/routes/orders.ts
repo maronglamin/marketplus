@@ -1000,6 +1000,21 @@ router.get('/seller/transaction/:transactionId', authenticate, async (req: Authe
       ? parseFloat(serviceFeeTransaction.amount.toString()) 
       : 0;
 
+    // Find the original payment transaction to identify the payment gateway provider
+    const originalPaymentTx = await prisma.externalTransaction.findFirst({
+      where: {
+        orderId: order.id,
+        transactionType: TransactionType.ORIGINAL,
+      },
+      select: {
+        gatewayProvider: true,
+        status: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
     // Get item details
     const itemUnitPrice = parseFloat(orderItem.unitPrice.toString());
     const itemQuantity = orderItem.quantity;
@@ -1052,6 +1067,7 @@ router.get('/seller/transaction/:transactionId', authenticate, async (req: Authe
       paymentMethod: order.paymentMethod,
       paymentStatus: order.paymentStatus,
       paymentReference: order.paymentReference || null,
+      paymentGatewayProvider: originalPaymentTx?.gatewayProvider || null,
       shippingMethod: order.shippingMethod,
       shippingAddress: formatAddress(order.shippingAddress),
       billingAddress: order.billingAddress ? formatAddress(order.billingAddress) : null,

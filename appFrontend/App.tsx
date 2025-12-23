@@ -37,6 +37,16 @@ import { CustomerOrders } from './src/screens/CustomerOrders';
 import ChangePin from './src/screens/ChangePin';
 import { RideRequest } from './src/screens/RideRequest';
 import { BecomeRider } from './src/screens/riders/BecomeRider';
+import { SalesRepsScreen } from './src/screens/SalesRepsScreen';
+import { ReportsScreen } from './src/screens/ReportsScreen';
+import { SettlementsScreen } from './src/screens/SettlementsScreen';
+import { BranchesScreen } from './src/screens/reps-reports/BranchesScreen';
+import { RevenueDetails } from './src/screens/RevenueDetails';
+import { TransactionHistory } from './src/screens/transactions/TransactionHistory';
+import { SettlementHistory } from './src/screens/transactions/SettlementHistory';
+import { SellerInterestDetail } from './src/screens/SellerInterestDetail';
+import { SettlementRequest } from './src/screens/transactions/SettlementRequest';
+import { TransactionDetail } from './src/screens/transactions/TransactionDetail';
 import PermissionsScreen from './src/screens/account-settings/Permissions';
 import { PaymentMethods } from './src/screens/account-settings/PaymentMethods';
 import Delivery from './src/screens/account-settings/Delivery';
@@ -96,6 +106,16 @@ export type MainStackParamList = {
   PrivacyPolicy: undefined;
   AccountDeletion: undefined;
   AccountType: undefined;
+  SalesRepsScreen: undefined;
+  ReportsScreen: undefined;
+  SettlementsScreen: undefined;
+  BranchesScreen: undefined;
+  RevenueDetails: undefined;
+  TransactionHistory: { currency: string; currencySymbol: string };
+  SettlementHistory: undefined;
+  SellerInterestDetail: { interestId: string };
+  SettlementRequest: undefined;
+  TransactionDetail: { transactionId: string; currency: string; currencySymbol: string };
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -209,6 +229,17 @@ function MainNavigator() {
       <MainStack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
       <MainStack.Screen name="AccountDeletion" component={AccountDeletion} />
       <MainStack.Screen name="AccountType" component={AccountType} />
+      {/* Seller/Rep management screens */}
+      <MainStack.Screen name="SalesRepsScreen" component={SalesRepsScreen} />
+      <MainStack.Screen name="ReportsScreen" component={ReportsScreen} />
+      <MainStack.Screen name="SettlementsScreen" component={SettlementsScreen} />
+      <MainStack.Screen name="BranchesScreen" component={BranchesScreen} />
+      <MainStack.Screen name="RevenueDetails" component={RevenueDetails} />
+      <MainStack.Screen name="TransactionHistory" component={TransactionHistory} />
+      <MainStack.Screen name="SettlementHistory" component={SettlementHistory} />
+      <MainStack.Screen name="SellerInterestDetail" component={SellerInterestDetail} />
+      <MainStack.Screen name="SettlementRequest" component={SettlementRequest} />
+      <MainStack.Screen name="TransactionDetail" component={TransactionDetail} />
     </MainStack.Navigator>
   );
 }

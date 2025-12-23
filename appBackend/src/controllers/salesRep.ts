@@ -392,15 +392,18 @@ export const createSalesRep = async (req: AuthenticatedRequest, res: Response) =
       })
     }
 
-    // Check if user with this phone number already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { phoneNumber: normalizedPhone }
+    // Check if any users exist with this phone number (phone may not be unique)
+    const usersWithPhone = await prisma.user.findMany({
+      where: { phoneNumber: normalizedPhone },
+      orderBy: { createdAt: 'desc' }
     })
+    // Prefer a non-terminated user if available; otherwise fall back to most recent
+    const existingUser = usersWithPhone.find(u => (u.status as any) !== 'TERMINATED') || usersWithPhone[0] || null
 
     let userId: string
 
     if (existingUser) {
-      // Allow TERMINATED users to be created as sales rep (per requirements)
+      // TERMINATED users are allowed to be created as sales reps (per requirements)
 
       // Check if this user is already a sales rep
       const existingSalesRep = await prisma.salesRep.findUnique({

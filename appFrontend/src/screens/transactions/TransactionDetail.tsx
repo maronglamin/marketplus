@@ -319,6 +319,13 @@ export function TransactionDetail() {
                 <Text style={styles.infoLabel}>Payment:</Text>
                 <Text style={styles.infoValue}>{transaction.paymentMethod}</Text>
               </View>
+              {transaction.paymentGatewayProvider && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="server-outline" size={20} color="#6B7280" />
+                  <Text style={styles.infoLabel}>Gateway:</Text>
+                  <Text style={styles.infoValue}>{transaction.paymentGatewayProvider}</Text>
+                </View>
+              )}
               {transaction.paymentReference && (
                 <View style={styles.infoRow}>
                   <Ionicons name="receipt-outline" size={20} color="#6B7280" />

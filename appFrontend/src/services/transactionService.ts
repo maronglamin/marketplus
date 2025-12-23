@@ -50,6 +50,7 @@ export interface TransactionDetail {
   paymentMethod: string;
   paymentStatus: string;
   paymentReference?: string;
+  paymentGatewayProvider?: string | null;
   shippingAddress: string;
   billingAddress?: string;
   trackingNumber?: string;
