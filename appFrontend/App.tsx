@@ -47,6 +47,13 @@ import { SettlementHistory } from './src/screens/transactions/SettlementHistory'
 import { SellerInterestDetail } from './src/screens/SellerInterestDetail';
 import { SettlementRequest } from './src/screens/transactions/SettlementRequest';
 import { TransactionDetail } from './src/screens/transactions/TransactionDetail';
+import { DriverDashboard } from './src/screens/DriverDashboard';
+import { DriverSettings } from './src/screens/driverManagement/DriverSettings';
+import { DriverProfile } from './src/screens/driverManagement/DriverProfile';
+import { DriverEarnings } from './src/screens/DriverEarnings';
+import { DriverRequests } from './src/screens/DriverRequests';
+import { RentalEarnings } from './src/screens/RentalEarnings';
+import AssetRental from './src/screens/AssetRental';
 import PermissionsScreen from './src/screens/account-settings/Permissions';
 import { PaymentMethods } from './src/screens/account-settings/PaymentMethods';
 import Delivery from './src/screens/account-settings/Delivery';
@@ -116,6 +123,13 @@ export type MainStackParamList = {
   SellerInterestDetail: { interestId: string };
   SettlementRequest: undefined;
   TransactionDetail: { transactionId: string; currency: string; currencySymbol: string };
+  DriverDashboard: undefined;
+  DriverSettings: undefined;
+  DriverProfile: undefined;
+  DriverEarnings: undefined;
+  DriverRequests: undefined;
+  RentalEarnings: undefined;
+  AssetRental: undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -240,6 +254,13 @@ function MainNavigator() {
       <MainStack.Screen name="SellerInterestDetail" component={SellerInterestDetail} />
       <MainStack.Screen name="SettlementRequest" component={SettlementRequest} />
       <MainStack.Screen name="TransactionDetail" component={TransactionDetail} />
+      <MainStack.Screen name="DriverDashboard" component={DriverDashboard} />
+      <MainStack.Screen name="DriverSettings" component={DriverSettings} />
+      <MainStack.Screen name="DriverProfile" component={DriverProfile} />
+      <MainStack.Screen name="DriverEarnings" component={DriverEarnings} />
+      <MainStack.Screen name="DriverRequests" component={DriverRequests} />
+      <MainStack.Screen name="RentalEarnings" component={RentalEarnings} />
+      <MainStack.Screen name="AssetRental" component={AssetRental} />
     </MainStack.Navigator>
   );
 }
