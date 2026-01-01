@@ -3,6 +3,7 @@ import { Modal, View, Text, TouchableOpacity, ActivityIndicator, Platform } from
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Props = {
   visible: boolean;
@@ -11,6 +12,7 @@ type Props = {
 };
 
 export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
+  const PERM_CACHE_KEY = 'voiceMicPermissionGranted';
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
@@ -84,6 +86,9 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
       const perm = await Audio.requestPermissionsAsync();
       setPermissionGranted(perm.status === 'granted');
       setCanAskPermission(!!perm.canAskAgain);
+      if (perm.status === 'granted') {
+        try { await AsyncStorage.setItem(PERM_CACHE_KEY, '1'); } catch {}
+      }
       return perm.status === 'granted';
     } catch {
       setErrorMessage('Could not request microphone permission.');
@@ -147,6 +152,8 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
       await Voice.start('en-US');
     } catch {
       stopAll();
+      // If start failed, assume permission may be missing; clear cache so we show rationale next time
+      try { await AsyncStorage.setItem(PERM_CACHE_KEY, '0'); } catch {}
       setErrorMessage('Could not start voice recognition. Please try again.');
     }
   }, [onClose, onResult, stopAll]);
@@ -161,8 +168,19 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
     }
     // Native: check mic permission first and show rationale if needed
     (async () => {
+      // If user has granted before, start immediately and rely on OS to enforce
+      let cachedGranted = false;
+      try {
+        cachedGranted = (await AsyncStorage.getItem(PERM_CACHE_KEY)) === '1';
+      } catch {}
+      if (cachedGranted) {
+        setPermissionGranted(true);
+        startNativeVoice();
+        return;
+      }
       const hasPerm = await ensureMicPermission();
       if (hasPerm) {
+        try { await AsyncStorage.setItem(PERM_CACHE_KEY, '1'); } catch {}
         startNativeVoice();
       } else {
         // Show rationale; user must tap Allow to proceed

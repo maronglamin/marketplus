@@ -498,6 +498,14 @@ export function AccountSettings() {
     return null
   }
 
+  const getProfileImageUri = () => {
+    const url = getProfileImageUrl()
+    if (!url) return null
+    if (/^(https?:|file:)/.test(url)) return url
+    const base = (ENV_CONFIG.API_BASE_URL || '').replace(/\/$/, '')
+    return `${base}${url.startsWith('/') ? url : `/${url}`}`
+  }
+
   // Handle edit image action (take photo / choose from library / remove)
   const handleEditProfileImage = async () => {
     const hasImage = !!getProfileImageUrl()
@@ -877,7 +885,7 @@ export function AccountSettings() {
           <View style={styles.profileImageContainer}>
             {getProfileImageUrl() ? (
               <Image
-                source={{ uri: getProfileImageUrl() as string }}
+                source={{ uri: getProfileImageUri() as string }}
                 style={styles.profileImage as any}
                 resizeMode="cover"
               />
