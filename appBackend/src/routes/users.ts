@@ -2,6 +2,11 @@ import express from 'express';
 import { logger } from '../utils/logger';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { PrismaClient } from '@prisma/client';
+import multer, { FileFilterCallback } from 'multer';
+import path from 'path';
+import fs from 'fs';
+import sharp from 'sharp';
+import { v4 as uuidv4 } from 'uuid';
 
 const prisma = new PrismaClient();
 
@@ -28,6 +33,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
         middleName: true,
         lastName: true,
         phoneNumber: true,
+        profileImageUrl: true,
         status: true,
         createdAt: true,
         updatedAt: true
@@ -190,6 +196,7 @@ router.get('/profile', authenticate, async (req: AuthRequest, res) => {
         middleName: true,
         lastName: true,
         phoneNumber: true,
+        profileImageUrl: true,
         createdAt: true,
         updatedAt: true
       }
@@ -299,6 +306,7 @@ router.get('/profile', authenticate, async (req: AuthRequest, res) => {
         lastName: user.lastName,
         fullName: `${user.firstName} ${user.middleName ? user.middleName + ' ' : ''}${user.lastName}`.trim(),
         phoneNumber: user.phoneNumber,
+        profileImageUrl: user.profileImageUrl,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt
       },
@@ -348,6 +356,117 @@ router.get('/profile', authenticate, async (req: AuthRequest, res) => {
   } catch (error) {
     logger.error('❌ Error fetching user profile:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Image upload config for user profile photo
+const memoryStorage = multer.memoryStorage();
+const profilePhotoUpload = multer({
+  storage: memoryStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB
+  },
+  fileFilter: (_req: express.Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    if (file.mimetype.startsWith('image/')) {
+      return cb(null, true);
+    }
+    return cb(new Error('Only image files are allowed'));
+  }
+});
+
+// Upload or replace profile photo
+router.post('/profile/photo', authenticate, profilePhotoUpload.single('file'), async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const userId = req.user.id;
+
+    // Ensure upload directory exists
+    const uploadDir = path.join(process.cwd(), 'uploads/users/profile');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Generate filename and output path
+    const ext = path.extname(req.file.originalname) || '.jpg';
+    const filename = `${uuidv4()}${ext}`;
+    const outputPath = path.join(uploadDir, filename);
+
+    // Compress, resize square-ish up to 800x800
+    await sharp(req.file.buffer)
+      .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85, progressive: true, chromaSubsampling: '4:4:4' })
+      .toFile(outputPath);
+
+    const fileUrl = `/uploads/users/profile/${filename}`;
+
+    // Remove previous profile image if exists
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { profileImageUrl: true }
+    });
+    if (existing?.profileImageUrl) {
+      const existingPath = path.join(process.cwd(), existing.profileImageUrl);
+      if (existingPath.startsWith(path.join(process.cwd(), 'uploads')) && fs.existsSync(existingPath)) {
+        try {
+          fs.unlinkSync(existingPath);
+        } catch (e) {
+          logger.warn('Failed to delete old profile image', { error: e });
+        }
+      }
+    }
+
+    // Update DB
+    await prisma.user.update({
+      where: { id: userId },
+      data: { profileImageUrl: fileUrl }
+    });
+
+    return res.status(200).json({ success: true, profileImageUrl: fileUrl });
+  } catch (error) {
+    logger.error('Error uploading profile photo:', error);
+    return res.status(500).json({ error: 'Failed to upload profile photo' });
+  }
+});
+
+// Remove profile photo
+router.delete('/profile/photo', authenticate, async (req: AuthRequest, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    const userId = req.user.id;
+
+    const existing = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { profileImageUrl: true }
+    });
+
+    if (existing?.profileImageUrl) {
+      const filePath = path.join(process.cwd(), existing.profileImageUrl);
+      if (filePath.startsWith(path.join(process.cwd(), 'uploads')) && fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (e) {
+          logger.warn('Failed to delete profile image', { error: e });
+        }
+      }
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { profileImageUrl: null }
+    });
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    logger.error('Error deleting profile photo:', error);
+    return res.status(500).json({ error: 'Failed to delete profile photo' });
   }
 });
 

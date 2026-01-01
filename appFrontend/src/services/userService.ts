@@ -8,6 +8,7 @@ export interface UserProfileData {
     lastName: string;
     fullName: string;
     phoneNumber: string;
+    profileImageUrl?: string;
     createdAt: string;
     updatedAt: string;
   };
@@ -73,6 +74,47 @@ export const userService = {
     } catch (error) {
       console.error('❌ userService: Error fetching basic user info:', error)
       throw error
+    }
+  },
+
+  async uploadProfilePhoto(imageUri: string): Promise<{ success: boolean; profileImageUrl: string }> {
+    try {
+      console.log('📸 userService: Uploading profile photo...');
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'profile.jpg'
+      } as any);
+      const response = await api.post('/api/users/profile/photo', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      console.log('✅ userService: Profile photo uploaded:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ userService: Error uploading profile photo:', error);
+      if (error.response) {
+        console.error('❌ userService: Response status:', error.response.status);
+        console.error('❌ userService: Response data:', error.response.data);
+      }
+      throw error;
+    }
+  },
+
+  async deleteProfilePhoto(): Promise<void> {
+    try {
+      console.log('🗑️ userService: Deleting profile photo...');
+      await api.delete('/api/users/profile/photo');
+      console.log('✅ userService: Profile photo deleted');
+    } catch (error: any) {
+      console.error('❌ userService: Error deleting profile photo:', error);
+      if (error.response) {
+        console.error('❌ userService: Response status:', error.response.status);
+        console.error('❌ userService: Response data:', error.response.data);
+      }
+      throw error;
     }
   },
 

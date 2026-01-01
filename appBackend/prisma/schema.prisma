@@ -78,6 +78,7 @@ model User {
   middleName                   String?
   lastName                     String
   phoneNumber                  String
+  profileImageUrl              String?
   pin                          String
   status                       AccountStatus          @default(ACTIVE)
   createdAt                    DateTime               @default(now())

@@ -13,7 +13,9 @@ import {
   Alert,
   Image,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native'
+import * as ImagePicker from 'expo-image-picker'
 import { 
   User, 
   Shield, 
@@ -143,6 +145,7 @@ export function AccountSettings() {
   // Delivery addresses moved to dedicated screen
   
 
+  const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false)
 
   // Load fresh user data from backend using JWT token
   const loadFreshUserData = React.useCallback(async () => {
@@ -206,26 +209,37 @@ export function AccountSettings() {
   // Redirect unauthenticated users back to Home with a login prompt
   React.useEffect(() => {
     if (!user?.id) {
-      // Navigate back to Home
-      navigation.navigate('Home')
-      // Show prompt to login
-      setTimeout(() => {
-        Alert.alert(
-          'Login required',
-          'Please login to access Account Settings.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Login',
-              onPress: () => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (navigation as any)?.getParent?.()?.navigate?.('Auth') ?? navigation.navigate('Login')
+      // Suppress login prompt if this is immediately after an intentional logout
+      (async () => {
+        const val = await AsyncStorage.getItem('justLoggedOut')
+        if (val) {
+          await AsyncStorage.removeItem('justLoggedOut')
+          // Reset to Onboarding cleanly at root
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const root = (navigation as any)?.getParent?.()?.getParent?.() || (navigation as any)?.getParent?.();
+          root?.reset?.({ index: 0, routes: [{ name: 'Onboarding' }] });
+          return;
+        }
+        // Navigate back to Home and prompt login (non-logout case)
+        navigation.navigate('Home')
+        setTimeout(() => {
+          Alert.alert(
+            'Login required',
+            'Please login to access Account Settings.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Login',
+                onPress: () => {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  (navigation as any)?.getParent?.()?.navigate?.('Auth', { screen: 'Login' }) ?? (navigation as any)?.navigate?.('Auth', { screen: 'Login' })
+                },
               },
-            },
-          ],
-          { cancelable: true }
-        )
-      }, 200)
+            ],
+            { cancelable: true }
+          )
+        }, 200)
+      })()
     }
   }, [user?.id, navigation])
 
@@ -469,6 +483,104 @@ export function AccountSettings() {
     return ''
   }
 
+  // Get profile image url from freshest available source
+  const getProfileImageUrl = () => {
+    if (freshUserData?.profileImageUrl) {
+      return freshUserData.profileImageUrl
+    }
+    if (userProfile?.user?.profileImageUrl) {
+      return userProfile.user.profileImageUrl
+    }
+    if (user?.profileImageUrl) {
+      // In case AuthContext carries it
+      return (user as any).profileImageUrl
+    }
+    return null
+  }
+
+  // Handle edit image action (take photo / choose from library / remove)
+  const handleEditProfileImage = async () => {
+    const hasImage = !!getProfileImageUrl()
+    const options = [
+      { text: 'Take Photo', onPress: async () => { await takePhotoAndUpload() } },
+      { text: 'Choose from Library', onPress: async () => { await pickFromLibraryAndUpload() } },
+      ...(hasImage ? [{ text: 'Remove Photo', style: 'destructive' as const, onPress: async () => { await removeProfilePhoto() } }] : []),
+      { text: 'Cancel', style: 'cancel' as const }
+    ]
+    Alert.alert('Profile Photo', 'Update your profile picture', options, { cancelable: true })
+  }
+
+  const pickFromLibraryAndUpload = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (perm.status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow photo library access to select a picture.')
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8
+      })
+      if (result.canceled || !result.assets?.[0]?.uri) return
+      await uploadProfilePhoto(result.assets[0].uri)
+    } catch (e) {
+      console.error('Error selecting image:', e)
+      Alert.alert('Error', 'Failed to select image.')
+    }
+  }
+
+  const takePhotoAndUpload = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync()
+      if (perm.status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow camera access to take a photo.')
+        return
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8
+      })
+      if (result.canceled || !result.assets?.[0]?.uri) return
+      await uploadProfilePhoto(result.assets[0].uri)
+    } catch (e) {
+      console.error('Error taking photo:', e)
+      Alert.alert('Error', 'Failed to take photo.')
+    }
+  }
+
+  const uploadProfilePhoto = async (uri: string) => {
+    try {
+      setIsUploadingPhoto(true)
+      await userService.uploadProfilePhoto(uri)
+      // refresh fresh data and profile
+      await Promise.all([loadFreshUserDataWithRetry(), loadUserProfile(true)])
+      Alert.alert('Success', 'Profile photo updated.')
+    } catch (e) {
+      console.error('Upload error:', e)
+      Alert.alert('Error', 'Failed to upload profile photo.')
+    } finally {
+      setIsUploadingPhoto(false)
+    }
+  }
+
+  const removeProfilePhoto = async () => {
+    try {
+      setIsUploadingPhoto(true)
+      await userService.deleteProfilePhoto()
+      await Promise.all([loadFreshUserDataWithRetry(), loadUserProfile(true)])
+      Alert.alert('Removed', 'Profile photo removed.')
+    } catch (e) {
+      console.error('Delete photo error:', e)
+      Alert.alert('Error', 'Failed to remove profile photo.')
+    } finally {
+      setIsUploadingPhoto(false)
+    }
+  }
+
   // Gt verification status icon and color
   const getVerificationStatusIcon = (verificationStatus: string) => {
     switch (verificationStatus) {
@@ -522,10 +634,13 @@ export function AccountSettings() {
           onPress: async () => {
             try {
               await logout()
-              navigation.reset({
+              // Reset to root Onboarding screen
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const root = (navigation as any)?.getParent?.()?.getParent?.() || (navigation as any)?.getParent?.();
+              root?.reset?.({
                 index: 0,
-                routes: [{ name: 'Login' }],
-              })
+                routes: [{ name: 'Onboarding' }],
+              });
             } catch (error) {
               console.error('Error during logout:', error)
               Alert.alert('Error', 'Failed to logout. Please try again.')
@@ -594,7 +709,7 @@ export function AccountSettings() {
           icon: <ShieldCheck size={20} color="#059669" />,
           onPress: () => navigation.navigate('Permissions'),
           showChevron: true,
-          subtitle: 'Security, biometric, privacy & location',
+          subtitle: 'Location sharing',
         },
       ],
     },
@@ -622,20 +737,7 @@ export function AccountSettings() {
       ],
     },
 
-    {
-      id: 'notifications',
-      title: 'Notifications',
-      items: [
-        {
-          id: 'notifications-settings',
-          title: 'Notifications',
-          icon: <Bell size={20} color="#2563EB" />,
-          onPress: () => navigation.navigate('NotificationsSettings'),
-          subtitle: 'Manage all notification preferences',
-          showChevron: true,
-        },
-      ],
-    },
+    
 
     {
       id: 'support',
@@ -773,11 +875,29 @@ export function AccountSettings() {
         {/* User Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.profileImageContainer}>
-            <View style={styles.profileImage}>
-              <User size={40} color="#6B7280" />
-                </View>
-            <TouchableOpacity style={styles.editImageButton}>
-              <Camera size={16} color="#FFFFFF" />
+            {getProfileImageUrl() ? (
+              <Image
+                source={{ uri: getProfileImageUrl() as string }}
+                style={styles.profileImage as any}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.profileImage}>
+                <User size={40} color="#6B7280" />
+              </View>
+            )}
+            {isUploadingPhoto && (
+              <View style={styles.uploadOverlay}>
+                <ActivityIndicator color="#FFFFFF" size="small" />
+                <Text style={styles.uploadText}>Uploading...</Text>
+              </View>
+            )}
+            <TouchableOpacity style={styles.editImageButton} onPress={handleEditProfileImage} disabled={isUploadingPhoto}>
+              {isUploadingPhoto ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Camera size={16} color="#FFFFFF" />
+              )}
               </TouchableOpacity>
           </View>
           <View style={styles.profileInfo}>
@@ -1070,6 +1190,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  uploadOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadText: {
+    marginTop: 6,
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
   },
   profileInfo: {
     flex: 1,

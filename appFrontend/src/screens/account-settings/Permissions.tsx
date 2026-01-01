@@ -14,9 +14,6 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { 
-  ShieldCheck,
-  Key,
-  Eye,
   Target,
   ArrowLeft,
 } from 'lucide-react-native';
@@ -29,8 +26,8 @@ const Permissions = () => {
   const navigation = useNavigation<PermissionsNavigationProp>();
   
   // State for toggle switches
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  // const [twoFactorEnabled, setTwoFactorEnabled] = useState(false); // commented: not implemented yet
+  // const [biometricEnabled, setBiometricEnabled] = useState(false); // commented: not implemented yet
   const [locationSharing, setLocationSharing] = useState(false);
 
   // Keys for AsyncStorage
@@ -62,39 +59,39 @@ const Permissions = () => {
     }
   };
 
-  const handleTwoFactorToggle = (value: boolean) => {
-    setTwoFactorEnabled(value);
-    if (value) {
-      Alert.alert(
-        'Two-Factor Authentication',
-        'Two-factor authentication has been enabled. You will receive a verification code via SMS for additional security.',
-        [{ text: 'OK' }]
-      );
-    } else {
-      Alert.alert(
-        'Two-Factor Authentication',
-        'Two-factor authentication has been disabled. Your account is now less secure.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
+  // const handleTwoFactorToggle = (value: boolean) => {
+  //   setTwoFactorEnabled(value);
+  //   if (value) {
+  //     Alert.alert(
+  //       'Two-Factor Authentication',
+  //       'Two-factor authentication has been enabled. You will receive a verification code via SMS for additional security.',
+  //       [{ text: 'OK' }]
+  //     );
+  //   } else {
+  //     Alert.alert(
+  //       'Two-Factor Authentication',
+  //       'Two-factor authentication has been disabled. Your account is now less secure.',
+  //       [{ text: 'OK' }]
+  //     );
+  //   }
+  // };
 
-  const handleBiometricToggle = (value: boolean) => {
-    setBiometricEnabled(value);
-    if (value) {
-      Alert.alert(
-        'Biometric Login',
-        'Biometric login has been enabled. You can now use fingerprint or face ID to log in.',
-        [{ text: 'OK' }]
-      );
-    } else {
-      Alert.alert(
-        'Biometric Login',
-        'Biometric login has been disabled. You will need to use your PIN to log in.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
+  // const handleBiometricToggle = (value: boolean) => {
+  //   setBiometricEnabled(value);
+  //   if (value) {
+  //     Alert.alert(
+  //       'Biometric Login',
+  //       'Biometric login has been enabled. You can now use fingerprint or face ID to log in.',
+  //       [{ text: 'OK' }]
+  //     );
+  //   } else {
+  //     Alert.alert(
+  //       'Biometric Login',
+  //       'Biometric login has been disabled. You will need to use your PIN to log in.',
+  //       [{ text: 'OK' }]
+  //     );
+  //   }
+  // };
 
   // Removed direct system settings redirection to comply with App Review guidance
 
@@ -163,9 +160,9 @@ const Permissions = () => {
     }
   };
 
-  const handlePrivacySettings = () => {
-    navigation.navigate('PrivacySettings');
-  };
+  // const handlePrivacySettings = () => {
+  //   navigation.navigate('PrivacySettings');
+  // };
 
   const renderMenuItem = (item: any) => (
     <TouchableOpacity
@@ -203,44 +200,44 @@ const Permissions = () => {
   );
 
   const categories = [
-    {
-      id: 'security',
-      title: 'Security & Authentication',
-      items: [
-        {
-          id: 'two-factor',
-          title: 'Two-Factor Authentication',
-          icon: <ShieldCheck size={20} color="#059669" />,
-          onPress: () => {},
-          isToggle: true,
-          toggleValue: twoFactorEnabled,
-          onToggleChange: handleTwoFactorToggle,
-          subtitle: 'Add an extra layer of security',
-        },
-        {
-          id: 'biometric',
-          title: 'Biometric Login',
-          icon: <Key size={20} color="#7C3AED" />,
-          onPress: () => {},
-          isToggle: true,
-          toggleValue: biometricEnabled,
-          onToggleChange: handleBiometricToggle,
-          subtitle: 'Use fingerprint or face ID',
-        },
-      ],
-    },
+    // {
+    //   id: 'security',
+    //   title: 'Security & Authentication',
+    //   items: [
+    //     {
+    //       id: 'two-factor',
+    //       title: 'Two-Factor Authentication',
+    //       icon: <ShieldCheck size={20} color="#059669" />,
+    //       onPress: () => {},
+    //       isToggle: true,
+    //       toggleValue: twoFactorEnabled,
+    //       onToggleChange: handleTwoFactorToggle,
+    //       subtitle: 'Add an extra layer of security',
+    //     },
+    //     {
+    //       id: 'biometric',
+    //       title: 'Biometric Login',
+    //       icon: <Key size={20} color="#7C3AED" />,
+    //       onPress: () => {},
+    //       isToggle: true,
+    //       toggleValue: biometricEnabled,
+    //       onToggleChange: handleBiometricToggle,
+    //       subtitle: 'Use fingerprint or face ID',
+    //     },
+    //   ],
+    // },
     {
       id: 'privacy',
-      title: 'Privacy & Location',
+      title: 'Location',
       items: [
-        {
-          id: 'privacy-settings',
-          title: 'Privacy Settings',
-          icon: <Eye size={20} color="#6B7280" />,
-          onPress: handlePrivacySettings,
-          showChevron: true,
-          subtitle: 'Manage your privacy preferences',
-        },
+        // {
+        //   id: 'privacy-settings',
+        //   title: 'Privacy Settings',
+        //   icon: <Eye size={20} color="#6B7280" />,
+        //   onPress: handlePrivacySettings,
+        //   showChevron: true,
+        //   subtitle: 'Manage your privacy preferences',
+        // },
         {
           id: 'location-sharing',
           title: 'Location Sharing',

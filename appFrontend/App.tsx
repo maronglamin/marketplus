@@ -33,6 +33,7 @@ import { CustomerRideService } from './src/screens/CustomerRideService';
 import { ChatList } from './src/screens/ChatList';
 import RentalRequest from './src/screens/RentalRequest';
 import { Order } from './src/screens/Order';
+import { OrderDetails } from './src/screens/OrderDetails';
 import { CustomerOrders } from './src/screens/CustomerOrders';
 import ChangePin from './src/screens/ChangePin';
 import { RideRequest } from './src/screens/RideRequest';
@@ -54,6 +55,8 @@ import { DriverEarnings } from './src/screens/DriverEarnings';
 import { DriverRequests } from './src/screens/DriverRequests';
 import { RentalEarnings } from './src/screens/RentalEarnings';
 import AssetRental from './src/screens/AssetRental';
+import NewPin from './src/screens/NewPin';
+import ConfirmPin from './src/screens/ConfirmPin';
 import PermissionsScreen from './src/screens/account-settings/Permissions';
 import { PaymentMethods } from './src/screens/account-settings/PaymentMethods';
 import Delivery from './src/screens/account-settings/Delivery';
@@ -81,6 +84,7 @@ export type MainStackParamList = {
   ProductDetail: { productId: string };
   ShowInterest: { productId: string };
   Order: { productId: string };
+  OrderDetails: { orderId: string };
   AccountSettings: undefined;
   SellerDashboard: undefined;
   AddProduct: undefined;
@@ -105,6 +109,8 @@ export type MainStackParamList = {
   BecomeRider: { type: string; existingData?: any };
   CustomerOrders: undefined;
   ChangePin: undefined;
+  NewPin: { currentPin: string; isFirstTime?: boolean; isPinReset?: boolean; pinResetOTPId?: string };
+  ConfirmPin: { currentPin: string; newPin: string; isFirstTime?: boolean; isPinReset?: boolean; pinResetOTPId?: string };
   Permissions: undefined;
   PaymentMethods: undefined;
   Delivery: undefined;
@@ -209,6 +215,7 @@ function MainNavigator() {
       <MainStack.Screen name="AccountSettings" component={AccountSettings} />
       <MainStack.Screen name="ProductDetail" component={ProductDetail} />
       <MainStack.Screen name="Order" component={Order} />
+      <MainStack.Screen name="OrderDetails" component={OrderDetails} />
       <MainStack.Screen name="ShowInterest" component={ShowInterest} />
       <MainStack.Screen name="SellerDashboard" component={SellerDashboard} />
       <MainStack.Screen name="AddProduct" component={AddProduct} />
@@ -234,6 +241,8 @@ function MainNavigator() {
       {/* Account & settings related routes (require login via upstream guards) */}
       <MainStack.Screen name="CustomerOrders" component={CustomerOrders} />
       <MainStack.Screen name="ChangePin" component={ChangePin} />
+      <MainStack.Screen name="NewPin" component={NewPin} />
+      <MainStack.Screen name="ConfirmPin" component={ConfirmPin} />
       <MainStack.Screen name="Permissions" component={PermissionsScreen} />
       <MainStack.Screen name="PaymentMethods" component={PaymentMethods} />
       <MainStack.Screen name="Delivery" component={Delivery} />

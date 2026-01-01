@@ -15,6 +15,7 @@ import { ShoppingBag, ShoppingCart, Heart, CreditCard, Car } from 'lucide-react-
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RootStackParamList } from '../../App'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 
 type OnboardingNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Onboarding'>
 
@@ -41,6 +42,16 @@ export function Onboarding() {
   ]
 
   useEffect(() => {
+    // Clear 'justLoggedOut' marker on first mount
+    (async () => {
+      try {
+        const flag = await AsyncStorage.getItem('justLoggedOut')
+        if (flag) {
+          await AsyncStorage.removeItem('justLoggedOut')
+        }
+      } catch {}
+    })()
+    
     // Type "SNAP" character by character
     const text = 'SNAP'
     let currentIndex = 0
@@ -163,7 +174,10 @@ export function Onboarding() {
         </Text>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => setServicePickerVisible(true)}
+          onPress={() => {
+            // Go straight to the app's main stack (Home is the initial screen)
+            navigation.navigate('Main')
+          }}
           activeOpacity={0.9}
         >
           <Text style={styles.buttonText}>Get Started</Text>

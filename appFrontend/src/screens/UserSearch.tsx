@@ -434,6 +434,7 @@ export default function UserSearch() {
               </TouchableOpacity>
             )}
           </View>
+
         </View>
 
         {/* Search Tabs */}
@@ -744,3 +745,4 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 });
+

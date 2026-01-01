@@ -38,6 +38,7 @@ import { categoryService, type Category } from '../services/categoryService';
 import { rentalApi } from '../services/rentalApi';
 import { userService } from '../services/userService';
 import { AppUpdateBottomSheet } from '../components/AppUpdateBottomSheet';
+import { VoiceSearchModal } from '../components/VoiceSearchModal';
 import { checkForUpdate, type UpdateCheckResult } from '../services/appUpdateService';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
@@ -105,10 +106,10 @@ export function Home() {
         } catch (e) {
           // ignore logout errors; proceed with navigation reset
         }
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'Login' as any }],
-        });
+        // Reset to root Onboarding
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const root = (navigation as any)?.getParent?.()?.getParent?.() || (navigation as any)?.getParent?.();
+        root?.reset?.({ index: 0, routes: [{ name: 'Onboarding' }] });
         return;
       }
     } catch (error) {
@@ -264,10 +265,9 @@ export function Home() {
                   // Properly logout and destroy auth state
                   await logout();
                   // Navigate to login screen after logout
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Login' as any }],
-                  });
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const root = (navigation as any)?.getParent?.()?.getParent?.() || (navigation as any)?.getParent?.();
+                  root?.reset?.({ index: 0, routes: [{ name: 'Onboarding' }] });
                 } catch (error) {
                   console.error('Error during logout:', error);
                   // Force close app if logout fails
@@ -703,10 +703,7 @@ export function Home() {
   };
 
   const handleRideBannerPress = () => {
-    if (!user && !token) {
-      promptLogin('Login to book a ride.');
-      return;
-    }
+    // Allow public browsing to Quick Ride route
     navigation.navigate('CustomerRideService');
   };
 
@@ -720,7 +717,8 @@ export function Home() {
 
   const handleRideRequestPress = () => {
     if (!user && !token) {
-      promptLogin('Login to request a ride.');
+      // Gate actions that post to backend
+      promptLogin('To access the service, please login to complete');
       return;
     }
     navigation.navigate('RideRequest');
@@ -728,7 +726,8 @@ export function Home() {
 
   const handleBookFirstRidePress = () => {
     if (!user && !token) {
-      promptLogin('Login to book your first ride.');
+      // Gate actions that post to backend
+      promptLogin('To access the service, please login to complete');
       return;
     }
     navigation.navigate('CustomerRideService');
@@ -825,6 +824,8 @@ export function Home() {
 
     
 
+  const [isVoiceModalVisible, setIsVoiceModalVisible] = useState(false);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
@@ -894,7 +895,7 @@ export function Home() {
                   Search now...
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={openSearchScreen}>
+              <TouchableOpacity onPress={() => setIsVoiceModalVisible(true)}>
                 <Ionicons name="mic-outline" size={isLargeTablet ? 22 : 20} color="#14B8A6" />
               </TouchableOpacity>
             </View>
@@ -904,20 +905,11 @@ export function Home() {
           <View style={styles.welcomeBanner}>
             <Text style={styles.welcomeTitle}>
               Hello, {(() => {
-                // First try fresh user data from backend
-                if (freshUserData?.firstName) {
-                  return freshUserData.firstName;
-                }
-                // Then try AuthContext user data
-                if (user?.firstName) {
-                  return user.firstName;
-                }
-                // Show loading state
-                if (isLoadingUserData) {
-                  return 'Loading...';
-                }
-                // Fallback
-                return 'User!';
+                const name =
+                  freshUserData?.firstName ||
+                  user?.firstName ||
+                  'Guest';
+                return name;
               })()}! 👋
             </Text>
             <Text style={styles.welcomeSubtitle}>What would you like to do today?</Text>
@@ -1527,6 +1519,17 @@ export function Home() {
         latestVersion={updateInfo?.latestVersion}
       />
 
+      <VoiceSearchModal
+        visible={isVoiceModalVisible}
+        onClose={() => setIsVoiceModalVisible(false)}
+        onResult={(text) => {
+          setIsVoiceModalVisible(false);
+          if (text && text.trim()) {
+            // @ts-expect-error cross-stack typing
+            navigation.navigate('UserSearch' as never, ({ initialQuery: text.trim() }) as never);
+          }
+        }}
+      />
 
     </View>
   );

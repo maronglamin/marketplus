@@ -90,10 +90,10 @@ const ConfirmPin = () => {
               text: 'OK',
               onPress: async () => {
                 await logout();
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Login' }],
-                });
+                // Reset to root Onboarding
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const root = (navigation as any)?.getParent?.()?.getParent?.() || (navigation as any)?.getParent?.();
+                root?.reset?.({ index: 0, routes: [{ name: 'Onboarding' }] });
               },
             },
           ]
@@ -111,10 +111,10 @@ const ConfirmPin = () => {
               text: 'OK',
               onPress: async () => {
                 await logout();
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Login' }],
-                });
+                // Reset to root Onboarding
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const root = (navigation as any)?.getParent?.()?.getParent?.() || (navigation as any)?.getParent?.();
+                root?.reset?.({ index: 0, routes: [{ name: 'Onboarding' }] });
               },
             },
           ]

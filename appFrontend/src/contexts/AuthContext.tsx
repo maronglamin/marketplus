@@ -275,6 +275,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     
     try {
+      // Mark that we just logged out as early as possible
+      try {
+        await AsyncStorage.setItem('justLoggedOut', '1');
+      } catch (e) {
+        // ignore
+      }
+
       // Immediately clear in-memory auth state to prevent race conditions
       console.log('🧹 Immediately clearing in-memory auth state...');
       setToken(null);
@@ -487,6 +494,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ];
       await AsyncStorage.multiRemove(keysToRemove);
       console.log('✅ AsyncStorage cleared successfully');
+      // Mark just logged out for UI suppression
+      try {
+        await AsyncStorage.setItem('justLoggedOut', '1');
+      } catch {}
 
       // Clear in-memory caches
       imageCache.clearCache();
