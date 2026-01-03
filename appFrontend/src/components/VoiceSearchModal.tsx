@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, ActivityIndicator, Platform, PermissionsAndroid } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import Constants from 'expo-constants';
@@ -20,14 +20,22 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
   const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null);
   const [canAskPermission, setCanAskPermission] = useState<boolean>(true);
   const recognitionRef = useRef<any | null>(null);
+  const startedRef = useRef(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isActiveRef = useRef(false);
 
   const stopAll = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     try { recognitionRef.current?.stop?.(); } catch {}
     try { recognitionRef.current?.destroy?.(); } catch {}
     try { recognitionRef.current?.removeAllListeners?.(); } catch {}
     recognitionRef.current = null;
     setIsListening(false);
     setIsRequestingPermission(false);
+    startedRef.current = false;
   }, []);
 
   const startWebSpeech = useCallback(() => {
@@ -98,7 +106,9 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
     }
   }, []);
 
-  const startNativeVoice = useCallback(async () => {
+  const startNativeVoiceCore = useCallback(async () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
     // Block when running under Expo Go which can't load custom native modules
     try {
       if (Constants?.appOwnership === 'expo') {
@@ -107,6 +117,23 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
       }
     } catch {
       // ignore
+    }
+    // On Android: ensure runtime permission is granted via RN PermissionsAndroid to avoid native crash
+    if (Platform.OS === 'android') {
+      try {
+        const has = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO as any);
+        if (!has) {
+          const req = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO as any);
+          if (req !== PermissionsAndroid.RESULTS.GRANTED) {
+            startedRef.current = false;
+            setPermissionGranted(false);
+            setErrorMessage('Microphone permission denied. Voice search requires microphone access.');
+            return;
+          }
+        }
+      } catch {
+        // If we cannot verify, proceed but guard Voice.start with try/catch
+      }
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let Voice: any = null;
@@ -130,6 +157,7 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
     }
     if (!Voice || typeof Voice.start !== 'function') {
       setUnavailableReason('Voice module is not linked. Rebuild a development client after installing @react-native-voice/voice.');
+      startedRef.current = false;
       return;
     }
     try { await Voice.destroy?.(); } catch {}
@@ -158,7 +186,21 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
     }
   }, [onClose, onResult, stopAll]);
 
+  const startNativeVoice = useCallback((afterPermission: boolean = false) => {
+    // On Android, add a slight delay after user grants permission so the OS settles
+    const delay = Platform.OS === 'android' ? (afterPermission ? 450 : 250) : 0;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    timeoutRef.current = setTimeout(() => {
+      if (!isActiveRef.current) return;
+      startNativeVoiceCore();
+    }, delay);
+  }, [startNativeVoiceCore]);
+
   useEffect(() => {
+    isActiveRef.current = visible;
     if (!visible) return;
     setUnavailableReason(null);
     setErrorMessage(null);
@@ -175,13 +217,13 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
       } catch {}
       if (cachedGranted) {
         setPermissionGranted(true);
-        startNativeVoice();
+        startNativeVoice(false);
         return;
       }
       const hasPerm = await ensureMicPermission();
       if (hasPerm) {
         try { await AsyncStorage.setItem(PERM_CACHE_KEY, '1'); } catch {}
-        startNativeVoice();
+        startNativeVoice(false);
       } else {
         // Show rationale; user must tap Allow to proceed
       }
@@ -295,7 +337,7 @@ export function VoiceSearchModal({ visible, onClose, onResult }: Props) {
                 onPress={async () => {
                   const granted = await requestMicPermission();
                   if (granted) {
-                    startNativeVoice();
+                    startNativeVoice(true);
                   } else if (!canAskPermission) {
                     setErrorMessage('Microphone permission is blocked by the system. Please enable it in device settings to continue.');
                   }

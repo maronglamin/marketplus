@@ -17,7 +17,8 @@
       "jsEngine": "hermes",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop-off points, and enable real-time ride tracking during an active trip. Location data is only accessed while you are using the app.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop-off points, and enable real-time ride tracking during an active trip. Location data is only accessed while you are using the app."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop-off points, and enable real-time ride tracking during an active trip. Location data is only accessed while you are using the app.",
+        "NSMicrophoneUsageDescription": "We use the microphone to enable voice search. We only listen while you see “Listening…”, and do not store audio."
       },
       "config": {
         "googleMapsApiKey": "AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo"
@@ -34,7 +35,8 @@
       "jsEngine": "hermes",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "RECORD_AUDIO"
       ],
       "config": {
         "googleMaps": {

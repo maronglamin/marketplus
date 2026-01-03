@@ -38,7 +38,6 @@ import { categoryService, type Category } from '../services/categoryService';
 import { rentalApi } from '../services/rentalApi';
 import { userService } from '../services/userService';
 import { AppUpdateBottomSheet } from '../components/AppUpdateBottomSheet';
-import { VoiceSearchModal } from '../components/VoiceSearchModal';
 import { checkForUpdate, type UpdateCheckResult } from '../services/appUpdateService';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
@@ -824,7 +823,7 @@ export function Home() {
 
     
 
-  const [isVoiceModalVisible, setIsVoiceModalVisible] = useState(false);
+  
 
   return (
     <View style={styles.container}>
@@ -895,9 +894,7 @@ export function Home() {
                   Search now...
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setIsVoiceModalVisible(true)}>
-                <Ionicons name="mic-outline" size={isLargeTablet ? 22 : 20} color="#14B8A6" />
-              </TouchableOpacity>
+              
             </View>
           </View>
 
@@ -1213,9 +1210,25 @@ export function Home() {
                     <Text style={styles.promotionTitle}>{promo.subtitle}</Text>
                     <Text style={styles.promotionDescription}>{promo.description}</Text>
                   </View>
-                  <TouchableOpacity style={styles.promotionButton}>
-                    <Text style={styles.promotionButtonText}>{promo.buttonText}</Text>
-                  </TouchableOpacity>
+                  {(() => {
+                    // Wire up specific promotion actions and hide button for Holiday Special
+                    if (promo.title === 'Morning Special') {
+                      return (
+                        <TouchableOpacity style={styles.promotionButton} onPress={() => navigation.navigate('RideRequest')}>
+                          <Text style={styles.promotionButtonText}>{promo.buttonText}</Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                    if (promo.title === 'Flash Sale') {
+                      return (
+                        <TouchableOpacity style={styles.promotionButton} onPress={() => navigation.navigate('FeaturedProducts')}>
+                          <Text style={styles.promotionButtonText}>{promo.buttonText}</Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                    // Holiday Special or any other: no button
+                    return null;
+                  })()}
                 </View>
               ))}
             </ScrollView>
@@ -1519,17 +1532,7 @@ export function Home() {
         latestVersion={updateInfo?.latestVersion}
       />
 
-      <VoiceSearchModal
-        visible={isVoiceModalVisible}
-        onClose={() => setIsVoiceModalVisible(false)}
-        onResult={(text) => {
-          setIsVoiceModalVisible(false);
-          if (text && text.trim()) {
-            // @ts-expect-error cross-stack typing
-            navigation.navigate('UserSearch' as never, ({ initialQuery: text.trim() }) as never);
-          }
-        }}
-      />
+      
 
     </View>
   );
