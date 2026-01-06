@@ -163,7 +163,7 @@ const RealTimeRideTracker: React.FC<RealTimeRideTrackerProps> = ({
         if (status !== 'granted') {
           Alert.alert(
             'Location Permission Required',
-            'This app needs location access to show your current position on the map.',
+            'Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop-off points, and enable real-time ride tracking during an active trip. Location data is only accessed while you are using the app.',
             [{ text: 'OK' }]
           );
           return;

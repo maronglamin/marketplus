@@ -246,7 +246,7 @@ const Permissions = () => {
           isToggle: true,
           toggleValue: locationSharing,
           onToggleChange: handleLocationToggle,
-          subtitle: 'Share location for better service',
+          subtitle: 'Share location for accurate ride service',
         },
       ],
     },

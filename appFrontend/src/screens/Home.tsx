@@ -677,6 +677,35 @@ export function Home() {
     { message: 'Fatou sold a phone in your area', time: '5 mins ago' },
   ];
 
+  // Promotions carousel control
+  const promotionsScrollRef = useRef<ScrollView>(null);
+  const [promotionIndex, setPromotionIndex] = useState(0);
+  const promotionCardWidth = isLargeTablet ? 340 : 280;
+  const promotionCardGap = 16; // matches styles.promotionCard marginLeft
+  const maxPromotionIndex = Math.max(0, promotions.length - 1);
+
+  const scrollToPromotionIndex = (index: number) => {
+    const clamped = Math.max(0, Math.min(maxPromotionIndex, index));
+    setPromotionIndex(clamped);
+    const x = clamped * (promotionCardWidth + promotionCardGap);
+    promotionsScrollRef.current?.scrollTo({ x, animated: true });
+  };
+
+  const handlePromotionPrev = () => {
+    scrollToPromotionIndex(promotionIndex - 1);
+  };
+
+  const handlePromotionNext = () => {
+    scrollToPromotionIndex(promotionIndex + 1);
+  };
+
+  const handlePromotionMomentumEnd = (event: any) => {
+    const x = event?.nativeEvent?.contentOffset?.x ?? 0;
+    const approxIndex = Math.round(x / (promotionCardWidth + promotionCardGap));
+    const clamped = Math.max(0, Math.min(maxPromotionIndex, approxIndex));
+    if (clamped !== promotionIndex) setPromotionIndex(clamped);
+  };
+
   // Search functions
   const openSearchScreen = () => {
     navigation.navigate('UserSearch');
@@ -1193,16 +1222,21 @@ export function Home() {
             <View style={styles.promotionsHeader}>
               <Text style={styles.promotionsTitle}>Promotions</Text>
               <View style={styles.promotionsControls}>
-                <TouchableOpacity style={styles.promotionControl}>
+                <TouchableOpacity style={styles.promotionControl} onPress={handlePromotionPrev} activeOpacity={0.7}>
                   <Ionicons name="chevron-back-outline" size={20} color="#9CA3AF" />
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.promotionControl}>
+                <TouchableOpacity style={styles.promotionControl} onPress={handlePromotionNext} activeOpacity={0.7}>
                   <Ionicons name="chevron-forward-outline" size={20} color="#6B7280" />
                 </TouchableOpacity>
               </View>
             </View>
             
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <ScrollView
+              ref={promotionsScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={handlePromotionMomentumEnd}
+            >
               {promotions.map((promo, index) => (
                 <View key={index} style={[styles.promotionCard, { backgroundColor: promo.gradient[0] }]}>
                   <View style={styles.promotionContent}>

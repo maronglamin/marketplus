@@ -522,7 +522,10 @@ export function AccountSettings() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (perm.status !== 'granted') {
-        Alert.alert('Permission required', 'Please allow photo library access to select a picture.')
+        Alert.alert(
+          'Permission required',
+          'We use your photo library so you can choose a profile picture and upload ID/registration images for account verification. Access is requested only when you select "Choose from Library" and is not used in the background.'
+        )
         return
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -543,7 +546,10 @@ export function AccountSettings() {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync()
       if (perm.status !== 'granted') {
-        Alert.alert('Permission required', 'Please allow camera access to take a photo.')
+        Alert.alert(
+          'Permission required',
+          'We use your camera so you can take a profile photo and capture ID/registration documents for account verification. Access is requested only when you choose "Take Photo" and is not used in the background.'
+        )
         return
       }
       const result = await ImagePicker.launchCameraAsync({

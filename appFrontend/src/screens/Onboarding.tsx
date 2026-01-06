@@ -168,9 +168,27 @@ export function Onboarding() {
       <View style={styles.footer}>
         <Text style={styles.termsText}>
           By continuing, you agree to our{' '}
-          <Text style={styles.linkText}>Terms of Use</Text>
+          <Text
+            style={styles.linkText}
+            suppressHighlighting
+            onPress={() =>
+              // Navigate into Main stack directly to ServiceTerms
+              navigation.navigate('Main' as never, { screen: 'ServiceTerms' } as never)
+            }
+          >
+            Terms of Use
+          </Text>
           {' '}and{' '}
-          <Text style={styles.linkText}>Privacy Policy</Text>
+          <Text
+            style={styles.linkText}
+            suppressHighlighting
+            onPress={() =>
+              // Navigate into Main stack directly to PrivacyPolicy
+              navigation.navigate('Main' as never, { screen: 'PrivacyPolicy' } as never)
+            }
+          >
+            Privacy Policy
+          </Text>
         </Text>
         <TouchableOpacity
           style={styles.button}

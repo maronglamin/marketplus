@@ -155,7 +155,7 @@ export function SellerKycVerification() {
       // Provide rationale before OS prompt
       const proceed = await showInfoConfirm(
         'Photo Library Access',
-        'We need access to your photo library so you can select an ID image for verification. Access is used only when you choose to upload.',
+        'We use your photo library so you can select an ID image for KYC verification. Access is requested only when you choose to upload and is not used in the background.',
         'Continue'
       );
       if (!proceed) return false;
@@ -193,7 +193,10 @@ export function SellerKycVerification() {
     try {
       const ok = await ensureMediaLibraryPermission();
       if (!ok) {
-        Alert.alert('Permission Needed', 'Photo library access is required to select your ID image.');
+        Alert.alert(
+          'Permission Needed',
+          'We use your photo library so you can select an ID image for KYC verification. Access is requested only when you choose to upload and is not used in the background.'
+        );
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({

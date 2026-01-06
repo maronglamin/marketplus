@@ -1,6 +1,7 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
+import { Asset } from 'expo-asset';
 
 export interface OrderItem {
   id: string;
@@ -180,7 +181,23 @@ const allocateProportionally = (rows: number[], totalToAllocate: number): number
   return rounded;
 };
 
-const generateReportHTML = (exportData: ExportData): string => {
+// Load app icon and return as data URI for embedding in HTML
+const getAppIconDataUri = async (): Promise<string | null> => {
+  try {
+    const asset = Asset.fromModule(require('../../assets/icon.png'));
+    if (!asset.localUri) {
+      await asset.downloadAsync();
+    }
+    const uri = asset.localUri || asset.uri;
+    if (!uri) return null;
+    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+    return `data:image/png;base64,${base64}`;
+  } catch {
+    return null;
+  }
+};
+
+const generateReportHTML = (exportData: ExportData, logoDataUri?: string | null): string => {
   const { type, data, dateRange, user } = exportData;
   const reportType = type === 'orders' ? 'Orders Invoice Report' : 'Interests Report';
   const userName = `${user.firstName} ${user.lastName}`.trim();
@@ -223,7 +240,11 @@ const generateReportHTML = (exportData: ExportData): string => {
     </head>
     <body>
       <div class="header">
-        <div class="logo">SNAP</div>
+        <div class="logo">
+          ${logoDataUri
+            ? `<img src="${logoDataUri}" alt="Logo" style="height:48px;width:48px;border-radius:10px;" />`
+            : `SNAP`}
+        </div>
         <div class="report-title">${reportType}</div>
       </div>
       
@@ -272,8 +293,8 @@ const generateReportHTML = (exportData: ExportData): string => {
             if (inferred > 0) discountCents = inferred;
           }
           const allocatedDiscounts = allocateProportionally(unitSubtotalsCents, discountCents);
-          const lineTotalsCents = unitSubtotalsCents.map((c, i) => Math.max(0, c - allocatedDiscounts[i]));
-          const computedTotalCents = lineTotalsCents.reduce((a, b) => a + b, 0) + shippingCents;
+          const lineTotalsCents = unitSubtotalsCents.map((c: number, i: number) => Math.max(0, c - allocatedDiscounts[i]));
+          const computedTotalCents = lineTotalsCents.reduce((a: number, b: number) => a + b, 0) + shippingCents;
           const displayedTotalCents = toCents(order.totalAmount || fromCents(computedTotalCents));
 
           return `
@@ -362,7 +383,8 @@ export const generateProformaPDF = async (order: OrderData): Promise<string> => 
 
 export const generateAndSharePDF = async (exportData: ExportData): Promise<void> => {
   try {
-    const html = generateReportHTML(exportData);
+    const logoDataUri = await getAppIconDataUri();
+    const html = generateReportHTML(exportData, logoDataUri);
     const { uri } = await Print.printToFileAsync({ html });
     
     const filename = `${exportData.type}_report_${new Date().toISOString().split('T')[0]}.pdf`;

@@ -161,7 +161,7 @@ export function ServiceTerms() {
             <Text style={styles.sectionTitle}>9. Contact Us</Text>
             <Text style={styles.paragraph}>
               If you have any questions, please contact us at{' '}
-              <Text style={styles.link}>customercare@cloudnexus.biz</Text>
+              <Text style={styles.link}>info@cloudnexus.biz</Text>
             </Text>
           </View>
         </View>
@@ -169,7 +169,7 @@ export function ServiceTerms() {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Last updated: {new Date().toLocaleDateString()}
+            Last updated: December 2025
           </Text>
         </View>
       </ScrollView>

@@ -433,7 +433,10 @@ export function BecomeRider() {
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions to upload documents.');
+      Alert.alert(
+        'Permission Required',
+        'We use your photo library so you can select driver license, registration, insurance and vehicle photos for your rider application. Access is requested only when you choose to upload and is not used in the background.'
+      );
       return false;
     }
     return true;

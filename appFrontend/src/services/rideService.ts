@@ -82,10 +82,25 @@ class RideService {
         return [];
       }
 
-      // Check if the query is a Plus Code (format: VNHD+UJDS or similar)
+      // Check if the query is a Plus Code (full or short)
       if (this.isPlusCode(query)) {
         console.log('🔍 Plus Code detected:', query);
-        return this.handlePlusCodeSearch(query);
+        // Try to derive country code from user location to help resolve short codes
+        let derivedCountry: string | undefined = countryCode;
+        if (!derivedCountry && userLocation) {
+          try {
+            derivedCountry = await this.getCountryCodeFromCoords(userLocation.latitude, userLocation.longitude);
+          } catch {
+            // ignore
+          }
+        }
+        return this.handlePlusCodeSearch(query, userLocation, derivedCountry);
+      }
+
+      // Check if the query looks like coordinates (lat,lng)
+      if (this.isLatLng(query)) {
+        console.log('🔍 Coordinate (lat,lng) detected:', query);
+        return this.handleLatLngSearch(query);
       }
 
       if (!GOOGLE_PLACES_API_KEY) {
@@ -151,20 +166,109 @@ class RideService {
     }
   }
 
-  // Check if a query is a Plus Code
+  // Check if a query is a Plus Code (full or short)
   private isPlusCode(query: string): boolean {
     // Plus Code format: typically 8 characters with a + in the middle
     // Examples: VNHD+UJDS, 87G8P27V+JG, etc.
     // Also handle global Plus Codes with country codes like 87G8P27V+JG
-    const plusCodePattern = /^[23456789CFGHJMPQRVWX]{8}\+[23456789CFGHJMPQRVWX]{2,}$/i;
+    // Additionally support short Plus Codes like 78FX+GVX (needs locality context)
+    const fullPlusCodePattern = /^[23456789CFGHJMPQRVWX]{8}\+[23456789CFGHJMPQRVWX]{2,}$/i;
     const globalPlusCodePattern = /^[23456789CFGHJMPQRVWX]{8}\+[23456789CFGHJMPQRVWX]{2,}\s*[A-Z]{2,}$/i;
+    const shortPlusCodePattern = /^[23456789CFGHJMPQRVWX]{2,7}\+[23456789CFGHJMPQRVWX]{2,}$/i;
     
     const trimmedQuery = query.trim();
-    return plusCodePattern.test(trimmedQuery) || globalPlusCodePattern.test(trimmedQuery);
+    return (
+      fullPlusCodePattern.test(trimmedQuery) ||
+      globalPlusCodePattern.test(trimmedQuery) ||
+      shortPlusCodePattern.test(trimmedQuery)
+    );
+  }
+
+  // Check if a query is in latitude,longitude form
+  private isLatLng(query: string): boolean {
+    const trimmed = query.trim().toLowerCase();
+    // Common patterns:
+    // "13.4432,-16.5919" | "13.4432, -16.5919" | "13.4432 -16.5919" | "lat: 13.4432, lng: -16.5919"
+    const simpleComma = /^\s*-?\d{1,3}(?:\.\d+)?\s*,\s*-?\d{1,3}(?:\.\d+)?\s*$/;
+    const simpleSpace = /^\s*-?\d{1,3}(?:\.\d+)?\s+\s*-?\d{1,3}(?:\.\d+)?\s*$/;
+    const labeled = /lat\s*[:=]\s*-?\d{1,3}(?:\.\d+)?\s*,?\s*lng\s*[:=]\s*-?\d{1,3}(?:\.\d+)?/;
+    return simpleComma.test(trimmed) || simpleSpace.test(trimmed) || labeled.test(trimmed);
+  }
+
+  // Parse latitude and longitude from a string. Returns null if invalid.
+  private parseLatLng(query: string): { lat: number; lng: number } | null {
+    const trimmed = query.trim().toLowerCase();
+    let latStr: string | undefined;
+    let lngStr: string | undefined;
+
+    // labeled form: lat: x, lng: y
+    const labeledMatch = trimmed.match(/lat\s*[:=]\s*(-?\d{1,3}(?:\.\d+)?)\s*,?\s*lng\s*[:=]\s*(-?\d{1,3}(?:\.\d+)?)/);
+    if (labeledMatch) {
+      latStr = labeledMatch[1];
+      lngStr = labeledMatch[2];
+    }
+
+    // simple comma: x,y
+    if (!latStr || !lngStr) {
+      const commaMatch = trimmed.match(/^\s*(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
+      if (commaMatch) {
+        latStr = commaMatch[1];
+        lngStr = commaMatch[2];
+      }
+    }
+
+    // simple space: x y
+    if (!latStr || !lngStr) {
+      const spaceMatch = trimmed.match(/^\s*(-?\d{1,3}(?:\.\d+)?)\s+(-?\d{1,3}(?:\.\d+)?)\s*$/);
+      if (spaceMatch) {
+        latStr = spaceMatch[1];
+        lngStr = spaceMatch[2];
+      }
+    }
+
+    if (latStr === undefined || lngStr === undefined) return null;
+    const lat = parseFloat(latStr);
+    const lng = parseFloat(lngStr);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+    if (lat < -90 || lat > 90) return null;
+    if (lng < -180 || lng > 180) return null;
+    return { lat, lng };
+  }
+
+  // Handle coordinate search by reverse-geocoding to an address and returning a suggestion
+  private async handleLatLngSearch(query: string): Promise<SuggestionItem[]> {
+    const parsed = this.parseLatLng(query);
+    if (!parsed) {
+      return [];
+    }
+    const { lat, lng } = parsed;
+
+    let address = 'Selected Coordinates';
+    try {
+      address = await this.reverseGeocode(lat, lng);
+    } catch {
+      // ignore, keep default address
+    }
+
+    return [{
+      place_id: `geo_${lat}_${lng}`,
+      description: `${address} (${lat.toFixed(5)}, ${lng.toFixed(5)})`,
+      structured_formatting: {
+        main_text: address,
+        secondary_text: `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+      },
+      geometry: {
+        location: { lat, lng }
+      }
+    }];
   }
 
   // Handle Plus Code search
-  private async handlePlusCodeSearch(plusCode: string): Promise<SuggestionItem[]> {
+  private async handlePlusCodeSearch(
+    plusCode: string,
+    userLocation?: { latitude: number; longitude: number },
+    countryCode?: string
+  ): Promise<SuggestionItem[]> {
     try {
       if (!GOOGLE_PLACES_API_KEY) {
         console.error('Google Places API key not configured for Plus Code lookup');
@@ -174,8 +278,21 @@ class RideService {
       console.log('🔍 Looking up Plus Code:', plusCode);
       console.log('🔑 API Key configured:', !!GOOGLE_PLACES_API_KEY);
 
-      // Use Google's Geocoding API to convert Plus Code to coordinates
-      const apiUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(plusCode)}&key=${GOOGLE_PLACES_API_KEY}`;
+      // Use Google's Geocoding API to convert Plus Code to coordinates (with optional bias for short codes)
+      let apiUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(plusCode)}&key=${GOOGLE_PLACES_API_KEY}`;
+      // Bias with region when available
+      if (countryCode) {
+        apiUrl += `&region=${countryCode}`;
+      }
+      // Bias with bounds when user location is available (helps resolve short plus codes)
+      if (userLocation) {
+        const delta = 0.5; // ~50km bias box
+        const swLat = userLocation.latitude - delta;
+        const swLng = userLocation.longitude - delta;
+        const neLat = userLocation.latitude + delta;
+        const neLng = userLocation.longitude + delta;
+        apiUrl += `&bounds=${swLat},${swLng}|${neLat},${neLng}`;
+      }
       console.log('🌐 Making Plus Code request to:', apiUrl.replace(GOOGLE_PLACES_API_KEY, 'API_KEY_HIDDEN'));
 
       const response = await fetch(apiUrl);
@@ -304,6 +421,44 @@ class RideService {
         console.log('🔄 Using fallback Plus Code details for:', placeId);
         const plusCode = placeId.replace('fallback_pluscode_', '');
         return this.getFallbackPlusCodeDetails(plusCode);
+      }
+
+      // Handle coordinate place IDs
+      if (placeId.startsWith('geo_')) {
+        console.log('🔍 Getting coordinate details for:', placeId);
+        const coords = placeId.replace('geo_', '').split('_');
+        if (coords.length === 2) {
+          const lat = parseFloat(coords[0]);
+          const lng = parseFloat(coords[1]);
+          if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+            const address = await this.reverseGeocode(lat, lng);
+            return {
+              latitude: lat,
+              longitude: lng,
+              address
+            };
+          }
+        }
+        return null;
+      }
+
+      // Handle fallback coordinate place IDs (include encoded coords)
+      if (placeId.startsWith('fallback_geo_')) {
+        console.log('🔄 Using fallback coordinate details for:', placeId);
+        const coords = placeId.replace('fallback_geo_', '').split('_');
+        if (coords.length === 2) {
+          const lat = parseFloat(coords[0]);
+          const lng = parseFloat(coords[1]);
+          if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+            const address = await this.reverseGeocode(lat, lng);
+            return {
+              latitude: lat,
+              longitude: lng,
+              address
+            };
+          }
+        }
+        return null;
       }
 
       if (!GOOGLE_PLACES_API_KEY) {

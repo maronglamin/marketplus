@@ -124,7 +124,7 @@ export default function PrivacyPolicy() {
         </View>
 
         <Text style={styles.h2}>Policy Review and Updates</Text>
-        <Text style={styles.paragraph}>This policy will be reviewed and updated regularly to reflect changes in our business operations, new technologies, or the evolution of The Gambia's data protection laws. Any significant changes to this policy will be communicated through our website and, where appropriate, directly to our clients and partners.</Text>
+        <Text style={styles.paragraph}>This policy will be reviewed and updated regularly to reflect changes in our business operations, new technologies, or the evolution of The Gambia's data protection laws. Any significant changes to this policy will be communicated through our website and, where appropriate, directly to our clients and partners. Last updated: December 2025</Text>
       </ScrollView>
     </SafeAreaView>
   )

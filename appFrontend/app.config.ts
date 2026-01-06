@@ -21,10 +21,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     infoPlist: {
       UILaunchStoryboardName: 'SplashScreen',
       UIRequiresFullScreen: true,
-      NSCameraUsageDescription: 'Camera access is required to allow you to capture and upload identification and registration documents for identity verification (KYC) and account approval. The camera is used only when you choose to upload documents.',
-      NSPhotoLibraryUsageDescription: 'This app needs access to your photo library so you can select photos to upload for identity verification (KYC) and account approval.',
-      NSPhotoLibraryAddUsageDescription: 'This app may save images or exports to your photo library when you choose to do so.',
-      NSMicrophoneUsageDescription: 'This app may use the microphone for features that require audio recording.',
+      NSCameraUsageDescription: 'We use your camera so you can take a profile photo and capture ID/registration documents required for identity verification (KYC) and account approval. Access is requested only when you choose “Take Photo” in Account Settings or during verification, and is not used in the background.',
+      NSPhotoLibraryUsageDescription: 'We use your photo library so you can choose an existing picture for your profile and upload ID/registration images needed to verify your identity and manage your account. Access is requested only when you select “Choose from Library” and is not used in the background.',
+      NSPhotoLibraryAddUsageDescription: 'We save images to your library only when you explicitly choose to download or save an image (for example, an export or receipt).',
+      NSMicrophoneUsageDescription: 'We use the microphone for features that require audio recording. We only listen while you see “Listening…”, and do not store audio.',
       NSLocationWhenInUseUsageDescription: 'Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop‑off points, and enable real‑time ride tracking during an active trip. Location data is only accessed while you are using the app.',
       NSLocationAlwaysAndWhenInUseUsageDescription: 'Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop‑off points, and enable real‑time ride tracking during an active trip. Location data is only accessed while you are using the app.',
       NSAppTransportSecurity: {

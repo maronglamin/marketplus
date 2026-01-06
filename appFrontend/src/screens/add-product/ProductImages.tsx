@@ -51,7 +51,7 @@ export function ProductImages({ onNext, initialImages }: ProductImagesProps) {
       if (status !== 'granted') {
         Alert.alert(
           'Permission Required',
-          'Sorry, we need camera roll permissions to upload product images!',
+          'We use your photo library so you can choose product photos to list your item. Access is requested only when you tap “Add Image” and is not used in the background.',
           [{ text: 'OK' }]
         );
         return;
