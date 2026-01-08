@@ -13,8 +13,13 @@ export function Header() {
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between p-4 bg-white shadow-sm">
       <div className="flex items-center">
-        <Link to="/home" className="text-xl font-bold text-blue-600">
-          SNAP
+        <Link to="/home" className="flex items-center">
+          <img
+            src="/assets/icon.png"
+            alt="SNAP"
+            className="w-8 h-8 rounded-md mr-2"
+          />
+          <span className="text-xl font-bold text-blue-600">SNAP</span>
         </Link>
       </div>
       <div className="flex items-center space-x-3">
@@ -36,12 +41,12 @@ export function Header() {
           </Link>
         </div>
 
-        <div className="relative">
+        {/* <div className="relative">
           <Bell className="w-6 h-6 text-gray-600" />
           <span className="absolute top-0 right-0 flex items-center justify-center w-4 h-4 text-xs text-white bg-orange-500 rounded-full">
             2
           </span>
-        </div>
+        </div> */}
         
         {/* User info */}
         <div className="flex items-center space-x-2">

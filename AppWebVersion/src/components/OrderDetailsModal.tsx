@@ -13,7 +13,8 @@ import {
   Edit,
   Save,
   Percent,
-  Shield
+  Shield,
+  Receipt
 } from 'lucide-react';
 import { orderService, type Order, type UpdateOrderPricingRequest } from '../api/orders';
 import { useAuth } from '../contexts/AuthContext';
@@ -156,6 +157,141 @@ export function OrderDetailsModal({
       case 'cancelled': return <XCircle className="w-4 h-4" />;
       case 'refunded': return <AlertCircle className="w-4 h-4" />;
       default: return <Clock className="w-4 h-4" />;
+    }
+  };
+
+  const formatMoney = (amount: number, currencyCode?: string) => {
+    const ccy = currencyCode || (order as any)?.currencyCode || 'USD';
+    try {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy }).format(Number(amount) || 0);
+    } catch {
+      const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£', JPY: '¥', CAD: 'C$' };
+      const symbol = symbols[ccy] || '';
+      const num = new Intl.NumberFormat('en-US', {
+        style: 'decimal',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(Number(amount) || 0);
+      return `${symbol}${num}`;
+    }
+  };
+
+  const computeSubtotal = () => {
+    if (!order?.items?.length) return 0;
+    return order.items.reduce((sum, it) => {
+      const lineTotal = typeof it.totalPrice === 'number'
+        ? it.totalPrice
+        : (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0);
+      return sum + (Number(lineTotal) || 0);
+    }, 0);
+  };
+
+  const generateInvoiceHTML = () => {
+    if (!order) return '';
+    const documentType = 'INVOICE';
+    const currency = order.currencyCode || 'USD';
+    const subtotal = computeSubtotal();
+    const discount = Number(order.discountAmount) || 0;
+    const shipping = Number(order.shippingAmount) || 0;
+    const total = Number(order.totalAmount) || (subtotal - discount + shipping);
+    const created = new Date(order.createdAt).toLocaleDateString();
+
+    const itemsRows = (order.items || []).map((item) => {
+      const qty = Number(item.quantity) || 0;
+      const unit = formatMoney(Number(item.unitPrice) || 0, currency);
+      const line = formatMoney(
+        typeof item.totalPrice === 'number'
+          ? item.totalPrice
+          : (Number(item.unitPrice) || 0) * qty,
+        currency
+      );
+      const title = item.product?.title || 'Item';
+      return `<tr><td>${title}</td><td>${qty}</td><td>${unit}</td><td>${line}</td></tr>`;
+    }).join('');
+
+    return `<!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>${documentType} #${order.orderNumber}</title>
+        <style>
+          body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:#111827; margin: 24px; }
+          .header { text-align:center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #2563EB; }
+          .logo { display:inline-flex; align-items:center; gap:10px; justify-content:center; }
+          .logo img { width:56px; height:56px; object-fit:contain; border-radius:10px; }
+          .brand { font-size: 24px; font-weight: 800; color:#2563EB; letter-spacing: 1px; }
+          .doc-type { margin-top: 6px; color:#6B7280; font-weight:600; }
+          .invoice-info { display:flex; justify-content:space-between; gap:24px; margin-top: 20px; }
+          .section { flex:1; }
+          .section h3 { color:#2563EB; margin: 0 0 8px 0; font-size:14px; }
+          .muted { color:#6B7280; font-size: 12px; }
+          table { width:100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { padding: 10px; border-bottom:1px solid #E5E7EB; text-align:left; font-size: 12px; }
+          th { background:#F9FAFB; }
+          .totals { margin-left:auto; margin-top: 16px; width: 320px; }
+          .total-row { display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px solid #F3F4F6; }
+          .total-row.final { font-weight: 800; color:#2563EB; border-bottom: 2px solid #2563EB; }
+          .footer { margin-top: 32px; text-align:center; color:#6B7280; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="logo">
+            <img src="/assets/icon.png" alt="Logo" />
+            <div class="brand">SNAP</div>
+          </div>
+          <div class="doc-type">${documentType}</div>
+        </div>
+        <div class="invoice-info">
+          <div class="section">
+            <h3>Bill To</h3>
+            <div><strong>${order.customer?.name || ''}</strong></div>
+            <div class="muted">${order.customer?.phone || ''}</div>
+          </div>
+          <div class="section">
+            <h3>Invoice Details</h3>
+            <div><strong>Invoice #:</strong> ${order.orderNumber}</div>
+            <div><strong>Date:</strong> ${created}</div>
+            <div><strong>Status:</strong> ${order.status}</div>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Item</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr>
+          </thead>
+          <tbody>
+            ${itemsRows || '<tr><td colspan="4" class="muted">No items</td></tr>'}
+          </tbody>
+        </table>
+        <div class="totals">
+          <div class="total-row"><span>Subtotal:</span><span>${formatMoney(subtotal, currency)}</span></div>
+          <div class="total-row"><span>Discount:</span><span>-${formatMoney(discount, currency)}</span></div>
+          <div class="total-row"><span>Shipping:</span><span>${formatMoney(shipping, currency)}</span></div>
+          <div class="total-row final"><span>Total:</span><span>${formatMoney(total, currency)}</span></div>
+        </div>
+        <div class="footer">Thank you for your business!</div>
+      </body>
+    </html>`;
+  };
+
+  const handleExportInvoice = () => {
+    try {
+      if (!order) return;
+      const html = generateInvoiceHTML();
+      const win = window.open('', '_blank');
+      if (!win) {
+        setModalMessage('Please allow popups for this site to export the invoice PDF.');
+        setShowErrorModal(true);
+        return;
+      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      setTimeout(() => win.print(), 300);
+    } catch (e) {
+      setModalMessage('We could not generate the invoice PDF at this time. Please try again later.');
+      setShowErrorModal(true);
     }
   };
 
@@ -531,6 +667,16 @@ export function OrderDetailsModal({
                 </div>
                 
               </div>
+            </div>
+            <div className="flex items-center gap-2 mr-2">
+              <button
+                onClick={handleExportInvoice}
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                title="Download Invoice PDF"
+              >
+                <Receipt className="w-4 h-4 mr-2" />
+                Invoice PDF
+              </button>
             </div>
             <button
               onClick={onClose}

@@ -61,6 +61,8 @@
     </dict>
     <key>NSCameraUsageDescription</key>
     <string>We use your camera so you can take a profile photo and capture ID/registration documents required for identity verification (KYC) and account approval. Access is requested only when you choose “Take Photo” in Account Settings or during verification, and is not used in the background.</string>
+    <key>NSFaceIDUsageDescription</key>
+    <string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
     <string>Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop‑off points, and enable real‑time ride tracking during an active trip. Location data is only accessed while you are using the app.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
