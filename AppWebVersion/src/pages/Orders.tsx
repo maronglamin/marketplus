@@ -197,9 +197,9 @@ export function Orders() {
           <style>
             body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color: #111827; margin: 24px; }
             .header { text-align:center; margin-bottom: 24px; padding-bottom: 12px; border-bottom: 1px solid #E5E7EB; }
-            .brand { display:inline-flex; align-items:center; gap: 10px; justify-content:center; }
+            .brand { display:inline-flex; flex-direction: column; align-items:center; gap: 6px; justify-content:center; }
             .brand-logo { width: 56px; height: 56px; object-fit: contain; border-radius: 10px; }
-            .brand-name { font-size: 22px; font-weight: 800; color:#2563EB; letter-spacing: 0.5px; }
+            .brand-name { font-size: 22px; font-weight: 800; color:#2563EB; letter-spacing: 0.5px; line-height: 1; }
             .report-title { font-size: 18px; font-weight: 800; margin-top: 8px; }
             .sub { color:#6B7280; font-size: 12px; margin-top: 2px; }
             .section { margin-bottom: 16px; }
