@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Star, Heart, ShoppingCart, Minus, Plus, Shield, Truck, ArrowLeft, RefreshCw, AlertCircle } from 'lucide-react';
 import { productService } from '../api/products';
 import { API_CONFIG, getImageUrl } from '../config/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ProductDetail {
   id: string;
@@ -30,11 +31,15 @@ interface ProductDetail {
 
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginPromptMessage, setLoginPromptMessage] = useState<string>('Please log in to place an order.');
 
   const [error, setError] = useState<string | null>(null);
 
@@ -279,13 +284,21 @@ export function ProductDetail() {
 
             {/* Action Buttons */}
             <div className="space-y-3">
-              <Link
-                to={`/product/${product.id}/order`}
+              <button
+                onClick={(e) => {
+                  if (!isAuthenticated) {
+                    e.preventDefault();
+                    setLoginPromptMessage('Please log in to place an order.');
+                    setShowLoginModal(true);
+                    return;
+                  }
+                  navigate(`/product/${product.id}/order`);
+                }}
                 className="w-full bg-white text-gray-900 py-3 px-6 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center border border-gray-300"
               >
                 <ShoppingCart className="w-5 h-5 mr-2" />
                 Place Order Now
-              </Link>
+              </button>
               <Link
                 to={`/product/${product.id}/interest`}
                 className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
@@ -307,6 +320,36 @@ export function ProductDetail() {
         </div>
 
       </div>
+
+      {/* Centered Login Prompt Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowLoginModal(false)} />
+          <div className="relative z-10 w-full max-w-sm mx-4 bg-white rounded-2xl shadow-xl p-6">
+            <h4 className="text-lg font-semibold text-gray-900 mb-2">Login Required</h4>
+            <p className="text-sm text-gray-600 mb-6">
+              {loginPromptMessage}
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowLoginModal(false);
+                  navigate('/login');
+                }}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Login
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
