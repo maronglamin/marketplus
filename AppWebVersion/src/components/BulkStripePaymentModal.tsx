@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { PaymentElement, useStripe, useElements, Elements } from '@stripe/react-stripe-js';
 import { X, CreditCard, AlertCircle, CheckCircle, Lock } from 'lucide-react';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { stripePaymentService } from '../api/stripePaymentService';
 import { getApi } from '../api/config';
 
@@ -15,7 +15,7 @@ interface BulkStripePaymentModalProps {
   description?: string;
 }
 
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_51H1234567890abcdef');
+// Stripe is loaded lazily inside the component when needed
 
 function BulkPaymentForm({
   onClose,
@@ -147,6 +147,7 @@ export function BulkStripePaymentModal({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
 
   const createPaymentIntent = useCallback(async () => {
     try {
@@ -170,6 +171,23 @@ export function BulkStripePaymentModal({
       createPaymentIntent();
     }
   }, [isOpen, clientSecret, createPaymentIntent]);
+
+  // Load Stripe after client secret is ready and modal is open
+  useEffect(() => {
+    if (isOpen && clientSecret && !stripePromise) {
+      const publishableKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
+      if (!publishableKey) {
+        setError('Missing Stripe publishable key. Please set REACT_APP_STRIPE_PUBLISHABLE_KEY.');
+        return;
+      }
+      const promise = loadStripe(publishableKey).catch((e) => {
+        console.error('Failed to load Stripe.js', e);
+        setError('Failed to load payment system. Please check your connection and try again.');
+        return null;
+      });
+      setStripePromise(promise);
+    }
+  }, [isOpen, clientSecret, stripePromise]);
 
   if (!isOpen) return null;
 

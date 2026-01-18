@@ -885,6 +885,7 @@ export function CustomerOrders() {
           onDateRangeChange={handleDateRangeChange}
           visible={showDatePicker}
           onClose={() => setShowDatePicker(false)}
+          onOpen={() => setShowDatePicker(true)}
         />
       </View>
     </SafeAreaView>

@@ -1,10 +1,6 @@
 import { loadStripe, Stripe, StripeElements, StripePaymentElement } from '@stripe/stripe-js';
 import { getApi } from './config';
 
-// Initialize Stripe with publishable key
-// Add REACT_APP_STRIPE_PUBLISHABLE_KEY to your .env file
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_51H1234567890abcdef');
-
 export interface StripePaymentData {
   paymentIntentId: string;
   paymentMethodId: string;
@@ -23,12 +19,20 @@ export interface StripePaymentResult {
 export class StripePaymentService {
   private stripe: Stripe | null = null;
 
-  constructor() {
-    this.initializeStripe();
-  }
-
-  private async initializeStripe() {
-    this.stripe = await stripePromise;
+  private async ensureStripeLoaded(): Promise<Stripe> {
+    if (this.stripe) {
+      return this.stripe;
+    }
+    const publishableKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
+    if (!publishableKey) {
+      throw new Error('Missing Stripe publishable key. Set REACT_APP_STRIPE_PUBLISHABLE_KEY.');
+    }
+    const loaded = await loadStripe(publishableKey);
+    if (!loaded) {
+      throw new Error('Failed to load Stripe.js');
+    }
+    this.stripe = loaded;
+    return this.stripe;
   }
 
   /**
@@ -54,14 +58,12 @@ export class StripePaymentService {
     elements: StripeElements,
     paymentElement: StripePaymentElement
   ): Promise<StripePaymentResult> {
-    if (!this.stripe) {
-      throw new Error('Stripe has not loaded yet. Please try again.');
-    }
+    const stripe = await this.ensureStripeLoaded();
 
     try {
       console.log('Confirming payment with Stripe.js...');
       
-      const { error, paymentIntent } = await this.stripe.confirmPayment({
+      const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
         confirmParams: {
           return_url: `${window.location.origin}/payment/return`,

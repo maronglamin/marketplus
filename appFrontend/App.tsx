@@ -66,6 +66,12 @@ import { AccountDeletion } from './src/screens/account-settings/AccountDeletion'
 import { AccountType } from './src/screens/account-settings/AccountType';
 import * as ExpoNotifications from 'expo-notifications';
 import { realTimeRideService } from './src/services/realTimeRideService';
+import { SellerKycForm } from './src/screens/SellerKycForm';
+import { SellerKycBusiness } from './src/screens/SellerKycBusiness';
+import { SellerKycAddress } from './src/screens/SellerKycAddress';
+import { SellerKycVerification } from './src/screens/SellerKycVerification';
+import { SellerKycConfirmation } from './src/screens/SellerKycConfirmation';
+import { SellerKycResponse } from './src/services/kycService';
 import { useEffect } from 'react';
 import { Platform, StatusBar, View } from 'react-native';
 import { enableScreens } from 'react-native-screens';
@@ -136,6 +142,65 @@ export type MainStackParamList = {
   DriverRequests: undefined;
   RentalEarnings: undefined;
   AssetRental: undefined;
+  SellerKycForm:
+    | undefined
+    | {
+        businessData?: {
+          businessName: string;
+          businessType: string;
+          registrationNumber: string;
+          taxId: string;
+        };
+      };
+  SellerKycBusiness: {
+    existingData?: SellerKycResponse;
+  };
+  SellerKycAddress: {
+    businessData: {
+      businessName: string;
+      businessType: string;
+      registrationNumber: string;
+      taxId: string;
+    };
+    existingData?: SellerKycResponse;
+  };
+  SellerKycVerification: {
+    businessData: {
+      businessName: string;
+      businessType: string;
+      registrationNumber: string;
+      taxId: string;
+    };
+    addressData: {
+      address: string;
+      city: string;
+      state: string;
+      countries: string[];
+      postalCode: string;
+    };
+    existingData?: SellerKycResponse;
+  };
+  SellerKycConfirmation: {
+    businessData: {
+      businessName: string;
+      businessType: string;
+      registrationNumber: string;
+      taxId: string;
+    };
+    addressData: {
+      address: string;
+      city: string;
+      state: string;
+      countries: string[];
+      postalCode: string;
+    };
+    verificationData: {
+      idType: string;
+      idNumber: string;
+      idExpiryDate: string;
+      idImage: string | null;
+    };
+  };
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -270,6 +335,12 @@ function MainNavigator() {
       <MainStack.Screen name="DriverRequests" component={DriverRequests} />
       <MainStack.Screen name="RentalEarnings" component={RentalEarnings} />
       <MainStack.Screen name="AssetRental" component={AssetRental} />
+      {/* Seller KYC flow */}
+      <MainStack.Screen name="SellerKycForm" component={SellerKycForm} />
+      <MainStack.Screen name="SellerKycBusiness" component={SellerKycBusiness} />
+      <MainStack.Screen name="SellerKycAddress" component={SellerKycAddress} />
+      <MainStack.Screen name="SellerKycVerification" component={SellerKycVerification} />
+      <MainStack.Screen name="SellerKycConfirmation" component={SellerKycConfirmation} />
     </MainStack.Navigator>
   );
 }

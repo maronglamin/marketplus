@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { PaymentElement, useStripe, useElements, Elements } from '@stripe/react-stripe-js';
 import { X, CreditCard, Lock, AlertCircle, CheckCircle } from 'lucide-react';
 import { stripePaymentService } from '../api/stripePaymentService';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 
 interface StripePaymentModalProps {
   isOpen: boolean;
@@ -16,15 +16,7 @@ interface StripePaymentModalProps {
   cardholderName?: string;
 }
 
-// Initialize Stripe with publishable key
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY || 'pk_test_51H1234567890abcdef');
-
-// Debug Stripe loading (remove in production)
-// stripePromise.then(stripe => {
-//   console.log('Stripe loaded:', !!stripe);
-// }).catch(error => {
-//   console.error('Stripe loading error:', error);
-// });
+// Stripe is now lazily loaded inside the modal when opened
 
 // Payment form component that uses Stripe hooks (just the form, not the modal)
 interface PaymentFormProps {
@@ -233,6 +225,7 @@ export function StripePaymentModal({
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
 
   const createPaymentIntent = useCallback(async () => {
     try {
@@ -265,9 +258,27 @@ export function StripePaymentModal({
     }
   }, [isOpen, clientSecret, createPaymentIntent]);
 
+  // Load Stripe only when we actually need to render Elements
+  useEffect(() => {
+    if (isOpen && clientSecret && !stripePromise) {
+      const publishableKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
+      if (!publishableKey) {
+        setError('Missing Stripe publishable key. Please set REACT_APP_STRIPE_PUBLISHABLE_KEY.');
+        return;
+      }
+      const promise = loadStripe(publishableKey).catch((e) => {
+        console.error('Failed to load Stripe.js', e);
+        setError('Failed to load payment system. Please check your connection and try again.');
+        return null;
+      });
+      setStripePromise(promise);
+    }
+  }, [isOpen, clientSecret, stripePromise]);
+
   const handleClose = () => {
     setError(null);
     setClientSecret(null);
+    setStripePromise(null);
     onClose();
   };
 
@@ -307,7 +318,7 @@ export function StripePaymentModal({
             </div>
           )}
 
-          {clientSecret && !isLoading && (
+          {clientSecret && !isLoading && stripePromise && !error && (
             <Elements stripe={stripePromise} options={{ clientSecret }}>
               <PaymentForm
                 onClose={handleClose}

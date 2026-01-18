@@ -658,6 +658,7 @@ export function InterestManagement() {
           onDateRangeChange={handleDateRangeChange}
           visible={showDatePicker}
           onClose={() => setShowDatePicker(false)}
+          onOpen={() => setShowDatePicker(true)}
         />
 
 

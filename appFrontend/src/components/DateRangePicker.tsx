@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import BottomSheet, { BottomSheetView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 
 interface DateRangePickerProps {
   startDate: Date;
@@ -17,6 +18,7 @@ interface DateRangePickerProps {
   onDateRangeChange: (startDate: Date, endDate: Date) => void;
   visible: boolean;
   onClose: () => void;
+  onOpen: () => void; // reopen the modal when bottom sheet is done/cancelled
 }
 
 export function DateRangePicker({
@@ -25,19 +27,49 @@ export function DateRangePicker({
   onDateRangeChange,
   visible,
   onClose,
+  onOpen,
 }: DateRangePickerProps) {
   const [tempStartDate, setTempStartDate] = useState(startDate);
   const [tempEndDate, setTempEndDate] = useState(endDate);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+  const [activePicker, setActivePicker] = useState<'start' | 'end' | null>(null);
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  const snapPoints = useMemo(() => ['50%', '90%'], []);
+  const skipResetOnOpenRef = useRef(false);
+  const sheetStartSnapshotRef = useRef<Date | null>(null);
+  const sheetEndSnapshotRef = useRef<Date | null>(null);
 
   // Reset temp dates when modal opens
   useEffect(() => {
     if (visible) {
+      if (skipResetOnOpenRef.current) {
+        // Skip resetting temp values when returning from bottom sheet
+        skipResetOnOpenRef.current = false;
+        return;
+      }
       setTempStartDate(startDate);
       setTempEndDate(endDate);
     }
   }, [visible, startDate, endDate]);
+
+  const handleSheetChanges = useCallback((index: number) => {
+    if (index === -1) {
+      onClose();
+    }
+  }, [onClose]);
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
 
   const handleStartDateChange = (event: any, selectedDate?: Date) => {
     console.log('Start date change:', event.type, selectedDate);
@@ -69,12 +101,28 @@ export function DateRangePicker({
 
   const handleStartDatePress = () => {
     console.log('Opening start date picker');
+    // Ensure only one picker is open at a time
+    setShowEndPicker(false);
     setShowStartPicker(true);
+    setActivePicker('start');
+    // Snapshot current start date to allow cancel restore
+    sheetStartSnapshotRef.current = tempStartDate;
+    bottomSheetRef.current?.snapToIndex(0);
+    // Close the main modal while the bottom sheet is active
+    onClose();
   };
 
   const handleEndDatePress = () => {
     console.log('Opening end date picker');
+    // Ensure only one picker is open at a time
+    setShowStartPicker(false);
     setShowEndPicker(true);
+    setActivePicker('end');
+    // Snapshot current end date to allow cancel restore
+    sheetEndSnapshotRef.current = tempEndDate;
+    bottomSheetRef.current?.snapToIndex(0);
+    // Close the main modal while the bottom sheet is active
+    onClose();
   };
 
   const handleConfirm = () => {
@@ -83,8 +131,17 @@ export function DateRangePicker({
       return;
     }
     console.log('Confirming date range:', tempStartDate, tempEndDate);
+    // Close any open picker before finalizing
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+    setActivePicker(null);
     onDateRangeChange(tempStartDate, tempEndDate);
-    onClose();
+    // Close bottom sheet; parent onClose will be triggered via onChange when closed
+    bottomSheetRef.current?.close();
+    // Stagger closing of the main modal slightly for iOS safety
+    setTimeout(() => {
+      onClose();
+    }, 150);
   };
 
   const handleCancel = () => {
@@ -92,6 +149,8 @@ export function DateRangePicker({
     setTempEndDate(endDate);
     setShowStartPicker(false);
     setShowEndPicker(false);
+    setActivePicker(null);
+    bottomSheetRef.current?.close();
     onClose();
   };
 
@@ -128,6 +187,7 @@ export function DateRangePicker({
         visible={visible}
         animationType="slide"
         transparent={true}
+        presentationStyle="overFullScreen"
         onRequestClose={onClose}
       >
         <View style={styles.overlay}>
@@ -229,87 +289,85 @@ export function DateRangePicker({
         </View>
       </Modal>
 
-      {/* Android Date Pickers */}
-      {Platform.OS === 'android' && showStartPicker && (
-        <DateTimePicker
-          value={tempStartDate}
-          mode="date"
-          display="default"
-          onChange={handleStartDateChange}
-          maximumDate={tempEndDate}
-        />
-      )}
-
-      {Platform.OS === 'android' && showEndPicker && (
-        <DateTimePicker
-          value={tempEndDate}
-          mode="date"
-          display="default"
-          onChange={handleEndDateChange}
-          minimumDate={tempStartDate}
-          maximumDate={new Date()}
-        />
-      )}
-
-      {/* iOS Date Pickers */}
-      {Platform.OS === 'ios' && showStartPicker && (
-        <Modal
-          visible={showStartPicker}
-          transparent={true}
-          animationType="slide"
-        >
-          <View style={styles.iosPickerOverlay}>
-            <View style={styles.iosPickerContainer}>
-              <View style={styles.iosPickerHeader}>
-                <TouchableOpacity onPress={() => setShowStartPicker(false)}>
-                  <Text style={styles.iosPickerButton}>Cancel</Text>
-                </TouchableOpacity>
-                <Text style={styles.iosPickerTitle}>Select Start Date</Text>
-                <TouchableOpacity onPress={() => setShowStartPicker(false)}>
-                  <Text style={styles.iosPickerButton}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={tempStartDate}
-                mode="date"
-                display="spinner"
-                onChange={handleStartDateChange}
-                maximumDate={tempEndDate}
-              />
-            </View>
+      {/* Bottom sheet solely for selecting dates; rendered within the modal overlay to ensure proper stacking */}
+      <BottomSheet
+        ref={bottomSheetRef}
+        index={-1}
+        style={styles.bottomSheetWrapper}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        onChange={(index) => {
+          if (index === -1) {
+            setShowStartPicker(false);
+            setShowEndPicker(false);
+            setActivePicker(null);
+          }
+        }}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={styles.bottomSheetBackground}
+        handleIndicatorStyle={styles.handleIndicator}
+      >
+        <BottomSheetView style={styles.sheetContent}>
+          <View style={styles.iosPickerHeader}>
+            <TouchableOpacity
+              onPress={() => {
+                // Restore snapshot for the active picker on cancel
+                if (activePicker === 'start' && sheetStartSnapshotRef.current) {
+                  setTempStartDate(sheetStartSnapshotRef.current);
+                } else if (activePicker === 'end' && sheetEndSnapshotRef.current) {
+                  setTempEndDate(sheetEndSnapshotRef.current);
+                }
+                setShowStartPicker(false);
+                setShowEndPicker(false);
+                setActivePicker(null);
+                bottomSheetRef.current?.close();
+                // Reopen the main modal without resetting temp values
+                skipResetOnOpenRef.current = true;
+                onOpen();
+              }}
+            >
+              <Text style={styles.iosPickerButton}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.iosPickerTitle}>
+              {activePicker === 'start' ? 'Select Start Date' : 'Select End Date'}
+            </Text>
+            <TouchableOpacity
+              onPress={() => {
+                setShowStartPicker(false);
+                setShowEndPicker(false);
+                setActivePicker(null);
+                bottomSheetRef.current?.close();
+                // Reopen the main modal reflecting the selected date(s)
+                skipResetOnOpenRef.current = true;
+                onOpen();
+              }}
+            >
+              <Text style={styles.iosPickerButton}>Done</Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
-      )}
 
-      {Platform.OS === 'ios' && showEndPicker && (
-        <Modal
-          visible={showEndPicker}
-          transparent={true}
-          animationType="slide"
-        >
-          <View style={styles.iosPickerOverlay}>
-            <View style={styles.iosPickerContainer}>
-              <View style={styles.iosPickerHeader}>
-                <TouchableOpacity onPress={() => setShowEndPicker(false)}>
-                  <Text style={styles.iosPickerButton}>Cancel</Text>
-                </TouchableOpacity>
-                <Text style={styles.iosPickerTitle}>Select End Date</Text>
-                <TouchableOpacity onPress={() => setShowEndPicker(false)}>
-                  <Text style={styles.iosPickerButton}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={tempEndDate}
-                mode="date"
-                display="spinner"
-                onChange={handleEndDateChange}
-                minimumDate={tempStartDate}
-                maximumDate={new Date()}
-              />
-            </View>
-          </View>
-        </Modal>
-      )}
+          {activePicker === 'start' && (
+            <DateTimePicker
+              value={tempStartDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+              onChange={handleStartDateChange}
+              maximumDate={tempEndDate}
+            />
+          )}
+
+          {activePicker === 'end' && (
+            <DateTimePicker
+              value={tempEndDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+              onChange={handleEndDateChange}
+              minimumDate={tempStartDate}
+              maximumDate={new Date()}
+            />
+          )}
+        </BottomSheetView>
+      </BottomSheet>
     </>
   );
 }
@@ -327,6 +385,27 @@ const styles = StyleSheet.create({
     padding: 24,
     width: '90%',
     maxWidth: 400,
+  },
+  bottomSheetBackground: {
+    backgroundColor: '#FFFFFF',
+  },
+  bottomSheetWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    top: 0,
+    zIndex: 9999,
+    elevation: 9999, // Android stacking
+  },
+  handleIndicator: {
+    backgroundColor: '#D1D5DB',
+    width: 40,
+    height: 4,
+  },
+  sheetContent: {
+    flex: 1,
+    padding: 16,
   },
   header: {
     flexDirection: 'row',
@@ -450,5 +529,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#111827',
+  },
+  iosInlinePickerContainer: {
+    marginTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
   },
 }); 

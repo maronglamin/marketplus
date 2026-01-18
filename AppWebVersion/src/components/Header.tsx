@@ -13,7 +13,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between p-4 bg-white shadow-sm">
       <div className="flex items-center">
-        <Link to="/home" className="flex items-center">
+        <Link to="/" className="flex items-center">
           <img
             src="/assets/icon.png"
             alt="SNAP"

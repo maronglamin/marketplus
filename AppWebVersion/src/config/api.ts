@@ -12,15 +12,21 @@ const normalizeApiBaseUrl = (raw?: string): string => {
 };
 
 const resolveDefaultBaseUrl = (): string => {
-  // Default to same-origin backend path under /api for production hosting
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return `${window.location.origin}/api`;
+  // If running in browser, decide sensible defaults for dev vs prod
+  if (typeof window !== 'undefined' && window.location) {
+    const { origin } = window.location;
+    // In development, use relative '/api' to leverage CRA proxy
+    if (process.env.NODE_ENV !== 'production') {
+      return '/api';
+    }
+    // In production, default to same-origin `/api`
+    return `${origin}/api`;
   }
   return '/api';
 };
 
 export const API_CONFIG = {
-  // Prefer explicit env; otherwise use same-origin + /api
+  // Prefer explicit env; otherwise resolve per environment
   BASE_URL: normalizeApiBaseUrl(process.env.REACT_APP_API_URL),
   TIMEOUT: 60000, // Increased to 60 seconds for payment processing
 };

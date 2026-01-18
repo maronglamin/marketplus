@@ -43,7 +43,19 @@ function App() {
       <Router>
         <Routes>
           {/* Public routes - no authentication required */}
-          <Route path="/" element={<Login />} />
+          <Route
+            path="/"
+            element={
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1 pb-16">
+                  <Home />
+                </main>
+                <BottomNavigation />
+              </div>
+            }
+          />
+          <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           
           <Route path="/transactions" element={
@@ -70,21 +82,10 @@ function App() {
             </ProtectedRoute>
           } />
           
-          {/* Protected routes - require authentication */}
-          <Route path="/home" element={
-            <ProtectedRoute>
-              <div className="flex flex-col w-full min-h-screen bg-gray-50">
-                <Header />
-                <main className="flex-1 pb-16">
-                  <Home />
-                </main>
-                <BottomNavigation />
-              </div>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/products" element={
-            <ProtectedRoute>
+          {/* Public ecommerce browsing routes */}
+          <Route
+            path="/products"
+            element={
               <div className="flex flex-col w-full min-h-screen bg-gray-50">
                 <Header />
                 <main className="flex-1">
@@ -92,11 +93,11 @@ function App() {
                 </main>
                 <BottomNavigation />
               </div>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/categories" element={
-            <ProtectedRoute>
+            }
+          />
+          <Route
+            path="/categories"
+            element={
               <div className="flex flex-col w-full min-h-screen bg-gray-50">
                 <Header />
                 <main className="flex-1">
@@ -104,11 +105,11 @@ function App() {
                 </main>
                 <BottomNavigation />
               </div>
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/product/:id" element={
-            <ProtectedRoute>
+            }
+          />
+          <Route
+            path="/product/:id"
+            element={
               <div className="flex flex-col w-full min-h-screen bg-gray-50">
                 <Header />
                 <main className="flex-1 pb-16">
@@ -116,8 +117,8 @@ function App() {
                 </main>
                 <BottomNavigation />
               </div>
-            </ProtectedRoute>
-          } />
+            }
+          />
           
           <Route path="/seller" element={
             <ProtectedRoute>
@@ -215,8 +216,9 @@ function App() {
             </ProtectedRoute>
           } />
           
-          <Route path="/products/popular" element={
-            <ProtectedRoute>
+          <Route
+            path="/products/popular"
+            element={
               <div className="flex flex-col w-full min-h-screen bg-gray-50">
                 <Header />
                 <main className="flex-1">
@@ -224,11 +226,12 @@ function App() {
                 </main>
                 <BottomNavigation />
               </div>
-            </ProtectedRoute>
-          } />
+            }
+          />
           
-          <Route path="/products/new" element={
-            <ProtectedRoute>
+          <Route
+            path="/products/new"
+            element={
               <div className="flex flex-col w-full min-h-screen bg-gray-50">
                 <Header />
                 <main className="flex-1">
@@ -236,8 +239,8 @@ function App() {
                 </main>
                 <BottomNavigation />
               </div>
-            </ProtectedRoute>
-          } />
+            }
+          />
           
           <Route path="/product/:productId/interest" element={
             <ProtectedRoute>
@@ -257,6 +260,19 @@ function App() {
                 <Header />
                 <main className="flex-1">
                   <PlaceOrder />
+                </main>
+                <BottomNavigation />
+              </div>
+            </ProtectedRoute>
+          } />
+
+          {/* Protected routes - require authentication */}
+          <Route path="/home" element={
+            <ProtectedRoute>
+              <div className="flex flex-col w-full min-h-screen bg-gray-50">
+                <Header />
+                <main className="flex-1 pb-16">
+                  <Home />
                 </main>
                 <BottomNavigation />
               </div>

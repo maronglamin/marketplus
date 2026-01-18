@@ -3,11 +3,12 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'SNAP',
-  slug: 'marketplace',
+  slug: 'snap',
   version: '1.0.1',
   orientation: 'portrait',
   icon: './assets/adaptive-icon.png',
   userInterfaceStyle: 'light',
+  scheme: 'snap',
   splash: {
     backgroundColor: '#ffffff'
   },
