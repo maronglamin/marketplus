@@ -5,11 +5,14 @@ import { sellerService } from '../api/seller';
 import { uploadService } from '../api/upload';
 import { categoryService, type Category } from '../api/products';
 import { API_CONFIG } from '../config/api';
+import { useAuth } from '../contexts/AuthContext';
 
 type ImageItem = { url: string; isPrimary: boolean };
 
 export function SellerAddProduct() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState<number>(0);
@@ -36,12 +39,16 @@ export function SellerAddProduct() {
   };
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
     const loadCategories = async () => {
       const data = await categoryService.getCategories();
       setCategories(data);
     };
     loadCategories();
-  }, []);
+  }, [isAuthenticated]);
 
   const onFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -127,6 +134,39 @@ export function SellerAddProduct() {
       setSubmitting(false);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Centered Login Prompt Modal */}
+        {showLoginModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => { setShowLoginModal(false); navigate('/'); }} />
+            <div className="relative z-10 w-full max-w-sm mx-4 bg-white rounded-2xl shadow-xl p-6">
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">Login Required</h4>
+              <p className="text-sm text-gray-600 mb-6">
+                Please log in to post an item for sale.
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => { setShowLoginModal(false); navigate('/'); }}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowLoginModal(false); navigate('/login'); }}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Login
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

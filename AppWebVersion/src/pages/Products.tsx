@@ -36,12 +36,6 @@ export function Products() {
         setError(null);
       }
 
-      // Check if user is authenticated
-      if (!user) {
-        setError('Please log in to view products');
-        return;
-      }
-
       const page = isLoadMore ? currentPage + 1 : 1;
       const limit = 20;
       
@@ -161,12 +155,10 @@ export function Products() {
       setSearchQuery(searchFromUrl);
       // Trigger immediate debounce update so initial load uses URL param
       setDebouncedSearchQuery(searchFromUrl);
-      // If user is available, immediately load with the URL search (seamless)
-      if (user) {
-        setCurrentPage(1);
-        setProducts([]);
-        loadProducts(false, searchFromUrl);
-      }
+      // Immediately load with the URL search
+      setCurrentPage(1);
+      setProducts([]);
+      loadProducts(false, searchFromUrl);
     }
   }, [searchParams, categories, user, loadProducts]);
 
@@ -212,12 +204,10 @@ export function Products() {
   }, [loadingMore, hasMore, loadProducts, scrollLock]);
 
   useEffect(() => {
-    if (user) {
-      // Reset to page 1 when filters change
-      setCurrentPage(1);
-      setProducts([]);
-      loadProducts();
-    }
+    // Reset to page 1 when filters change
+    setCurrentPage(1);
+    setProducts([]);
+    loadProducts();
   }, [user, selectedCategoryId, debouncedSearchQuery, sortBy]);
 
   // Infinite scrolling effect using both Intersection Observer and scroll fallback
@@ -343,24 +333,7 @@ export function Products() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center py-20">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h1>
-            <p className="text-gray-600 mb-8">Please log in to view featured products</p>
-            <Link
-              to="/login"
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Go to Login
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Publicly accessible; no auth gate here
 
   return (
     <div className="min-h-screen bg-gray-50">

@@ -5,6 +5,7 @@ import { kycService, type SellerKycResponse } from '../api/kyc';
 import { salesRepService, type SalesRep } from '../api/salesReps';
 import { sellerService } from '../api/seller';
 import { API_CONFIG } from '../config/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Product {
   id: string;
@@ -23,6 +24,8 @@ interface Product {
 
 export function SellerDashboard() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
@@ -84,6 +87,10 @@ export function SellerDashboard() {
   };
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
     const initialize = async () => {
       try {
         setLoading(true);
@@ -201,7 +208,7 @@ export function SellerDashboard() {
       }
     };
     initialize();
-  }, []);
+  }, [isAuthenticated]);
 
   // Handle click outside to close header menu
   useEffect(() => {
@@ -256,6 +263,39 @@ export function SellerDashboard() {
       setProducts(products.filter(product => product.id !== productId));
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Centered Login Prompt Modal */}
+        {showLoginModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => { setShowLoginModal(false); navigate('/'); }} />
+            <div className="relative z-10 w-full max-w-sm mx-4 bg-white rounded-2xl shadow-xl p-6">
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">Login Required</h4>
+              <p className="text-sm text-gray-600 mb-6">
+                Please log in to access the seller dashboard.
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => { setShowLoginModal(false); navigate('/'); }}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowLoginModal(false); navigate('/login'); }}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Login
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (loading) {
     return (

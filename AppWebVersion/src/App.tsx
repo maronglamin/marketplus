@@ -121,15 +121,13 @@ function App() {
           />
           
           <Route path="/seller" element={
-            <ProtectedRoute>
-              <div className="flex flex-col w-full min-h-screen bg-gray-50">
-                <Header />
-                <main className="flex-1 pb-16">
-                  <SellerDashboard />
-                </main>
-                <BottomNavigation />
-              </div>
-            </ProtectedRoute>
+            <div className="flex flex-col w-full min-h-screen bg-gray-50">
+              <Header />
+              <main className="flex-1 pb-16">
+                <SellerDashboard />
+              </main>
+              <BottomNavigation />
+            </div>
           } />
 
           <Route path="/seller/sales-reps" element={
@@ -145,15 +143,13 @@ function App() {
           } />
 
           <Route path="/seller/add-product" element={
-            <ProtectedRoute>
-              <div className="flex flex-col w-full min-h-screen bg-gray-50">
-                <Header />
-                <main className="flex-1 pb-16">
-                  <SellerAddProduct />
-                </main>
-                <BottomNavigation />
-              </div>
-            </ProtectedRoute>
+            <div className="flex flex-col w-full min-h-screen bg-gray-50">
+              <Header />
+              <main className="flex-1 pb-16">
+                <SellerAddProduct />
+              </main>
+              <BottomNavigation />
+            </div>
           } />
 
           <Route path="/seller/kyc" element={
