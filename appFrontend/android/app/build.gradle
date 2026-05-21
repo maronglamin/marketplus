@@ -2,22 +2,36 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// Keep the same drive/root Gradle was launched from.
+// Using canonical paths breaks Windows builds started from a subst drive (e.g. R:)
+// because other tooling may stay on R: while canonicalPath resolves to C:.
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+// Windows: hermesc must be hermesc.exe or "Failed to open file" can occur
+def isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
+def hermescBin = isWindows ? "hermesc.exe" : "hermesc"
+def reactNativePath = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath()
+
+// Optional local signing secrets (gitignored). Env vars override this file.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { stream -> keystoreProperties.load(stream) }
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
 react {
-    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
-    reactNativeDir = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
-    hermesCommand = new File(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/sdks/hermesc/%OS-BIN%/hermesc"
+    root = file(projectRoot).getAbsoluteFile()
+    // Use explicit absolute entry path to avoid Metro resolution issues on Windows (./index.ts from appFrontend/.)
+    entryFile = file(projectRoot + "/index.ts")
+    reactNativeDir = new File(reactNativePath).getAbsoluteFile()
+    hermesCommand = reactNativePath + "/sdks/hermesc/%OS-BIN%/" + hermescBin
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
-    enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
-    // Use Expo CLI to bundle the app, this ensures the Metro config
-    // works correctly with Expo projects.
-    cliFile = new File(["node", "--print", "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })"].execute(null, rootDir).text.trim())
+    // Use wrapper so bundle runs with cwd = PROJECT_ROOT (canonical path), fixing Metro ./index.ts resolution on Windows when building from C:\mp
+    cliFile = file(projectRoot + "/scripts/bundle-export-wrapper.js")
     bundleCommand = "export:embed"
 
     /* Folders */
@@ -63,6 +77,18 @@ react {
     autolinkLibrariesWithApp()
 }
 
+// Ensure bundle output dirs exist before running (helps avoid "Failed to open file" on Windows)
+tasks.findByName("createBundleReleaseJsAndAssets")?.configure { task ->
+    task.doFirst {
+        def buildDir = task.project.layout.buildDirectory.get().asFile
+        [ "generated/assets/react/Release", "generated/assets/createBundleReleaseJsAndAssets" ].each { sub ->
+            new File(buildDir, sub).mkdirs()
+        }
+    }
+    task.environment("PROJECT_ROOT", projectRoot)
+    task.environment("NODE_ENV", System.getenv("NODE_ENV") ?: "production")
+}
+
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
@@ -92,8 +118,8 @@ android {
         applicationId 'biz.cloudnexus.snap.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
-        versionName "1.0.1"
+        versionCode 15
+        versionName "1.0.2"
     }
     signingConfigs {
         debug {
@@ -104,10 +130,11 @@ android {
         }
         // Configure a release signing config if keystore properties are provided via
         // Gradle properties or environment variables. Falls back to debug if absent.
-        def releaseKeystorePath = (findProperty('MYAPP_UPLOAD_STORE_FILE') ?: System.getenv('MYAPP_UPLOAD_STORE_FILE'))
-        def releaseKeyAlias = (findProperty('MYAPP_UPLOAD_KEY_ALIAS') ?: System.getenv('MYAPP_UPLOAD_KEY_ALIAS'))
-        def releaseStorePassword = (findProperty('MYAPP_UPLOAD_STORE_PASSWORD') ?: System.getenv('MYAPP_UPLOAD_STORE_PASSWORD'))
-        def releaseKeyPassword = (findProperty('MYAPP_UPLOAD_KEY_PASSWORD') ?: System.getenv('MYAPP_UPLOAD_KEY_PASSWORD'))
+        def releaseKeystorePath = (System.getenv('MYAPP_UPLOAD_STORE_FILE') ?: keystoreProperties.getProperty('MYAPP_UPLOAD_STORE_FILE') ?: findProperty('MYAPP_UPLOAD_STORE_FILE'))
+        def releaseKeyAlias = (System.getenv('MYAPP_UPLOAD_KEY_ALIAS') ?: keystoreProperties.getProperty('MYAPP_UPLOAD_KEY_ALIAS') ?: findProperty('MYAPP_UPLOAD_KEY_ALIAS'))
+        // Passwords: env > keystore.properties only (never commit in gradle.properties)
+        def releaseStorePassword = (System.getenv('MYAPP_UPLOAD_STORE_PASSWORD') ?: keystoreProperties.getProperty('MYAPP_UPLOAD_STORE_PASSWORD'))
+        def releaseKeyPassword = (System.getenv('MYAPP_UPLOAD_KEY_PASSWORD') ?: keystoreProperties.getProperty('MYAPP_UPLOAD_KEY_PASSWORD'))
         if (releaseKeystorePath && releaseKeyAlias && releaseStorePassword && releaseKeyPassword) {
             release {
                 storeFile file(releaseKeystorePath)
@@ -190,5 +217,39 @@ dependencies {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
+    }
+}
+
+// Fail fast if the JS bundle never made it into the AAB (avoids Play-only jniLoadScriptFromAssets crashes).
+afterEvaluate {
+    def packageReleaseBundle = tasks.findByName("packageReleaseBundle")
+    if (packageReleaseBundle != null) {
+        packageReleaseBundle.doLast {
+            def aab = file("${layout.buildDirectory.get().asFile}/outputs/bundle/release/app-release.aab")
+            if (!aab.exists()) {
+                return
+            }
+            def zip = new java.util.zip.ZipFile(aab)
+            try {
+                def bundleEntry = null
+                zip.entries().each { e ->
+                    if (!e.isDirectory() && e.name.endsWith("index.android.bundle")) {
+                        bundleEntry = e
+                    }
+                }
+                if (bundleEntry == null) {
+                    throw new GradleException(
+                        "Release AAB is missing assets index.android.bundle — release builds will crash in CatalystInstanceImpl.jniLoadScriptFromAssets. Run a clean build: .\\gradlew clean :app:createBundleReleaseJsAndAssets :app:bundleRelease"
+                    )
+                }
+                if (bundleEntry.size < 1024) {
+                    throw new GradleException(
+                        "Release AAB index.android.bundle is only ${bundleEntry.size} bytes — bundle step likely failed."
+                    )
+                }
+            } finally {
+                zip.close()
+            }
+        }
     }
 }

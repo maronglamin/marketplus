@@ -178,16 +178,17 @@ export class RealTimeRideService {
    * Connect to WebSocket server
    */
   async connect(): Promise<void> {
+    const token = await getAuthToken();
+    if (!token) {
+      return;
+    }
+
     if (this.connectionPromise) {
       return this.connectionPromise;
     }
 
     this.connectionPromise = new Promise(async (resolve, reject) => {
       try {
-        const token = await getAuthToken();
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
 
         // Create socket connection
         this.socket = io(API_URL, {

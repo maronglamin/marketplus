@@ -1,78 +1,15 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
-import { Home } from './src/screens/Home';
-import { ProductDetail } from './src/screens/products/buyer/ProductDetail';
-import { ShowInterest } from './src/screens/ShowInterest';
-import { Onboarding } from './src/screens/Onboarding';
-import { SellerDashboard } from './src/screens/SellerDashboard';
-import { AddProduct } from './src/screens/add-product';
-import { Chat } from './src/screens/Chat';
-import { Notifications } from './src/screens/Notifications';
-import { Settings } from './src/screens/Settings';
-import { InterestManagement } from './src/screens/InterestManagement';
-import { AccountSettings } from './src/screens/AccountSettings';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { TokenNotificationProvider } from './src/contexts/TokenNotificationContext';
 import { useTokenNotification } from './src/contexts/TokenNotificationContext';
-import AuthNavigator from './src/navigation/AuthNavigator';
-import { FeaturedProducts } from './src/screens/products/buyer/FeaturedProducts';
-import PopularProductsScreen from './src/screens/PopularProducts';
-import NewArrivalsScreen from './src/screens/NewArrivals';
-import FeaturedByCategoriesScreen from './src/screens/FeaturedByCategories';
-import { ProductCategoryOptions } from './src/screens/ProductCategoryOptions';
-import UserSearch from './src/screens/UserSearch';
-import { ShoppingCart } from './src/screens/ShoppingCart';
-import { CustomerRides } from './src/screens/CustomerRides';
-import { CustomerRideHistory } from './src/screens/CustomerRideHistory';
-import { ProductListing } from './src/screens/products/buyer/ProductListing';
-import { CustomerRideService } from './src/screens/CustomerRideService';
-import { ChatList } from './src/screens/ChatList';
-import RentalRequest from './src/screens/RentalRequest';
-import { Order } from './src/screens/Order';
-import { OrderDetails } from './src/screens/OrderDetails';
-import { CustomerOrders } from './src/screens/CustomerOrders';
-import ChangePin from './src/screens/ChangePin';
-import { RideRequest } from './src/screens/RideRequest';
-import { BecomeRider } from './src/screens/riders/BecomeRider';
-import { SalesRepsScreen } from './src/screens/SalesRepsScreen';
-import { ReportsScreen } from './src/screens/ReportsScreen';
-import { SettlementsScreen } from './src/screens/SettlementsScreen';
-import { BranchesScreen } from './src/screens/reps-reports/BranchesScreen';
-import { RevenueDetails } from './src/screens/RevenueDetails';
-import { TransactionHistory } from './src/screens/transactions/TransactionHistory';
-import { SettlementHistory } from './src/screens/transactions/SettlementHistory';
-import { SellerInterestDetail } from './src/screens/SellerInterestDetail';
-import { SettlementRequest } from './src/screens/transactions/SettlementRequest';
-import { TransactionDetail } from './src/screens/transactions/TransactionDetail';
-import { DriverDashboard } from './src/screens/DriverDashboard';
-import { DriverSettings } from './src/screens/driverManagement/DriverSettings';
-import { DriverProfile } from './src/screens/driverManagement/DriverProfile';
-import { DriverEarnings } from './src/screens/DriverEarnings';
-import { DriverRequests } from './src/screens/DriverRequests';
-import { RentalEarnings } from './src/screens/RentalEarnings';
-import AssetRental from './src/screens/AssetRental';
-import NewPin from './src/screens/NewPin';
-import ConfirmPin from './src/screens/ConfirmPin';
-import PermissionsScreen from './src/screens/account-settings/Permissions';
-import { PaymentMethods } from './src/screens/account-settings/PaymentMethods';
-import Delivery from './src/screens/account-settings/Delivery';
-import { ServiceTerms } from './src/screens/account-settings/ServiceTerms';
-import PrivacyPolicy from './src/screens/PrivacyPolicy';
-import { AccountDeletion } from './src/screens/account-settings/AccountDeletion';
-import { AccountType } from './src/screens/account-settings/AccountType';
 import * as ExpoNotifications from 'expo-notifications';
 import { realTimeRideService } from './src/services/realTimeRideService';
-import { SellerKycForm } from './src/screens/SellerKycForm';
-import { SellerKycBusiness } from './src/screens/SellerKycBusiness';
-import { SellerKycAddress } from './src/screens/SellerKycAddress';
-import { SellerKycVerification } from './src/screens/SellerKycVerification';
-import { SellerKycConfirmation } from './src/screens/SellerKycConfirmation';
-import { SellerKycResponse } from './src/services/kycService';
-import { useEffect } from 'react';
+import type { SellerKycResponse } from './src/services/kycService';
 import { Platform, StatusBar, View } from 'react-native';
 import { enableScreens } from 'react-native-screens';
 
@@ -208,61 +145,62 @@ const MainStack = createNativeStackNavigator<MainStackParamList>();
 
 function NotificationHandler() {
   const { showTokenNotification } = useTokenNotification();
-  const { user } = useAuth();
+  const { user, token, isLoading } = useAuth();
 
   useEffect(() => {
-    // Connect to WebSocket service
-    const connectWebSocket = async () => {
-      try {
-        await realTimeRideService.connect();
-        console.log('✅ WebSocket connected for ride token notifications');
-      } catch (error) {
-        console.error('❌ Failed to connect WebSocket:', error);
-      }
-    };
+    if (isLoading) {
+      return;
+    }
 
-    connectWebSocket();
+    let unsubscribeRideToken: (() => void) | undefined;
 
-    // Subscribe to ride token notifications via WebSocket
-    const unsubscribeRideToken = realTimeRideService.onRideToken((notification) => {
-      console.log('🎫 WebSocket ride token notification received:', notification);
-      
-      // Show the floating notification for the customer
-      showTokenNotification({
-        token: notification.data.token,
-        rideId: notification.rideId,
-        customerName: 'You', // This is for the customer
-        customerId: user?.id || 'current-user', // Use actual user ID
-        driverName: notification.data.driverName,
-        expiresAt: notification.data.expiresAt,
+    if (token) {
+      unsubscribeRideToken = realTimeRideService.onRideToken((notification) => {
+        console.log('🎫 WebSocket ride token notification received:', notification);
+
+        showTokenNotification({
+          token: notification.data.token,
+          rideId: notification.rideId,
+          customerName: 'You',
+          customerId: user?.id || 'current-user',
+          driverName: notification.data.driverName,
+          expiresAt: notification.data.expiresAt,
+        });
       });
-    });
 
-    // Keep push notification listener as fallback
+      void (async () => {
+        try {
+          await realTimeRideService.connect();
+          console.log('✅ WebSocket connected for ride token notifications');
+        } catch (error) {
+          console.error('❌ Failed to connect WebSocket:', error);
+        }
+      })();
+    }
+
     const subscription = ExpoNotifications.addNotificationReceivedListener((notification: ExpoNotifications.Notification) => {
       const data = notification.request.content.data as any;
-      
+
       if (data?.type === 'ride_token') {
         console.log('📱 Push notification ride token received (fallback):', data);
-        
-        // Show the floating notification for the customer
+
         showTokenNotification({
           token: data.token,
           rideId: data.rideId,
-          customerName: 'You', // This is for the customer
-          customerId: user?.id || 'current-user', // Use actual user ID
+          customerName: 'You',
+          customerId: user?.id || 'current-user',
           driverName: data.driverName,
-          expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 minutes from now
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
         });
       }
     });
 
     return () => {
       subscription.remove();
-      unsubscribeRideToken();
+      unsubscribeRideToken?.();
       realTimeRideService.disconnect();
     };
-  }, [showTokenNotification, user?.id]);
+  }, [showTokenNotification, user?.id, token, isLoading]);
 
   return null;
 }
@@ -276,71 +214,71 @@ function MainNavigator() {
         animationDuration: 200,
       }}
     >
-      <MainStack.Screen name="Home" component={Home} />
-      <MainStack.Screen name="AccountSettings" component={AccountSettings} />
-      <MainStack.Screen name="ProductDetail" component={ProductDetail} />
-      <MainStack.Screen name="Order" component={Order} />
-      <MainStack.Screen name="OrderDetails" component={OrderDetails} />
-      <MainStack.Screen name="ShowInterest" component={ShowInterest} />
-      <MainStack.Screen name="SellerDashboard" component={SellerDashboard} />
-      <MainStack.Screen name="AddProduct" component={AddProduct} />
-      <MainStack.Screen name="Chat" component={Chat} />
-      <MainStack.Screen name="Notifications" component={Notifications} />
-      <MainStack.Screen name="Settings" component={Settings} />
-      <MainStack.Screen name="InterestManagement" component={InterestManagement} />
-      <MainStack.Screen name="FeaturedProducts" component={FeaturedProducts} />
-      <MainStack.Screen name="PopularProducts" component={PopularProductsScreen} />
-      <MainStack.Screen name="NewArrivals" component={NewArrivalsScreen} />
-      <MainStack.Screen name="FeaturedByCategories" component={FeaturedByCategoriesScreen} />
-      <MainStack.Screen name="ProductCategoryOptions" component={ProductCategoryOptions} />
-      <MainStack.Screen name="UserSearch" component={UserSearch} />
-      <MainStack.Screen name="ShoppingCart" component={ShoppingCart} />
-      <MainStack.Screen name="CustomerRides" component={CustomerRides} />
-      <MainStack.Screen name="CustomerRideHistory" component={CustomerRideHistory} />
-      <MainStack.Screen name="ProductListing" component={ProductListing} />
-      <MainStack.Screen name="CustomerRideService" component={CustomerRideService} />
-      <MainStack.Screen name="ChatList" component={ChatList} />
-      <MainStack.Screen name="RentalRequest" component={RentalRequest} />
-      <MainStack.Screen name="RideRequest" component={RideRequest} />
-      <MainStack.Screen name="BecomeRider" component={BecomeRider} />
+      <MainStack.Screen name="Home" getComponent={() => require('./src/screens/Home').Home} />
+      <MainStack.Screen name="AccountSettings" getComponent={() => require('./src/screens/AccountSettings').AccountSettings} />
+      <MainStack.Screen name="ProductDetail" getComponent={() => require('./src/screens/products/buyer/ProductDetail').ProductDetail} />
+      <MainStack.Screen name="Order" getComponent={() => require('./src/screens/Order').Order} />
+      <MainStack.Screen name="OrderDetails" getComponent={() => require('./src/screens/OrderDetails').OrderDetails} />
+      <MainStack.Screen name="ShowInterest" getComponent={() => require('./src/screens/ShowInterest').ShowInterest} />
+      <MainStack.Screen name="SellerDashboard" getComponent={() => require('./src/screens/SellerDashboard').SellerDashboard} />
+      <MainStack.Screen name="AddProduct" getComponent={() => require('./src/screens/add-product').AddProduct} />
+      <MainStack.Screen name="Chat" getComponent={() => require('./src/screens/Chat').Chat} />
+      <MainStack.Screen name="Notifications" getComponent={() => require('./src/screens/Notifications').Notifications} />
+      <MainStack.Screen name="Settings" getComponent={() => require('./src/screens/Settings').Settings} />
+      <MainStack.Screen name="InterestManagement" getComponent={() => require('./src/screens/InterestManagement').InterestManagement} />
+      <MainStack.Screen name="FeaturedProducts" getComponent={() => require('./src/screens/products/buyer/FeaturedProducts').FeaturedProducts} />
+      <MainStack.Screen name="PopularProducts" getComponent={() => require('./src/screens/PopularProducts').default} />
+      <MainStack.Screen name="NewArrivals" getComponent={() => require('./src/screens/NewArrivals').default} />
+      <MainStack.Screen name="FeaturedByCategories" getComponent={() => require('./src/screens/FeaturedByCategories').default} />
+      <MainStack.Screen name="ProductCategoryOptions" getComponent={() => require('./src/screens/ProductCategoryOptions').ProductCategoryOptions} />
+      <MainStack.Screen name="UserSearch" getComponent={() => require('./src/screens/UserSearch').default} />
+      <MainStack.Screen name="ShoppingCart" getComponent={() => require('./src/screens/ShoppingCart').ShoppingCart} />
+      <MainStack.Screen name="CustomerRides" getComponent={() => require('./src/screens/CustomerRides').CustomerRides} />
+      <MainStack.Screen name="CustomerRideHistory" getComponent={() => require('./src/screens/CustomerRideHistory').CustomerRideHistory} />
+      <MainStack.Screen name="ProductListing" getComponent={() => require('./src/screens/products/buyer/ProductListing').ProductListing} />
+      <MainStack.Screen name="CustomerRideService" getComponent={() => require('./src/screens/CustomerRideService').CustomerRideService} />
+      <MainStack.Screen name="ChatList" getComponent={() => require('./src/screens/ChatList').ChatList} />
+      <MainStack.Screen name="RentalRequest" getComponent={() => require('./src/screens/RentalRequest').default} />
+      <MainStack.Screen name="RideRequest" getComponent={() => require('./src/screens/RideRequest').RideRequest} />
+      <MainStack.Screen name="BecomeRider" getComponent={() => require('./src/screens/riders/BecomeRider').BecomeRider} />
       {/* Account & settings related routes (require login via upstream guards) */}
-      <MainStack.Screen name="CustomerOrders" component={CustomerOrders} />
-      <MainStack.Screen name="ChangePin" component={ChangePin} />
-      <MainStack.Screen name="NewPin" component={NewPin} />
-      <MainStack.Screen name="ConfirmPin" component={ConfirmPin} />
-      <MainStack.Screen name="Permissions" component={PermissionsScreen} />
-      <MainStack.Screen name="PaymentMethods" component={PaymentMethods} />
-      <MainStack.Screen name="Delivery" component={Delivery} />
+      <MainStack.Screen name="CustomerOrders" getComponent={() => require('./src/screens/CustomerOrders').CustomerOrders} />
+      <MainStack.Screen name="ChangePin" getComponent={() => require('./src/screens/ChangePin').default} />
+      <MainStack.Screen name="NewPin" getComponent={() => require('./src/screens/NewPin').default} />
+      <MainStack.Screen name="ConfirmPin" getComponent={() => require('./src/screens/ConfirmPin').default} />
+      <MainStack.Screen name="Permissions" getComponent={() => require('./src/screens/account-settings/Permissions').default} />
+      <MainStack.Screen name="PaymentMethods" getComponent={() => require('./src/screens/account-settings/PaymentMethods').PaymentMethods} />
+      <MainStack.Screen name="Delivery" getComponent={() => require('./src/screens/account-settings/Delivery').default} />
       {/* Route notifications settings to Permissions to manage OS-level permissions */}
-      <MainStack.Screen name="NotificationsSettings" component={PermissionsScreen} />
-      <MainStack.Screen name="ServiceTerms" component={ServiceTerms} />
-      <MainStack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
-      <MainStack.Screen name="AccountDeletion" component={AccountDeletion} />
-      <MainStack.Screen name="AccountType" component={AccountType} />
+      <MainStack.Screen name="NotificationsSettings" getComponent={() => require('./src/screens/account-settings/Permissions').default} />
+      <MainStack.Screen name="ServiceTerms" getComponent={() => require('./src/screens/account-settings/ServiceTerms').ServiceTerms} />
+      <MainStack.Screen name="PrivacyPolicy" getComponent={() => require('./src/screens/PrivacyPolicy').default} />
+      <MainStack.Screen name="AccountDeletion" getComponent={() => require('./src/screens/account-settings/AccountDeletion').AccountDeletion} />
+      <MainStack.Screen name="AccountType" getComponent={() => require('./src/screens/account-settings/AccountType').AccountType} />
       {/* Seller/Rep management screens */}
-      <MainStack.Screen name="SalesRepsScreen" component={SalesRepsScreen} />
-      <MainStack.Screen name="ReportsScreen" component={ReportsScreen} />
-      <MainStack.Screen name="SettlementsScreen" component={SettlementsScreen} />
-      <MainStack.Screen name="BranchesScreen" component={BranchesScreen} />
-      <MainStack.Screen name="RevenueDetails" component={RevenueDetails} />
-      <MainStack.Screen name="TransactionHistory" component={TransactionHistory} />
-      <MainStack.Screen name="SettlementHistory" component={SettlementHistory} />
-      <MainStack.Screen name="SellerInterestDetail" component={SellerInterestDetail} />
-      <MainStack.Screen name="SettlementRequest" component={SettlementRequest} />
-      <MainStack.Screen name="TransactionDetail" component={TransactionDetail} />
-      <MainStack.Screen name="DriverDashboard" component={DriverDashboard} />
-      <MainStack.Screen name="DriverSettings" component={DriverSettings} />
-      <MainStack.Screen name="DriverProfile" component={DriverProfile} />
-      <MainStack.Screen name="DriverEarnings" component={DriverEarnings} />
-      <MainStack.Screen name="DriverRequests" component={DriverRequests} />
-      <MainStack.Screen name="RentalEarnings" component={RentalEarnings} />
-      <MainStack.Screen name="AssetRental" component={AssetRental} />
+      <MainStack.Screen name="SalesRepsScreen" getComponent={() => require('./src/screens/SalesRepsScreen').SalesRepsScreen} />
+      <MainStack.Screen name="ReportsScreen" getComponent={() => require('./src/screens/ReportsScreen').ReportsScreen} />
+      <MainStack.Screen name="SettlementsScreen" getComponent={() => require('./src/screens/SettlementsScreen').SettlementsScreen} />
+      <MainStack.Screen name="BranchesScreen" getComponent={() => require('./src/screens/reps-reports/BranchesScreen').BranchesScreen} />
+      <MainStack.Screen name="RevenueDetails" getComponent={() => require('./src/screens/RevenueDetails').RevenueDetails} />
+      <MainStack.Screen name="TransactionHistory" getComponent={() => require('./src/screens/transactions/TransactionHistory').TransactionHistory} />
+      <MainStack.Screen name="SettlementHistory" getComponent={() => require('./src/screens/transactions/SettlementHistory').SettlementHistory} />
+      <MainStack.Screen name="SellerInterestDetail" getComponent={() => require('./src/screens/SellerInterestDetail').SellerInterestDetail} />
+      <MainStack.Screen name="SettlementRequest" getComponent={() => require('./src/screens/transactions/SettlementRequest').SettlementRequest} />
+      <MainStack.Screen name="TransactionDetail" getComponent={() => require('./src/screens/transactions/TransactionDetail').TransactionDetail} />
+      <MainStack.Screen name="DriverDashboard" getComponent={() => require('./src/screens/DriverDashboard').DriverDashboard} />
+      <MainStack.Screen name="DriverSettings" getComponent={() => require('./src/screens/driverManagement/DriverSettings').DriverSettings} />
+      <MainStack.Screen name="DriverProfile" getComponent={() => require('./src/screens/driverManagement/DriverProfile').DriverProfile} />
+      <MainStack.Screen name="DriverEarnings" getComponent={() => require('./src/screens/DriverEarnings').DriverEarnings} />
+      <MainStack.Screen name="DriverRequests" getComponent={() => require('./src/screens/DriverRequests').DriverRequests} />
+      <MainStack.Screen name="RentalEarnings" getComponent={() => require('./src/screens/RentalEarnings').RentalEarnings} />
+      <MainStack.Screen name="AssetRental" getComponent={() => require('./src/screens/AssetRental').default} />
       {/* Seller KYC flow */}
-      <MainStack.Screen name="SellerKycForm" component={SellerKycForm} />
-      <MainStack.Screen name="SellerKycBusiness" component={SellerKycBusiness} />
-      <MainStack.Screen name="SellerKycAddress" component={SellerKycAddress} />
-      <MainStack.Screen name="SellerKycVerification" component={SellerKycVerification} />
-      <MainStack.Screen name="SellerKycConfirmation" component={SellerKycConfirmation} />
+      <MainStack.Screen name="SellerKycForm" getComponent={() => require('./src/screens/SellerKycForm').SellerKycForm} />
+      <MainStack.Screen name="SellerKycBusiness" getComponent={() => require('./src/screens/SellerKycBusiness').SellerKycBusiness} />
+      <MainStack.Screen name="SellerKycAddress" getComponent={() => require('./src/screens/SellerKycAddress').SellerKycAddress} />
+      <MainStack.Screen name="SellerKycVerification" getComponent={() => require('./src/screens/SellerKycVerification').SellerKycVerification} />
+      <MainStack.Screen name="SellerKycConfirmation" getComponent={() => require('./src/screens/SellerKycConfirmation').SellerKycConfirmation} />
     </MainStack.Navigator>
   );
 }
@@ -371,8 +309,8 @@ export default function App() {
                       },
                     }}
                   >
-                    <RootStack.Screen name="Onboarding" component={Onboarding} />
-                    <RootStack.Screen name="Auth" component={AuthNavigator} />
+                    <RootStack.Screen name="Onboarding" getComponent={() => require('./src/screens/Onboarding').Onboarding} />
+                    <RootStack.Screen name="Auth" getComponent={() => require('./src/navigation/AuthNavigator').default} />
                     <RootStack.Screen name="Main" component={MainNavigator} />
                   </RootStack.Navigator>
                 </NavigationContainer>

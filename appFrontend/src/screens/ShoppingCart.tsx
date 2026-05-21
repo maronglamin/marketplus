@@ -29,8 +29,9 @@ import YonnaPaymentModal from '../components/YonnaPaymentModal';
 import { YonnaForexPaymentService } from '../services/YonnaForexPaymentService';
 import WavePaymentService from '../services/WavePaymentService';
 import { Image } from 'react-native';
-import waveImg from '../../assets/wave.jpg';
-import YonnaWalletIcon from '../../assets/yonna_wallet.svg';
+
+const waveImg = require('../../assets/wave.jpg');
+const YonnaWalletIcon = require('../../assets/yonna_wallet.svg').default;
 
 
 type ShoppingCartNavigation = NativeStackNavigationProp<AppStackParamList, 'ShoppingCart'>;

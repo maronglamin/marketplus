@@ -8,8 +8,17 @@ buildscript {
   dependencies {
     classpath('com.android.tools.build:gradle')
     classpath('com.facebook.react:react-native-gradle-plugin')
-    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24')
   }
+}
+
+ext {
+  buildToolsVersion = findProperty('android.buildToolsVersion') ?: '35.0.0'
+  minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
+  compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '35')
+  targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '35')
+  ndkVersion = findProperty('android.ndkVersion') ?: '26.1.10909125'
+  kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.24'
 }
 
 def reactNativeAndroidDir = new File(
@@ -33,5 +42,66 @@ allprojects {
   }
 }
 
-apply plugin: "expo-root-project"
+subprojects { subproject ->
+  subproject.tasks.matching { task ->
+    task.name == "extractReleaseAnnotations"
+  }.configureEach { task ->
+    task.enabled = false
+  }
+
+  def ensureTypedefsFileTask = subproject.tasks.register("ensureTypedefsFileForRelease") {
+    doLast {
+      def typedefFile = new File(
+        subproject.buildDir,
+        "intermediates/annotations_typedef_file/release/extractReleaseAnnotations/typedefs.txt"
+      )
+      if (!typedefFile.parentFile.exists()) {
+        typedefFile.parentFile.mkdirs()
+      }
+      if (!typedefFile.exists()) {
+        typedefFile.text = ""
+      }
+    }
+  }
+  subproject.tasks.matching { task ->
+    task.name == "syncReleaseLibJars"
+  }.configureEach { task ->
+    task.dependsOn(ensureTypedefsFileTask)
+  }
+
+  // Local Gradle release builds often omit NODE_ENV; without it, app.config.ts sees isProductionBuild
+  // as false and expo-constants embeds the wrong config shape — linked to release jniLoadScriptFromAssets failures.
+  subproject.afterEvaluate {
+    subproject.tasks.withType(org.gradle.api.tasks.Exec).configureEach { task ->
+      if (task.name == "createExpoConfig") {
+        task.environment("NODE_ENV", System.getenv("NODE_ENV") ?: "production")
+      }
+    }
+  }
+
+  if (System.getProperty("os.name").toLowerCase().contains("windows") &&
+      subproject.name == "react-native-screens") {
+    // Windows can get stuck cleaning stale CMake state for removed ABIs
+    // (e.g. old armeabi-v7a caches) with "build.ninja still dirty after 100 tries".
+    // Skipping the library's external native clean tasks avoids that clean-only failure
+    // while still allowing the actual release build to regenerate native outputs.
+    subproject.tasks.matching { task ->
+      task.name.startsWith("externalNativeBuildClean")
+    }.configureEach { task ->
+      task.enabled = false
+    }
+  }
+
+  // Expo SDK 52 uses Compose compiler 1.5.14 in expo-modules-core.
+  // On this toolchain Kotlin resolves to 1.9.25, so suppress the strict version gate.
+  subproject.plugins.withId("org.jetbrains.kotlin.android") {
+    subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { task ->
+      task.kotlinOptions.freeCompilerArgs += [
+        "-P",
+        "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.25"
+      ]
+    }
+  }
+}
+
 apply plugin: "com.facebook.react.rootproject"

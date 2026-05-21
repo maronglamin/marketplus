@@ -5,3 +5,7 @@ appBackend/uploads/
 .env.*
 !**/.env.example
 AppWebVersion/build/
+# Android local config (SDK path)
+**/android/local.properties
+# Android release signing secrets (copy from keystore.properties.example)
+**/android/keystore.properties

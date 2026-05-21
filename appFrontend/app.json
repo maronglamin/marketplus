@@ -2,11 +2,11 @@
   "expo": {
     "name": "SNAP",
     "slug": "snap",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/luncher.jpg",
+    "icon": "./assets/adaptive-icon-foreground.png",
     "userInterfaceStyle": "light",
-    "jsEngine": "hermes",
+    "jsEngine": "jsc",
     "splash": {
       "backgroundColor": "#ffffff",
       "resizeMode": "contain"
@@ -14,7 +14,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "biz.cloudnexus.snap.app",
-      "jsEngine": "hermes",
+      "jsEngine": "jsc",
       "infoPlist": {
         "NSCameraUsageDescription": "We use your camera so you can take a profile photo and capture ID/registration documents required for identity verification (KYC) and account approval. Access is requested only when you choose “Take Photo” in Account Settings or during verification, and is not used in the background.",
         "NSPhotoLibraryUsageDescription": "We use your photo library so you can choose an existing picture for your profile and upload ID/registration images needed to verify your identity and manage your account. Access is requested only when you select “Choose from Library” and is not used in the background.",
@@ -35,7 +35,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "biz.cloudnexus.snap.app",
-      "jsEngine": "hermes",
+      "jsEngine": "jsc",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -92,16 +92,6 @@
     },
     "assetBundlePatterns": [
       "**/*"
-    ],
-    "fonts": [
-      {
-        "asset": "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/AntDesign.ttf",
-        "family": "AntDesign"
-      },
-      {
-        "asset": "node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf",
-        "family": "Ionicons"
-      }
     ]
   }
 } 

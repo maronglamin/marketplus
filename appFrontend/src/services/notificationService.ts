@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from '../api/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -60,8 +61,17 @@ class NotificationService {
       }
 
       // Get the token
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        Constants.easConfig?.projectId;
+
+      if (!projectId) {
+        console.log('Missing Expo project ID for push notifications');
+        return null;
+      }
+
       const token = await Notifications.getExpoPushTokenAsync({
-        projectId: 'marketplace-c20bf',
+        projectId,
       });
 
       this.token = token.data;

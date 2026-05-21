@@ -1,13 +1,5 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Login } from '../screens/Login';
-import { PinVerification } from '../screens/PinVerification';
-import { UserRegistration } from '../screens/UserRegistration';
-import { LoginPin } from '../screens/LoginPin';
-import ChangePin from '../screens/ChangePin';
-import NewPin from '../screens/NewPin';
-import ConfirmPin from '../screens/ConfirmPin';
-import { AppNavigator } from './AppNavigator';
 
 export type AuthStackParamList = {
   Login: undefined;
@@ -45,14 +37,14 @@ const AuthNavigator = () => {
         animation: 'none',
       }}
     >
-      <Stack.Screen name="Login" component={Login} />
-      <Stack.Screen name="PinVerification" component={PinVerification} />
-      <Stack.Screen name="UserRegistration" component={UserRegistration} />
-      <Stack.Screen name="LoginPin" component={LoginPin} />
-      <Stack.Screen name="ChangePin" component={ChangePin} />
-      <Stack.Screen name="NewPin" component={NewPin} />
-      <Stack.Screen name="ConfirmPin" component={ConfirmPin} />
-      <Stack.Screen name="App" component={AppNavigator} />
+      <Stack.Screen name="Login" getComponent={() => require('../screens/Login').Login} />
+      <Stack.Screen name="PinVerification" getComponent={() => require('../screens/PinVerification').PinVerification} />
+      <Stack.Screen name="UserRegistration" getComponent={() => require('../screens/UserRegistration').UserRegistration} />
+      <Stack.Screen name="LoginPin" getComponent={() => require('../screens/LoginPin').LoginPin} />
+      <Stack.Screen name="ChangePin" getComponent={() => require('../screens/ChangePin').default} />
+      <Stack.Screen name="NewPin" getComponent={() => require('../screens/NewPin').default} />
+      <Stack.Screen name="ConfirmPin" getComponent={() => require('../screens/ConfirmPin').default} />
+      <Stack.Screen name="App" getComponent={() => require('./AppNavigator').AppNavigator} />
     </Stack.Navigator>
   );
 };
