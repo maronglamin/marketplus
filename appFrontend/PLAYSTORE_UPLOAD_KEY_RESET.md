@@ -1,52 +1,81 @@
 # Play Store upload key reset
 
-Use this when you need to **request an upload key reset** for the app in Google Play Console (e.g. lost key or rotating keys).
+Use this when you need to **request an upload key reset** in Google Play Console (e.g. new dev machine, lost key).
 
-## 1. Have your upload keystore ready
+## 1. Generate upload keystore (new machine)
 
-- **Already generated**: If `android/app/upload-keystore.jks` exists (e.g. from running `generate-upload-keystore.ps1`), skip to step 2.
-- **If you still have the key**: Copy `upload-keystore.jks` into `android/app/` (same folder as `debug.keystore`).
-- **If you need a new key**: Run from project root:
+From `appFrontend/android/app`:
 
-  ```powershell
-  cd appFrontend\android\app
-  .\generate-upload-keystore.ps1
-  ```
-
-  Or with a password (non-interactive): `$env:UPLOAD_KEYSTORE_PASSWORD = "YourSecurePassword"; .\generate-upload-keystore.ps1`
-
-  **Important:** If the keystore was created with the default temp password, change it before production:
-  `keytool -storepasswd -keystore upload-keystore.jks` and `keytool -keypasswd -keystore upload-keystore.jks -alias upload`. Store passwords securely; you need them for release builds.
-
-## 2. Export the certificate to PEM
-
-From project root:
-
-```powershell
-cd appFrontend\android\app
-keytool -export -rfc -keystore upload-keystore.jks -alias upload -file upload_certificate.pem
+```bash
+export UPLOAD_KEYSTORE_PASSWORD='your-secure-password'
+./generate-upload-keystore.sh
 ```
 
-Or run the script (with the keystore already in `android/app/`):
+If `upload-keystore.jks` already exists, delete it only when you intend to create a **new** key (you will need a Play upload key reset again).
 
-```powershell
-.\appFrontend\android\app\export-upload-cert.ps1
+Scripts pick up Java from `JAVA_HOME`, Android Studio JBR, or Homebrew OpenJDK 17.
+
+## 2. Export certificate (PEM)
+
+```bash
+export UPLOAD_KEYSTORE_PASSWORD='your-secure-password'   # same as step 1
+./export-upload-cert.sh
 ```
 
-You’ll be prompted for the keystore password. This creates `upload_certificate.pem` in `android/app/`.
+Creates `upload_certificate.pem` in `android/app/`.
 
-## 3. Request the reset in Play Console
+## 3. Request reset in Play Console
 
-1. Open [Google Play Console](https://play.google.com/console) and select the app.
-2. Go to **Setup** → **App signing** (under “Release”).
-3. Under **App signing key** or **Upload key**, choose **Request upload key reset** (or similar).
-4. Follow the flow and **upload `upload_certificate.pem`** when asked.
-5. After Google approves, use this keystore (and the same alias `upload`) for all release builds you upload to Play.
+Google no longer always shows **Request upload key reset** on the App signing page. As account owner, use the **help form** (official path):
 
-## 4. Use the upload key in release builds (optional)
+1. Open [Play Console Help & support](https://play.google.com/console/developers/help-and-support) (left menu: **Help** → **Contact support**, or the ? icon).
+2. Choose **Publishing** / **App signing** (wording varies) → topic about **lost or compromised upload key** / **upload key reset**.
+3. Select app **SNAP** (`biz.cloudnexus.snap.app`).
+4. When asked, upload `android/app/upload_certificate.pem`.
+5. Wait for Google’s email (often 24–48 hours). After approval, use this keystore for all uploads.
 
-To sign release builds with this keystore, add a `release` signing config in `android/app/build.gradle` that points to `upload-keystore.jks` and alias `upload`, and set `release { signingConfig = ... }` to use it. Keep passwords in environment variables or a secure store, not in the repo.
+**Where to view keys (not where you reset):**
+
+- Left menu: **Test and release** (or **Release**) → **App integrity** → **App signing**  
+  or: **Protected with Play** → **Play Store distribution** → **Go to Play app signing**
+- You should see **App signing key** (Google holds) and **Upload key certificate** (your uploads). There may be no reset button here — that is normal.
+
+**If you don’t see App signing at all:** the app may not be enrolled in Play App Signing yet, or you need permission **Release to production, exclude devices, and use Play App Signing**.
+
+## 4. Release signing for local `bundleRelease`
+
+Copy the example and set passwords (file is gitignored):
+
+```bash
+cp android/keystore.properties.example android/keystore.properties
+# edit MYAPP_UPLOAD_* passwords
+```
+
+`gradle.properties` already points at `upload-keystore.jks` and alias `upload`. Passwords can also come from env:
+
+```bash
+export MYAPP_UPLOAD_STORE_PASSWORD='...'
+export MYAPP_UPLOAD_KEY_PASSWORD='...'
+```
+
+## 5. Install NDK (required before bundle build)
+
+Install **NDK 26.1.10909125** via Android Studio: **Settings → Android SDK → SDK Tools → NDK (Side by side)**.  
+Command-line `sdkmanager` installs were interrupted on this machine; use Studio if the NDK folder only contains `.installer`.
+
+## 6. Build release AAB
+
+```bash
+cd appFrontend/android
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export NODE_ENV=production
+./gradlew clean :app:bundleRelease
+```
+
+Output: `app/build/outputs/bundle/release/app-release.aab`
+
+Or from `appFrontend`: `npm run android:bundle`
 
 ---
 
-**Security:** Do not commit `upload-keystore.jks` or `upload_certificate.pem` to version control. Add them to `.gitignore` if they live under the project directory.
+**Security:** Do not commit `upload-keystore.jks`, `upload_certificate.pem`, or `keystore.properties`. They are covered by `.gitignore` / `*.jks` / `*.pem`.

@@ -10,6 +10,7 @@ import {
   Animated,
   Dimensions,
   Modal,
+  ScrollView,
 } from 'react-native'
 import { ShoppingBag, ShoppingCart, Heart, CreditCard, Car } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
@@ -27,6 +28,7 @@ export function Onboarding() {
   const [displayText, setDisplayText] = useState('')
   const fadeAnim = useRef(new Animated.Value(0)).current
   const { width } = Dimensions.get('window')
+  const logoSize = Math.max(84, Math.min(120, Math.round(width * 0.28)))
   const [servicePickerVisible, setServicePickerVisible] = useState(false)
   const [selectedServices, setSelectedServices] = useState({
     ecommerce: true, // default allow browse
@@ -130,77 +132,84 @@ export function Onboarding() {
       />
       {/* Simplified background for a professional, minimal look */}
 
-      <View style={styles.content}>
-        <View style={styles.logoContainer}>
-          {imageError ? (
-            <ShoppingBag size={80} color="#2563EB" />
-          ) : (
-            <Image
-              source={require('../../assets/icon.png')}
-              style={styles.logoImage}
-              resizeMode="contain"
-              onError={(error) => {
-                console.error('Failed to load logo icon:', error.nativeEvent.error);
-                setImageError(true);
-              }}
-            />
-          )}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <View style={styles.content}>
+          <View style={styles.logoContainer}>
+            {imageError ? (
+              <ShoppingBag size={logoSize} color="#2563EB" />
+            ) : (
+              <Image
+                source={require('../../assets/icon.png')}
+                style={[styles.logoImage, { width: logoSize, height: logoSize }]}
+                resizeMode="contain"
+                onError={(error) => {
+                  console.error('Failed to load logo icon:', error.nativeEvent.error);
+                  setImageError(true);
+                }}
+              />
+            )}
+          </View>
+
+          <Text style={styles.mainTitle}>SNAP</Text>
+          <Text style={styles.subtitle}>Commerce and mobility — unified for speed and trust.</Text>
+
+          <View style={styles.featureChips}>
+            {features.map((f, idx) => (
+              <View key={idx} style={styles.chip}>
+                <View style={styles.chipIconBox}>
+                  <f.Icon size={18} color="#2563EB" />
+                </View>
+                <View style={styles.chipTexts}>
+                  <Text style={styles.chipTitle}>{f.title}</Text>
+                  <Text style={styles.chipDesc}>{f.description}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
         </View>
 
-        <Text style={styles.mainTitle}>SNAP</Text>
-        <Text style={styles.subtitle}>Commerce and mobility — unified for speed and trust.</Text>
-
-        <View style={styles.featureChips}>
-          {features.map((f, idx) => (
-            <View key={idx} style={styles.chip}>
-              <View style={styles.chipIconBox}>
-                <f.Icon size={18} color="#2563EB" />
-              </View>
-              <View style={styles.chipTexts}>
-                <Text style={styles.chipTitle}>{f.title}</Text>
-                <Text style={styles.chipDesc}>{f.description}</Text>
-              </View>
-            </View>
-          ))}
+        <View style={styles.footer}>
+          <Text style={styles.termsText}>
+            By continuing, you agree to our{' '}
+            <Text
+              style={styles.linkText}
+              suppressHighlighting
+              onPress={() =>
+                // Navigate into Main stack directly to ServiceTerms
+                navigation.navigate('Main' as never, { screen: 'ServiceTerms' } as never)
+              }
+            >
+              Terms of Use
+            </Text>
+            {' '}and{' '}
+            <Text
+              style={styles.linkText}
+              suppressHighlighting
+              onPress={() =>
+                // Navigate into Main stack directly to PrivacyPolicy
+                navigation.navigate('Main' as never, { screen: 'PrivacyPolicy' } as never)
+              }
+            >
+              Privacy Policy
+            </Text>
+          </Text>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => {
+              // Go straight to the app's main stack (Home is the initial screen)
+              navigation.navigate('Main')
+            }}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.buttonText}>Get Started</Text>
+          </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.footer}>
-        <Text style={styles.termsText}>
-          By continuing, you agree to our{' '}
-          <Text
-            style={styles.linkText}
-            suppressHighlighting
-            onPress={() =>
-              // Navigate into Main stack directly to ServiceTerms
-              navigation.navigate('Main' as never, { screen: 'ServiceTerms' } as never)
-            }
-          >
-            Terms of Use
-          </Text>
-          {' '}and{' '}
-          <Text
-            style={styles.linkText}
-            suppressHighlighting
-            onPress={() =>
-              // Navigate into Main stack directly to PrivacyPolicy
-              navigation.navigate('Main' as never, { screen: 'PrivacyPolicy' } as never)
-            }
-          >
-            Privacy Policy
-          </Text>
-        </Text>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => {
-            // Go straight to the app's main stack (Home is the initial screen)
-            navigation.navigate('Main')
-          }}
-          activeOpacity={0.9}
-        >
-          <Text style={styles.buttonText}>Get Started</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       <Modal
         visible={servicePickerVisible}
@@ -369,14 +378,21 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: Platform.OS === 'ios' ? 60 : StatusBar.currentHeight || 24,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
+  },
+  content: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
   },
   
   logoContainer: {
-    marginBottom: 32,
+    marginTop: 8,
+    marginBottom: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -447,7 +463,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   footer: {
-    marginTop: 'auto',
+    marginTop: 24,
     paddingBottom: Platform.OS === 'ios' ? 34 : 24,
   },
   termsText: {

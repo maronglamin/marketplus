@@ -3,6 +3,7 @@ import { RentalService } from '../services/rentalService';
 import { PrismaClient, TransactionType } from '@prisma/client';
 import UCPService from '../services/ucpService';
 import { authenticate } from '../middleware/auth';
+import { notificationService } from '../services/notificationService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1107,6 +1108,15 @@ router.post('/:rentalId/payment', authenticate, async (req: any, res) => {
       console.error('Error creating chat message for payment:', error);
       // Don't fail the main operation if chat message creation fails
     }
+
+    void notificationService.sendPaymentCompletedNotifications({
+      customerId: rental.customerId,
+      sellerId: sellerUserId,
+      amount: originalAmount,
+      currency: currencyCode,
+      context: 'rental',
+      referenceId: rentalId,
+    });
 
     return res.json({
       success: true,

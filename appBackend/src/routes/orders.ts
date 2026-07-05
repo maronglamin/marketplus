@@ -3,9 +3,54 @@ import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger';
 import { PrismaClient, TransactionType } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
+import { notificationService } from '../services/notificationService';
 
 const router = express.Router();
 const prisma = new PrismaClient();
+
+function getOrderProductName(items: Array<{ productSnapshot: unknown }>): string {
+  const snapshot = items[0]?.productSnapshot as { title?: string } | null | undefined;
+  return snapshot?.title || 'your order';
+}
+
+async function sendOrderCancelledNotifications(
+  order: {
+    id: string;
+    orderNumber: string;
+    userId: string;
+    sellerId: string;
+  },
+  cancelledByUserId: string,
+  items: Array<{ productSnapshot: unknown }>
+): Promise<void> {
+  const productName = getOrderProductName(items);
+
+  if (cancelledByUserId === order.userId) {
+    const buyer = await prisma.user.findUnique({
+      where: { id: order.userId },
+      select: { firstName: true, lastName: true },
+    });
+    const buyerName = `${buyer?.firstName || ''} ${buyer?.lastName || ''}`.trim() || 'A buyer';
+
+    void notificationService.sendOrderCancellationNotificationToSeller(
+      order.sellerId,
+      buyerName,
+      productName,
+      order.id,
+      order.orderNumber
+    ).catch((err) => logger.error('Failed to send order cancellation notification to seller:', err));
+    return;
+  }
+
+  if (cancelledByUserId === order.sellerId) {
+    void notificationService.sendOrderCancellationNotificationToBuyer(
+      order.userId,
+      productName,
+      order.id,
+      order.orderNumber
+    ).catch((err) => logger.error('Failed to send order cancellation notification to buyer:', err));
+  }
+}
 
 // Extend Express Request to include user
 interface AuthenticatedRequest extends express.Request {
@@ -179,6 +224,20 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res) => {
       productId,
       deliveryCurrency: result.order.deliveryCurrency
     });
+
+    const buyerName = `${customer.firstName} ${customer.lastName}`.trim();
+    void notificationService.sendOrderNotificationToSeller(
+      product.sellerId,
+      buyerName,
+      product.title,
+      result.order.id
+    ).catch((err) => logger.error('Failed to send order notification to seller:', err));
+    void notificationService.sendOrderConfirmationToBuyer(
+      userId,
+      product.title,
+      result.order.id,
+      result.order.orderNumber
+    ).catch((err) => logger.error('Failed to send order confirmation to buyer:', err));
 
     res.status(201).json({
       message: 'Order created successfully',
@@ -595,7 +654,10 @@ router.patch('/:orderId/status', authenticate, async (req: AuthenticatedRequest,
       return res.status(400).json({ message: 'Missing status' });
     }
 
-    const order = await prisma.orders.findUnique({ where: { id: orderId } });
+    const order = await prisma.orders.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
@@ -611,15 +673,16 @@ router.patch('/:orderId/status', authenticate, async (req: AuthenticatedRequest,
     // Define which status changes are allowed by whom
     const customerAllowedStatuses = ['AUTHORIZED', 'CANCELLED'];
     const sellerAllowedStatuses = ['CONFIRMED', 'SHIPPED', 'DELIVERED', 'COMPLETED'];
+    const normalizedStatus = status.toUpperCase();
     
     // Check if the user is authorized to make this status change
-    if (isCustomer && !customerAllowedStatuses.includes(status.toUpperCase())) {
+    if (isCustomer && !customerAllowedStatuses.includes(normalizedStatus)) {
       return res.status(403).json({ 
         message: `Customer can only change status to: ${customerAllowedStatuses.join(', ')}` 
       });
     }
     
-    if (isSeller && !sellerAllowedStatuses.includes(status.toUpperCase())) {
+    if (isSeller && !sellerAllowedStatuses.includes(normalizedStatus)) {
       return res.status(403).json({ 
         message: `Seller can only change status to: ${sellerAllowedStatuses.join(', ')}` 
       });
@@ -627,8 +690,13 @@ router.patch('/:orderId/status', authenticate, async (req: AuthenticatedRequest,
 
     const updated = await prisma.orders.update({
       where: { id: orderId },
-      data: { status: status.toUpperCase() }
+      data: { status: normalizedStatus },
     });
+
+    if (normalizedStatus === 'CANCELLED' && order.status !== 'CANCELLED') {
+      void sendOrderCancelledNotifications(order, userId, order.items);
+    }
+
     res.json({ message: 'Order status updated', status: updated.status });
   } catch (error) {
     logger.error('Error updating order status:', error);
@@ -767,7 +835,10 @@ router.patch('/:orderId/authorize', authenticate, async (req: AuthenticatedReque
       return res.status(400).json({ message: 'Invalid action. Must be "authorize" or "cancel"' });
     }
 
-    const order = await prisma.orders.findUnique({ where: { id: orderId } });
+    const order = await prisma.orders.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
@@ -794,6 +865,10 @@ router.patch('/:orderId/authorize', authenticate, async (req: AuthenticatedReque
         // Let Prisma update the timestamp automatically
       }
     });
+
+    if (newStatus === 'CANCELLED' && order.status !== 'CANCELLED') {
+      void sendOrderCancelledNotifications(order, userId, order.items);
+    }
 
     logger.info('Order authorization updated:', {
       orderId,

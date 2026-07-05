@@ -40,6 +40,10 @@ class NotificationService {
    */
   async registerForPushNotifications(): Promise<string | null> {
     try {
+      if (Platform.OS === 'web') {
+        return await this.registerWebPushNotifications();
+      }
+
       // Check if device supports notifications
       if (!Device.isDevice) {
         console.log('Must use physical device for Push Notifications');
@@ -60,25 +64,24 @@ class NotificationService {
         return null;
       }
 
-      // Get the token
-      const projectId =
-        Constants.expoConfig?.extra?.eas?.projectId ??
-        Constants.easConfig?.projectId;
-
-      if (!projectId) {
-        console.log('Missing Expo project ID for push notifications');
-        return null;
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#00bcd4',
+        });
       }
 
-      const token = await Notifications.getExpoPushTokenAsync({
-        projectId,
-      });
+      // Native device token: APNs on iOS, FCM on Android — no Expo push relay
+      const devicePush = await Notifications.getDevicePushTokenAsync();
+      const token = devicePush.data;
 
-      this.token = token.data;
-      console.log('Push token:', this.token);
+      this.token = token;
+      console.log(`Native push token (${devicePush.type}):`, token.slice(0, 20) + '...');
 
-      // Save token to AsyncStorage
-      await AsyncStorage.setItem('fcmToken', this.token);
+      await AsyncStorage.setItem('fcmToken', token);
+      await AsyncStorage.setItem('pushTokenType', devicePush.type);
 
       return this.token;
     } catch (error) {
@@ -107,6 +110,73 @@ class NotificationService {
   }
 
   /**
+   * Register browser web push (VAPID) on Expo web — same pattern as 7a-side / directPay.
+   */
+  private async registerWebPushNotifications(): Promise<string | null> {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return null;
+    }
+
+    const publicKey = await this.fetchWebPushPublicKey();
+    if (!publicKey) {
+      return null;
+    }
+
+    const permission =
+      typeof Notification !== 'undefined' && Notification.permission === 'granted'
+        ? 'granted'
+        : typeof Notification !== 'undefined'
+          ? await Notification.requestPermission()
+          : 'denied';
+    if (permission !== 'granted') {
+      return null;
+    }
+
+    await navigator.serviceWorker.register('/push-sw.js', { scope: '/' }).catch(() => undefined);
+    const registration = await navigator.serviceWorker.ready;
+    const key = this.urlBase64ToUint8Array(publicKey);
+    const existing = await registration.pushManager.getSubscription();
+    const subscription =
+      existing ??
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: key.buffer.slice(key.byteOffset, key.byteOffset + key.byteLength) as ArrayBuffer,
+      }));
+
+    const token = JSON.stringify(subscription.toJSON());
+    this.token = token;
+    await AsyncStorage.setItem('fcmToken', token);
+    return token;
+  }
+
+  private urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = typeof atob !== 'undefined' ? atob(base64) : '';
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i += 1) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  private async fetchWebPushPublicKey(): Promise<string | null> {
+    const fromExtra = String(
+      (Constants.expoConfig?.extra as { WEB_PUSH_VAPID_PUBLIC_KEY?: string } | undefined)
+        ?.WEB_PUSH_VAPID_PUBLIC_KEY || '',
+    ).trim();
+    if (fromExtra) return fromExtra;
+
+    try {
+      const response = await api.get('/api/users/web-push/public-key');
+      return response.data?.publicKey || null;
+    } catch (error) {
+      console.warn('[web-push] Could not load VAPID public key', error);
+      return null;
+    }
+  }
+
+  /**
    * Send FCM token to backend
    */
   async sendTokenToBackend(userId: string): Promise<boolean> {
@@ -117,10 +187,10 @@ class NotificationService {
         return false;
       }
 
-      const response = await api.post('/api/users/fcm-token', {
+      await api.post('/api/users/fcm-token', {
         token,
         userId,
-        deviceType: Platform.OS,
+        deviceType: Platform.OS === 'web' ? 'web' : Platform.OS,
       });
 
       console.log('FCM token sent to backend successfully');

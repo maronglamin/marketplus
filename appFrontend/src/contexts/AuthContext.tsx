@@ -106,6 +106,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initializeAuth();
   }, [initializeAuth]);
 
+  const registerPushNotifications = useCallback(async (userId: string) => {
+    try {
+      const pushToken = await notificationService.registerForPushNotifications();
+      if (pushToken) {
+        await notificationService.sendTokenToBackend(userId);
+      }
+    } catch (error) {
+      console.error('AuthContext: Failed to register push notifications:', error);
+    }
+  }, []);
+
+  // Register push token whenever the user becomes authenticated
+  useEffect(() => {
+    if (!isLoading && user?.id && token) {
+      void registerPushNotifications(user.id);
+    }
+  }, [isLoading, user?.id, token, registerPushNotifications]);
+
   // Debug user state changes
   useEffect(() => {
     console.log('AuthContext: User state changed:', { 

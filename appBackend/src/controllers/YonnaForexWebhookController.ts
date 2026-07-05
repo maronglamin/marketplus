@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { getWebhookConfig, getWebhookUrls } from '../utils/webhookConfig';
 import { PrismaClient } from '@prisma/client';
 import UCPService from '../services/ucpService';
+import { notificationService } from '../services/notificationService';
 
 const prisma = new PrismaClient();
 
@@ -111,6 +112,18 @@ export class YonnaForexWebhookController {
       const userId = located.userId || null;
       if (userId) {
         await this.notifyUser(userId, payload);
+      }
+
+      const normalizedStatus = String(payload.status).toLowerCase();
+      if (normalizedStatus === 'success' || normalizedStatus === 'completed') {
+        if (located.type === 'external') {
+          const externalTx = await prisma.externalTransaction.findUnique({
+            where: { id: located.id },
+          });
+          if (externalTx) {
+            void notificationService.sendPaymentCompletedFromExternalTransaction(externalTx);
+          }
+        }
       }
 
       // Log the webhook event
@@ -359,6 +372,24 @@ export class YonnaForexWebhookController {
             });
           }
 
+          if (ext?.serviceBookingId) {
+            if (normalized === 'success' || normalized === 'completed') {
+              await prisma.serviceBooking.update({
+                where: { id: ext.serviceBookingId },
+                data: { status: 'PAID', paymentStatus: 'PAID', updatedAt: new Date() },
+              });
+            }
+          }
+
+          if (ext?.propertyBookingId) {
+            if (normalized === 'success' || normalized === 'completed') {
+              await prisma.propertyBooking.update({
+                where: { id: ext.propertyBookingId },
+                data: { status: 'CONFIRMED', paymentStatus: 'PAID', updatedAt: new Date() },
+              });
+            }
+          }
+
           if (ext?.rentalRequestId) {
             // Map to rentals (RentalRequest.status)
             const rentalStatus = normalized === 'success' || normalized === 'completed'
@@ -542,17 +573,12 @@ export class YonnaForexWebhookController {
         return;
       }
 
-      // Prepare notification content
+      // Send push notification for non-success updates (success handled separately)
+      const normalizedForNotification = String(payload.status).toLowerCase();
       let title = 'Payment Update';
       let body = '';
-      const normalizedForNotification = String(payload.status).toLowerCase();
-      
+
       switch (normalizedForNotification) {
-        case 'success':
-        case 'completed':
-          title = 'Payment Successful';
-          body = `Your payment of ${payload.currency} ${payload.amount} has been completed successfully.`;
-          break;
         case 'failed':
           title = 'Payment Failed';
           body = `Your payment of ${payload.currency} ${payload.amount} has failed. ${payload.message || ''}`;
@@ -565,16 +591,21 @@ export class YonnaForexWebhookController {
           body = `Your payment status has been updated to ${payload.status}.`;
       }
 
-      // Send push notification (simplified for now)
-      if (user.devices && user.devices.length > 0) {
-        console.log('Sending notification to user devices:', user.devices.length);
-        // TODO: Implement actual push notification when FCM tokens are available
-        // For now, just log the notification
-        console.log('Notification would be sent:', { title, body, userId: _userId });
+      if (normalizedForNotification !== 'success' && normalizedForNotification !== 'completed') {
+        await notificationService.sendNotificationToUser(_userId, {
+          title,
+          body,
+          data: {
+            type: 'payment_update',
+            status: normalizedForNotification,
+            amount: String(payload.amount),
+            currency: payload.currency,
+          },
+        });
       }
 
       // Send SMS notification (optional)
-      if (process.env.SEND_SMS_NOTIFICATIONS === 'true') {
+      if (process.env.SEND_SMS_NOTIFICATIONS === 'true' && body) {
         const smsService = require('../services/smsService');
         await smsService.sendSMS(user.phoneNumber, body);
       }

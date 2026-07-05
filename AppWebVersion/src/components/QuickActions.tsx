@@ -5,6 +5,8 @@ import {
   Star,
   Clock,
   Plus,
+  Wrench,
+  Building2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,6 +18,18 @@ export function QuickActions() {
   const [loginPromptMessage, setLoginPromptMessage] = useState<string>('Please log in to continue.');
 
   const actions = [
+    {
+      icon: <Wrench className="w-10 h-10" />,
+      label: 'Home Services',
+      link: '/home-services',
+      color: 'bg-sky-100 text-sky-600',
+    },
+    {
+      icon: <Building2 className="w-10 h-10" />,
+      label: 'Properties',
+      link: '/real-estate',
+      color: 'bg-violet-100 text-violet-600',
+    },
     {
       icon: <Package className="w-10 h-10" />,
       label: 'My Orders',

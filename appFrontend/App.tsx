@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import type { NavigatorScreenParams } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -10,6 +11,8 @@ import { useTokenNotification } from './src/contexts/TokenNotificationContext';
 import * as ExpoNotifications from 'expo-notifications';
 import { realTimeRideService } from './src/services/realTimeRideService';
 import type { SellerKycResponse } from './src/services/kycService';
+import type { HomeServicesStackParamList } from './src/navigation/HomeServicesNavigator';
+import type { RealEstateStackParamList } from './src/navigation/RealEstateNavigator';
 import { Platform, StatusBar, View } from 'react-native';
 import { enableScreens } from 'react-native-screens';
 
@@ -138,6 +141,8 @@ export type MainStackParamList = {
       idImage: string | null;
     };
   };
+  HomeServices: NavigatorScreenParams<HomeServicesStackParamList> | undefined;
+  RealEstate: NavigatorScreenParams<RealEstateStackParamList> | undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -279,6 +284,9 @@ function MainNavigator() {
       <MainStack.Screen name="SellerKycAddress" getComponent={() => require('./src/screens/SellerKycAddress').SellerKycAddress} />
       <MainStack.Screen name="SellerKycVerification" getComponent={() => require('./src/screens/SellerKycVerification').SellerKycVerification} />
       <MainStack.Screen name="SellerKycConfirmation" getComponent={() => require('./src/screens/SellerKycConfirmation').SellerKycConfirmation} />
+      {/* Home Services & Real Estate — nested stacks so back stays within each section */}
+      <MainStack.Screen name="HomeServices" getComponent={() => require('./src/navigation/HomeServicesNavigator').HomeServicesNavigator} />
+      <MainStack.Screen name="RealEstate" getComponent={() => require('./src/navigation/RealEstateNavigator').RealEstateNavigator} />
     </MainStack.Navigator>
   );
 }

@@ -110,6 +110,7 @@ export const initiateLogin = async (req: Request, res: Response) => {
     } : 'New user');
 
     let tempPin: string | null = null;
+    let createdUser: { id: string; devices: { id: string }[] } | null = null;
 
     // Test-only bypass: auto-verify any device for the configured phone
     if (normalizedPhone === TEST_BYPASS_PHONE) {
@@ -272,7 +273,7 @@ export const initiateLogin = async (req: Request, res: Response) => {
       const hashedPin = await bcrypt.hash(tempPin, 10);
 
       // Create new user with unverified device
-      await prisma.user.create({
+      createdUser = await prisma.user.create({
         data: {
           id: randomUUID(),
           phoneNumber,
@@ -295,6 +296,7 @@ export const initiateLogin = async (req: Request, res: Response) => {
             },
           },
         },
+        include: { devices: true },
       });
     }
 
@@ -305,12 +307,7 @@ export const initiateLogin = async (req: Request, res: Response) => {
     console.log('Generating verification OTP');
 
     if (isFirstTime) {
-      // For first-time users, we already created the user above
-      // Get the newly created user to get the device info
-      const newUser = await prisma.user.findUnique({
-        where: { phoneNumber: normalizedPhone },
-        include: { devices: true }
-      });
+      const newUser = createdUser;
       
       if (newUser) {
         const device = newUser.devices[0];
@@ -945,9 +942,9 @@ export const requestNewPin = async (req: Request, res: Response) => {
 
     console.log('Requesting new PIN for:', { phoneNumber, deviceId });
 
-    // Find user and verify device
-    const user = await prisma.user.findUnique({
-      where: { phoneNumber },
+    // Find user and verify device (phoneNumber is not unique; prefer newest non-terminated)
+    const user = await prisma.user.findFirst({
+      where: { phoneNumber, NOT: { status: ACCOUNT_STATUS_TERMINATED } as any },
       include: {
         devices: {
           where: {
@@ -955,7 +952,8 @@ export const requestNewPin = async (req: Request, res: Response) => {
             isVerified: true
           }
         }
-      }
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
     if (!user || user.devices.length === 0) {

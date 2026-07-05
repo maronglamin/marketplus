@@ -26,7 +26,7 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import type { AppStackParamList } from '../navigation/AppNavigator';
+import type { MainStackParamList } from '../../App';
 import { useAuth } from '../contexts/AuthContext';
 import { RiderApplicationService, RiderApplication } from '../services/riderApplicationService';
 import { RideRequestService, RecentDestination } from '../services/rideRequestService';
@@ -39,13 +39,16 @@ import { rentalApi } from '../services/rentalApi';
 import { userService } from '../services/userService';
 import { AppUpdateBottomSheet } from '../components/AppUpdateBottomSheet';
 import { checkForUpdate, type UpdateCheckResult } from '../services/appUpdateService';
+import { homeServicesApi, type ServiceBooking } from '../services/homeServicesApi';
+import { realEstateApi, type PropertyListing } from '../services/realEstateApi';
+import { getListingCoverUrl } from '../utils/propertyImages';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 const isLargeTablet = Math.max(screenWidth, screenHeight) >= 1024;
 const basePadding = isLargeTablet ? 24 : 16;
 const contentMaxWidth = Math.min(900, screenWidth - (isLargeTablet ? 48 : 32));
 
-type HomeNavigationProp = NativeStackNavigationProp<AppStackParamList, 'Home'>;
+type HomeNavigationProp = NativeStackNavigationProp<MainStackParamList, 'Home'>;
 
 export function Home() {
   const navigation = useNavigation<HomeNavigationProp>();
@@ -85,6 +88,8 @@ export function Home() {
   // Pending payment orders count for cart badge
   const [pendingPaymentCount, setPendingPaymentCount] = useState(0);
   const [isLoadingPendingCount, setIsLoadingPendingCount] = useState(false);
+  const [recentServiceBookings, setRecentServiceBookings] = useState<ServiceBooking[]>([]);
+  const [featuredProperties, setFeaturedProperties] = useState<PropertyListing[]>([]);
 
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -139,6 +144,8 @@ export function Home() {
     }
     loadCategories();
     getUserLocation();
+    loadFeaturedProperties();
+    if (user?.id) loadRecentServiceBookings();
     // Check for app updates on mount (no-op if backend endpoint not present)
     (async () => {
       const result = await checkForUpdate();
@@ -235,6 +242,8 @@ export function Home() {
         getUserLocation(),
         loadUnreadNotificationsCount(),
         loadPendingPaymentCount(),
+        loadFeaturedProperties(),
+        ...(user?.id ? [loadRecentServiceBookings()] : []),
       ]);
     } catch (e) {
       // no-op; errors handled within individual loaders
@@ -363,6 +372,28 @@ export function Home() {
       setCategoriesData([]);
     } finally {
       setIsLoadingCategories(false);
+    }
+  };
+
+  const loadFeaturedProperties = async () => {
+    try {
+      const listings = await realEstateApi.getFeatured(6);
+      setFeaturedProperties(listings);
+    } catch {
+      setFeaturedProperties([]);
+    }
+  };
+
+  const loadRecentServiceBookings = async () => {
+    try {
+      if (!user?.id) {
+        setRecentServiceBookings([]);
+        return;
+      }
+      const bookings = await homeServicesApi.getMyBookings();
+      setRecentServiceBookings(bookings.slice(0, 3));
+    } catch {
+      setRecentServiceBookings([]);
     }
   };
 
@@ -634,9 +665,62 @@ export function Home() {
   // Mock data
   const quickActions = [
     { icon: 'car-sport', label: 'Rental' },
+    { icon: 'construct-outline', label: 'Home Services' },
+    { icon: 'business-outline', label: 'Properties' },
     { icon: 'car-outline', label: 'Ride History' },
     { icon: 'bag-outline', label: 'My Orders' },
     { icon: 'heart-outline', label: 'Interest' },
+  ];
+
+  const serviceCards = [
+    {
+      id: 'ride',
+      image: require('../../assets/ride-taxi.jpeg'),
+      badgeIcon: 'car-sport-outline' as const,
+      badgeText: 'Ride Service',
+      badgeColor: 'rgba(14, 165, 233, 0.9)',
+      title: 'Book a Ride',
+      subtitle: 'Fast and reliable rides near you',
+      actionText: 'Find a Ride',
+      actionColor: '#0EA5E9',
+      onPress: () => handleRideBannerPress(),
+    },
+    {
+      id: 'shop',
+      image: require('../../assets/ecommerce-image.jpeg'),
+      badgeIcon: 'bag-handle-outline' as const,
+      badgeText: 'Marketplace',
+      badgeColor: 'rgba(59, 130, 246, 0.85)',
+      title: 'Shop Online',
+      subtitle: 'Buy and sell from trusted sellers',
+      actionText: 'Start Shopping',
+      actionColor: '#3B82F6',
+      onPress: () => navigation.navigate('FeaturedProducts'),
+    },
+    {
+      id: 'home-services',
+      image: require('../../assets/home-and-professional-service.jpeg'),
+      badgeIcon: 'construct-outline' as const,
+      badgeText: 'Utility Services',
+      badgeColor: 'rgba(16, 185, 129, 0.9)',
+      title: 'Home & Professional Services',
+      subtitle: 'Plumbing, cleaning, electrical & more',
+      actionText: 'Book a Service',
+      actionColor: '#10B981',
+      onPress: () => navigation.navigate('HomeServices', { screen: 'HomeServicesHub' }),
+    },
+    {
+      id: 'properties',
+      image: require('../../assets/hotel-and-apartment-booking.jpeg'),
+      badgeIcon: 'bed-outline' as const,
+      badgeText: 'Properties',
+      badgeColor: 'rgba(124, 58, 237, 0.9)',
+      title: 'Stays & Realty',
+      subtitle: 'Hotels, apartments, homes & land',
+      actionText: 'Explore Properties',
+      actionColor: '#7C3AED',
+      onPress: () => navigation.navigate('RealEstate', { screen: 'RealEstateHub' }),
+    },
   ];
 
 
@@ -650,25 +734,37 @@ export function Home() {
 
   const promotions = [
     {
+      id: 'morning-special',
       title: 'Morning Special',
       subtitle: 'Save 10% on Morning Rides',
-      description: 'Valid 6AM - 10AM daily',
-      gradient: ['#14B8A6', '#0D9488'],
-      buttonText: 'Book Now'
+      description: 'Valid 6AM – 10AM daily',
+      gradient: ['#0D9488', '#115E59'],
+      accentColor: '#0D9488',
+      icon: 'sunny-outline' as const,
+      buttonText: 'Book Now',
+      action: 'RideRequest' as const,
     },
     {
+      id: 'flash-sale',
       title: 'Flash Sale',
-      subtitle: 'Electronics Sale!',
+      subtitle: 'Electronics Deals',
       description: 'Up to 30% off selected items',
-      gradient: ['#FB923C', '#F97316'],
-      buttonText: 'Shop Now'
+      gradient: ['#EA580C', '#C2410C'],
+      accentColor: '#EA580C',
+      icon: 'flash-outline' as const,
+      buttonText: 'Shop Now',
+      action: 'FeaturedProducts' as const,
     },
     {
-      title: 'Holiday Special',
+      id: 'holiday-special',
+      title: 'Weekend Offers',
       subtitle: 'Festival Discounts',
-      description: 'Special offers all weekend',
-      gradient: ['#6366F1', '#8B5CF6'],
-      buttonText: 'View Deals'
+      description: 'Special deals all weekend long',
+      gradient: ['#4F46E5', '#4338CA'],
+      accentColor: '#4F46E5',
+      icon: 'gift-outline' as const,
+      buttonText: 'View Deals',
+      action: 'FeaturedProducts' as const,
     },
   ];
 
@@ -677,34 +773,115 @@ export function Home() {
     { message: 'Fatou sold a phone in your area', time: '5 mins ago' },
   ];
 
-  // Promotions carousel control
+  // Carousel auto-slide (5s is a standard marketing carousel interval)
+  const SERVICE_AUTO_SLIDE_MS = 5000;
+  const PROMOTION_AUTO_SLIDE_MS = 5500;
+  const CAROUSEL_RESUME_DELAY_MS = 10000;
+
+  const serviceCarouselWidth = isLargeTablet ? contentMaxWidth : screenWidth - basePadding * 2;
+  const serviceCarouselRef = useRef<ScrollView>(null);
+  const [serviceCardIndex, setServiceCardIndex] = useState(0);
+  const serviceAutoSlidePausedRef = useRef(false);
+  const serviceResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serviceCardCount = serviceCards.length;
+
+  const promotionCardWidth = isLargeTablet ? contentMaxWidth : screenWidth - basePadding * 2;
   const promotionsScrollRef = useRef<ScrollView>(null);
   const [promotionIndex, setPromotionIndex] = useState(0);
-  const promotionCardWidth = isLargeTablet ? 340 : 280;
-  const promotionCardGap = 16; // matches styles.promotionCard marginLeft
+  const promotionAutoSlidePausedRef = useRef(false);
+  const promotionResumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxPromotionIndex = Math.max(0, promotions.length - 1);
 
-  const scrollToPromotionIndex = (index: number) => {
-    const clamped = Math.max(0, Math.min(maxPromotionIndex, index));
+  const pauseServiceAutoSlide = useCallback(() => {
+    serviceAutoSlidePausedRef.current = true;
+    if (serviceResumeTimerRef.current) clearTimeout(serviceResumeTimerRef.current);
+    serviceResumeTimerRef.current = setTimeout(() => {
+      serviceAutoSlidePausedRef.current = false;
+    }, CAROUSEL_RESUME_DELAY_MS);
+  }, []);
+
+  const pausePromotionAutoSlide = useCallback(() => {
+    promotionAutoSlidePausedRef.current = true;
+    if (promotionResumeTimerRef.current) clearTimeout(promotionResumeTimerRef.current);
+    promotionResumeTimerRef.current = setTimeout(() => {
+      promotionAutoSlidePausedRef.current = false;
+    }, CAROUSEL_RESUME_DELAY_MS);
+  }, []);
+
+  const scrollToServiceIndex = useCallback((index: number, animated = true) => {
+    const clamped = ((index % serviceCardCount) + serviceCardCount) % serviceCardCount;
+    setServiceCardIndex(clamped);
+    serviceCarouselRef.current?.scrollTo({ x: clamped * serviceCarouselWidth, animated });
+  }, [serviceCarouselWidth]);
+
+  const scrollToPromotionIndex = useCallback((index: number, animated = true) => {
+    const clamped = ((index % promotions.length) + promotions.length) % promotions.length;
     setPromotionIndex(clamped);
-    const x = clamped * (promotionCardWidth + promotionCardGap);
-    promotionsScrollRef.current?.scrollTo({ x, animated: true });
-  };
+    promotionsScrollRef.current?.scrollTo({
+      x: clamped * promotionCardWidth,
+      animated,
+    });
+  }, [promotionCardWidth, promotions.length]);
 
   const handlePromotionPrev = () => {
+    pausePromotionAutoSlide();
     scrollToPromotionIndex(promotionIndex - 1);
   };
 
   const handlePromotionNext = () => {
+    pausePromotionAutoSlide();
     scrollToPromotionIndex(promotionIndex + 1);
   };
 
   const handlePromotionMomentumEnd = (event: any) => {
     const x = event?.nativeEvent?.contentOffset?.x ?? 0;
-    const approxIndex = Math.round(x / (promotionCardWidth + promotionCardGap));
-    const clamped = Math.max(0, Math.min(maxPromotionIndex, approxIndex));
-    if (clamped !== promotionIndex) setPromotionIndex(clamped);
+    const index = Math.round(x / promotionCardWidth);
+    setPromotionIndex(Math.max(0, Math.min(maxPromotionIndex, index)));
   };
+
+  const handleServiceCarouselEnd = (event: any) => {
+    const x = event?.nativeEvent?.contentOffset?.x ?? 0;
+    const index = Math.round(x / serviceCarouselWidth);
+    setServiceCardIndex(Math.max(0, Math.min(index, serviceCardCount - 1)));
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      serviceAutoSlidePausedRef.current = false;
+      promotionAutoSlidePausedRef.current = false;
+
+      const serviceTimer = setInterval(() => {
+        if (serviceAutoSlidePausedRef.current) return;
+        setServiceCardIndex((prev) => {
+          const next = (prev + 1) % serviceCardCount;
+          serviceCarouselRef.current?.scrollTo({
+            x: next * serviceCarouselWidth,
+            animated: true,
+          });
+          return next;
+        });
+      }, SERVICE_AUTO_SLIDE_MS);
+
+      const promotionTimer = setInterval(() => {
+        if (promotionAutoSlidePausedRef.current) return;
+        setPromotionIndex((prev) => {
+          const next = (prev + 1) % promotions.length;
+          promotionsScrollRef.current?.scrollTo({
+            x: next * promotionCardWidth,
+            animated: true,
+          });
+          return next;
+        });
+      }, PROMOTION_AUTO_SLIDE_MS);
+
+      return () => {
+        clearInterval(serviceTimer);
+        clearInterval(promotionTimer);
+        if (serviceResumeTimerRef.current) clearTimeout(serviceResumeTimerRef.current);
+        if (promotionResumeTimerRef.current) clearTimeout(promotionResumeTimerRef.current);
+      };
+    }, [serviceCarouselWidth, promotionCardWidth, promotions.length, serviceCardCount])
+  );
 
   // Search functions
   const openSearchScreen = () => {
@@ -774,6 +951,12 @@ export function Home() {
       case 'Rental':
         if (requireAuth('Login to request a rental.')) return;
         navigation.navigate('RentalRequest');
+        break;
+      case 'Home Services':
+        navigation.navigate('HomeServices', { screen: 'HomeServicesHub' });
+        break;
+      case 'Properties':
+        navigation.navigate('RealEstate', { screen: 'RealEstateHub' });
         break;
       case 'Ride History':
         // Directly navigate to Requested Rides for faster access
@@ -940,79 +1123,68 @@ export function Home() {
             </Text>
             <Text style={styles.welcomeSubtitle}>What would you like to do today?</Text>
             
-            <View style={styles.welcomeButtons}>
-              <TouchableOpacity 
-                style={styles.rideButton}
-                onPress={handleRideBannerPress}
-                activeOpacity={0.9}
+            <View style={styles.serviceCarouselContainer}>
+              <ScrollView
+                ref={serviceCarouselRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                decelerationRate="fast"
+                onScrollBeginDrag={pauseServiceAutoSlide}
+                onMomentumScrollEnd={handleServiceCarouselEnd}
+                style={{ width: serviceCarouselWidth }}
+                contentContainerStyle={styles.serviceCarouselContent}
               >
-                <ImageBackground 
-                  source={require('../../assets/ride-image.jpeg')}
-                  resizeMode="cover"
-                  style={{ width: '100%', aspectRatio: 16 / 9, justifyContent: 'flex-end' }}
-                  imageStyle={{ borderRadius: 12 }}
-                >
-                  <View style={{ backgroundColor: `rgba(0, 0, 0, ${isLargeTablet ? 0.6 : 0.5})`, padding: isLargeTablet ? 20 : 16, alignItems: 'center', borderRadius: 12 }}>
-                    <Text style={[
-                      styles.rideButtonTitle,
-                      { 
-                        color: '#FFFFFF',
-                        textShadowColor: 'rgba(0, 0, 0, 0.55)',
-                        textShadowOffset: { width: 0, height: 1 },
-                        textShadowRadius: 2 
-                      }
-                    ]}>Book a Ride</Text>
-                    <Text style={[
-                      styles.rideButtonSubtitle,
-                      { 
-                        color: '#F8FAFC',
-                        textShadowColor: 'rgba(0,0,0,0.55)',
-                        textShadowOffset: { width: 0, height: 1 },
-                        textShadowRadius: 1 
-                      }
-                    ]}>Fast and reliable rides near you</Text>
-                    <View style={styles.rideButtonAction}>
-                      <Text style={styles.rideButtonActionText}>Find a Ride</Text>
-                    </View>
-                  </View>
-                </ImageBackground>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.shopButton}
-                onPress={() => navigation.navigate('FeaturedProducts')}
-                activeOpacity={0.9}
-              >
-                <ImageBackground 
-                  source={require('../../assets/ecommerce-image.jpeg')}
-                  resizeMode="cover"
-                  style={{ width: '100%', aspectRatio: 16 / 9, justifyContent: 'flex-end' }}
-                  imageStyle={{ borderRadius: 12 }}
-                >
-                  <View style={{ backgroundColor: `rgba(0, 0, 0, ${isLargeTablet ? 0.6 : 0.5})`, padding: isLargeTablet ? 20 : 16, alignItems: 'center', borderRadius: 12 }}>
-                    <Text style={[
-                      styles.shopButtonTitle, 
-                      { 
-                        color: '#FFFFFF',
-                        textShadowColor: 'rgba(0,0,0,0.6)',
-                        textShadowOffset: { width: 0, height: 1 },
-                        textShadowRadius: 2 
-                      }
-                    ]}>Shop Online</Text>
-                    <Text style={[
-                      styles.shopButtonSubtitle, 
-                      { 
-                        color: '#F8FAFC',
-                        textShadowColor: 'rgba(0,0,0,0.5)',
-                        textShadowOffset: { width: 0, height: 1 },
-                        textShadowRadius: 1 
-                      }
-                    ]}>Buy and sell from trusted sellers</Text>
-                    <View style={styles.shopButtonAction}>
-                      <Text style={styles.shopButtonActionText}>Start Shopping</Text>
-                    </View>
-                  </View>
-                </ImageBackground>
-              </TouchableOpacity>
+                {serviceCards.map((card) => (
+                  <TouchableOpacity
+                    key={card.id}
+                    style={[styles.serviceCard, { width: serviceCarouselWidth }]}
+                    onPress={card.onPress}
+                    activeOpacity={0.92}
+                  >
+                    <ImageBackground
+                      source={card.image}
+                      resizeMode="cover"
+                      style={styles.serviceCardImage}
+                      imageStyle={styles.serviceCardImageStyle}
+                    >
+                      <View style={styles.serviceCardOverlayFull}>
+                        <View style={[styles.serviceCardBadge, { backgroundColor: card.badgeColor }]}>
+                          <Ionicons name={card.badgeIcon} size={14} color="#FFFFFF" />
+                          <Text style={styles.serviceCardBadgeText}>{card.badgeText}</Text>
+                        </View>
+                        <Text style={styles.serviceCardTitle}>{card.title}</Text>
+                        <Text style={styles.serviceCardSubtitle}>{card.subtitle}</Text>
+                        <View style={[styles.serviceCardAction, { backgroundColor: card.actionColor }]}>
+                          <Text style={styles.serviceCardActionText}>{card.actionText}</Text>
+                          <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+                        </View>
+                      </View>
+                    </ImageBackground>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <View style={styles.servicePagination}>
+                {serviceCards.map((_, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => {
+                      pauseServiceAutoSlide();
+                      scrollToServiceIndex(index);
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                    activeOpacity={0.7}
+                  >
+                    <View
+                      style={[
+                        styles.servicePaginationDot,
+                        serviceCardIndex === index && styles.servicePaginationDotActive,
+                      ]}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
 
@@ -1217,6 +1389,99 @@ export function Home() {
             </View>
           </View>
 
+          {/* Home & Professional Services */}
+          <View style={[styles.serviceSection, { paddingHorizontal: basePadding }]}>
+            <View style={styles.serviceBlock}>
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceTitleContainer}>
+                  <Text style={styles.serviceTitle}>Home Services</Text>
+                </View>
+                <TouchableOpacity style={styles.viewAllButton} onPress={() => navigation.navigate('HomeServices', { screen: 'HomeServicesHub' })}>
+                  <Text style={styles.viewAllText}>View All</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#0EA5E9" />
+                </TouchableOpacity>
+              </View>
+              {recentServiceBookings.length > 0 ? (
+                <View style={styles.destinationsList}>
+                  {recentServiceBookings.map((booking) => (
+                    <TouchableOpacity
+                      key={booking.id}
+                      style={styles.destinationCard}
+                      onPress={() => navigation.navigate('HomeServices', { screen: 'ServiceBookingDetail', params: { bookingId: booking.id } })}
+                    >
+                      <View style={[styles.destinationIconContainer, { backgroundColor: '#10B981' }]}>
+                        <Ionicons name="construct-outline" size={18} color="#FFFFFF" />
+                      </View>
+                      <View style={styles.destinationContent}>
+                        <Text style={styles.destinationName} numberOfLines={1}>{booking.category?.name}</Text>
+                        <Text style={styles.destinationDate}>{booking.serviceAddress}</Text>
+                      </View>
+                      <Text style={[styles.viewAllText, { fontSize: 12 }]}>{booking.status}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.emptyDestinationsContainer}>
+                  <Ionicons name="construct-outline" size={32} color="#9CA3AF" />
+                  <Text style={styles.emptyDestinationsTitle}>No service bookings yet</Text>
+                  <Text style={styles.emptyDestinationsSubtitle}>Book plumbing, cleaning, electrical & more</Text>
+                  <TouchableOpacity style={styles.bookFirstRideButton} onPress={() => navigation.navigate('HomeServices', { screen: 'HomeServicesHub' })}>
+                    <Text style={styles.bookFirstRideButtonText}>Book a Service</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* Properties */}
+            <View style={[styles.serviceBlock, { marginTop: 24 }]}>
+              <View style={styles.serviceHeader}>
+                <View style={styles.serviceTitleContainer}>
+                  <Text style={styles.serviceTitle}>Properties</Text>
+                </View>
+                <TouchableOpacity style={styles.viewAllButton} onPress={() => navigation.navigate('RealEstate', { screen: 'RealEstateHub' })}>
+                  <Text style={styles.viewAllText}>View All</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#0EA5E9" />
+                </TouchableOpacity>
+              </View>
+              {featuredProperties.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {featuredProperties.map((listing) => {
+                    const coverUrl = getListingCoverUrl(listing);
+                    return (
+                    <TouchableOpacity
+                      key={listing.id}
+                      style={{ width: 200, marginRight: 12, backgroundColor: '#F9FAFB', borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB' }}
+                      onPress={() => navigation.navigate('RealEstate', { screen: 'PropertyDetail', params: { listingId: listing.id } })}
+                    >
+                      {coverUrl ? (
+                        <Image source={{ uri: coverUrl }} style={{ width: '100%', height: 100 }} resizeMode="cover" />
+                      ) : (
+                        <View style={{ width: '100%', height: 100, backgroundColor: '#EDE9FE', alignItems: 'center', justifyContent: 'center' }}>
+                          <Ionicons name="business-outline" size={32} color="#7C3AED" />
+                        </View>
+                      )}
+                      <View style={{ padding: 10 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#1F2937' }} numberOfLines={1}>{listing.title}</Text>
+                        <Text style={{ fontSize: 12, color: '#7C3AED', marginTop: 4 }}>{listing.currency} {Number(listing.price).toLocaleString()}</Text>
+                        <Text style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{listing.city}</Text>
+                      </View>
+                    </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              ) : (
+                <View style={styles.emptyDestinationsContainer}>
+                  <Ionicons name="bed-outline" size={32} color="#9CA3AF" />
+                  <Text style={styles.emptyDestinationsTitle}>Explore stays & realty</Text>
+                  <Text style={styles.emptyDestinationsSubtitle}>Hotels, apartments, homes & land listings</Text>
+                  <TouchableOpacity style={[styles.bookFirstRideButton, { backgroundColor: '#7C3AED' }]} onPress={() => navigation.navigate('RealEstate', { screen: 'RealEstateHub' })}>
+                    <Text style={styles.bookFirstRideButtonText}>Browse Properties</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+
           {/* Promotions */}
           <View style={styles.promotionsContainer}>
             <View style={styles.promotionsHeader}>
@@ -1234,38 +1499,69 @@ export function Home() {
             <ScrollView
               ref={promotionsScrollRef}
               horizontal
+              pagingEnabled
               showsHorizontalScrollIndicator={false}
+              decelerationRate="fast"
+              onScrollBeginDrag={pausePromotionAutoSlide}
               onMomentumScrollEnd={handlePromotionMomentumEnd}
+              style={{ width: promotionCardWidth, alignSelf: 'center' }}
+              contentContainerStyle={styles.promotionsScrollContent}
             >
-              {promotions.map((promo, index) => (
-                <View key={index} style={[styles.promotionCard, { backgroundColor: promo.gradient[0] }]}>
+              {promotions.map((promo) => (
+                <View
+                  key={promo.id}
+                  style={[
+                    styles.promotionCard,
+                    { width: promotionCardWidth, backgroundColor: promo.gradient[0] },
+                  ]}
+                >
+                  <View style={styles.promotionCardDecor}>
+                    <Ionicons name={promo.icon} size={88} color="rgba(255, 255, 255, 0.12)" />
+                  </View>
                   <View style={styles.promotionContent}>
-                    <Text style={styles.promotionLabel}>{promo.title}</Text>
+                    <View style={styles.promotionBadge}>
+                      <Text style={styles.promotionBadgeText}>{promo.title}</Text>
+                    </View>
                     <Text style={styles.promotionTitle}>{promo.subtitle}</Text>
                     <Text style={styles.promotionDescription}>{promo.description}</Text>
                   </View>
-                  {(() => {
-                    // Wire up specific promotion actions and hide button for Holiday Special
-                    if (promo.title === 'Morning Special') {
-                      return (
-                        <TouchableOpacity style={styles.promotionButton} onPress={() => navigation.navigate('RideRequest')}>
-                          <Text style={styles.promotionButtonText}>{promo.buttonText}</Text>
-                        </TouchableOpacity>
-                      );
-                    }
-                    if (promo.title === 'Flash Sale') {
-                      return (
-                        <TouchableOpacity style={styles.promotionButton} onPress={() => navigation.navigate('FeaturedProducts')}>
-                          <Text style={styles.promotionButtonText}>{promo.buttonText}</Text>
-                        </TouchableOpacity>
-                      );
-                    }
-                    // Holiday Special or any other: no button
-                    return null;
-                  })()}
+                  <TouchableOpacity
+                    style={styles.promotionButton}
+                    onPress={() => {
+                      pausePromotionAutoSlide();
+                      navigation.navigate(promo.action);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.promotionButtonText, { color: promo.accentColor }]}>
+                      {promo.buttonText}
+                    </Text>
+                    <Ionicons name="arrow-forward" size={14} color={promo.accentColor} />
+                  </TouchableOpacity>
                 </View>
               ))}
             </ScrollView>
+
+            <View style={styles.promotionPagination}>
+              {promotions.map((promo, index) => (
+                <TouchableOpacity
+                  key={promo.id}
+                  onPress={() => {
+                    pausePromotionAutoSlide();
+                    scrollToPromotionIndex(index);
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.promotionPaginationDot,
+                      promotionIndex === index && styles.promotionPaginationDotActive,
+                    ]}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
             
             <View style={styles.securityCard}>
               <Ionicons name="shield-checkmark-outline" size={16} color="#14B8A6" />
@@ -1357,7 +1653,7 @@ export function Home() {
                       <Text style={styles.benefitsTitle}>Why Join Us?</Text>
                       <View style={styles.benefitItem}>
                         <Ionicons name="cash-outline" size={20} color="#0EA5E9" />
-                        <Text style={styles.benefitText}>Earn per request ride</Text>
+                        <Text style={styles.benefitText}>Earn per ride request</Text>
                       </View>
                       <View style={styles.benefitItem}>
                         <Ionicons name="time-outline" size={20} color="#0EA5E9" />
@@ -1665,71 +1961,98 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 16,
   },
-  welcomeButtons: {
-    flexDirection: 'column',
-    gap: 12,
+  serviceCarouselContainer: {
+    marginTop: 4,
   },
-  rideButton: {
-    flex: 1,
-    backgroundColor: '#E6F3FF',
-    borderRadius: 12,
-    padding: 16,
+  serviceCarouselContent: {
     alignItems: 'center',
   },
-  rideButtonTitle: {
-    fontSize: isLargeTablet ? 24 : 16,
-    fontWeight: '500',
-    color: '#1E40AF',
-    marginTop: 8,
+  serviceCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  rideButtonSubtitle: {
-    fontSize: isLargeTablet ? 16 : 12,
-    color: '#1E3A8A',
-    marginTop: 4,
-    textAlign: 'center',
+  serviceCardImage: {
+    width: '100%',
+    height: isLargeTablet ? 220 : 180,
+    justifyContent: 'flex-end',
   },
-  rideButtonAction: {
-    backgroundColor: '#1E40AF',
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    borderRadius: 20,
-    marginTop: 12,
+  serviceCardImageStyle: {
+    borderRadius: 16,
   },
-  rideButtonActionText: {
-    fontSize: isLargeTablet ? 16 : 14,
-    fontWeight: '500',
-    color: '#FFFFFF',
-  },
-  shopButton: {
+  serviceCardOverlayFull: {
     flex: 1,
-    backgroundColor: '#F0F4FF',
-    borderRadius: 12,
-    padding: 16,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    paddingHorizontal: isLargeTablet ? 24 : 20,
+    paddingVertical: isLargeTablet ? 22 : 18,
+    borderRadius: 16,
+  },
+  serviceCardBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  shopButtonTitle: {
-    fontSize: isLargeTablet ? 24 : 16,
-    fontWeight: '500',
-    color: '#3B82F6',
-    marginTop: 8,
-  },
-  shopButtonSubtitle: {
-    fontSize: isLargeTablet ? 16 : 12,
-    color: '#2563EB',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  shopButtonAction: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 16,
+    alignSelf: 'flex-start',
+    gap: 6,
+    backgroundColor: 'rgba(14, 165, 233, 0.9)',
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
-    marginTop: 12,
+    marginBottom: 10,
   },
-  shopButtonActionText: {
-    fontSize: isLargeTablet ? 16 : 14,
-    fontWeight: '500',
+  serviceCardBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
     color: '#FFFFFF',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  serviceCardTitle: {
+    fontSize: isLargeTablet ? 26 : 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  serviceCardSubtitle: {
+    fontSize: isLargeTablet ? 15 : 13,
+    color: 'rgba(255, 255, 255, 0.92)',
+    marginTop: 4,
+    lineHeight: isLargeTablet ? 22 : 18,
+  },
+  serviceCardAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 24,
+    marginTop: 14,
+  },
+  serviceCardActionText: {
+    fontSize: isLargeTablet ? 15 : 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  servicePagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+  },
+  servicePaginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#CBD5E1',
+  },
+  servicePaginationDotActive: {
+    width: 22,
+    backgroundColor: '#0EA5E9',
   },
   // Image Card styles for welcome section
   imageCardWrapper: {
@@ -2214,49 +2537,97 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   promotionControl: {
-    width: 24,
-    height: 24,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
+  },
+  promotionsScrollContent: {
+    alignItems: 'center',
   },
   promotionCard: {
-    width: isLargeTablet ? 340 : 280,
-    height: isLargeTablet ? 140 : 128,
-    borderRadius: 12,
-    padding: 16,
-    marginLeft: 16,
+    height: isLargeTablet ? 168 : 156,
+    borderRadius: 16,
+    padding: isLargeTablet ? 20 : 18,
     justifyContent: 'space-between',
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  promotionCardDecor: {
+    position: 'absolute',
+    right: -8,
+    top: -8,
   },
   promotionContent: {
     flex: 1,
+    zIndex: 1,
   },
-  promotionLabel: {
-    fontSize: isLargeTablet ? 16 : 14,
-    fontWeight: '500',
-    color: '#FFFFFF',
-  },
-  promotionTitle: {
-    fontSize: isLargeTablet ? 22 : 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginTop: 4,
-  },
-  promotionDescription: {
-    fontSize: isLargeTablet ? 14 : 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 4,
-  },
-  promotionButton: {
+  promotionBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
+    marginBottom: 10,
+  },
+  promotionBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  promotionTitle: {
+    fontSize: isLargeTablet ? 24 : 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  promotionDescription: {
+    fontSize: isLargeTablet ? 14 : 13,
+    color: 'rgba(255, 255, 255, 0.88)',
+    marginTop: 6,
+    lineHeight: isLargeTablet ? 20 : 18,
+  },
+  promotionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 24,
+    zIndex: 1,
   },
   promotionButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#14B8A6',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  promotionPagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingHorizontal: basePadding,
+  },
+  promotionPaginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#CBD5E1',
+  },
+  promotionPaginationDotActive: {
+    width: 22,
+    backgroundColor: '#0EA5E9',
   },
   securityCard: {
     flexDirection: 'row',

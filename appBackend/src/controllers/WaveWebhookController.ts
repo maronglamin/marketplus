@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { PrismaClient, TransactionType } from '@prisma/client';
 import WavePaymentService from '../services/WavePaymentService';
 import UCPService from '../services/ucpService';
+import { notificationService } from '../services/notificationService';
 
 const prisma = new PrismaClient();
 
@@ -192,9 +193,40 @@ export class WaveWebhookController {
                 })
               : null);
           if (!original && clientReference) {
-            // Fallback resolution via domain entities referenced by clientReference
+            // Try service booking by id
             try {
-              // Try order by id or orderNumber
+              const serviceBooking = await prisma.serviceBooking.findUnique({ where: { id: clientReference } });
+              if (serviceBooking) {
+                original = await prisma.externalTransaction.findFirst({
+                  where: {
+                    gatewayProvider: 'wave_gambia',
+                    transactionType: 'ORIGINAL',
+                    serviceBookingId: serviceBooking.id,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                });
+              }
+            } catch {}
+          }
+          if (!original && clientReference) {
+            // Try property booking by id
+            try {
+              const propertyBooking = await prisma.propertyBooking.findUnique({ where: { id: clientReference } });
+              if (propertyBooking) {
+                original = await prisma.externalTransaction.findFirst({
+                  where: {
+                    gatewayProvider: 'wave_gambia',
+                    transactionType: 'ORIGINAL',
+                    propertyBookingId: propertyBooking.id,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                });
+              }
+            } catch {}
+          }
+          if (!original && clientReference) {
+            // Try order by id or orderNumber
+            try {
               const order =
                 (await prisma.orders.findUnique({ where: { id: clientReference } })) ||
                 (await prisma.orders.findUnique({ where: { orderNumber: clientReference } as any }).catch(() => null as any));
@@ -277,6 +309,8 @@ export class WaveWebhookController {
                   orderId: original.orderId || null,
                   rentalRequestId: (original as any).rentalRequestId || null,
                   rideRequestId: (original as any).rideRequestId || null,
+                  serviceBookingId: (original as any).serviceBookingId || null,
+                  propertyBookingId: (original as any).propertyBookingId || null,
                   customerId: (original.customerId ?? undefined) as any,
                   sellerId: (original.sellerId ?? undefined) as any,
                   gatewayProvider: 'wave_gambia',
@@ -340,6 +374,30 @@ export class WaveWebhookController {
               }
             }
 
+            // If linked to a service booking, mark as PAID
+            if ((original as any).serviceBookingId) {
+              try {
+                await prisma.serviceBooking.update({
+                  where: { id: (original as any).serviceBookingId },
+                  data: { status: 'PAID', paymentStatus: 'PAID', updatedAt: new Date() },
+                });
+              } catch (e) {
+                console.warn('Wave webhook: service booking finalize warning:', (e as any)?.message || e);
+              }
+            }
+
+            // If linked to a property booking, mark as PAID
+            if ((original as any).propertyBookingId) {
+              try {
+                await prisma.propertyBooking.update({
+                  where: { id: (original as any).propertyBookingId },
+                  data: { status: 'CONFIRMED', paymentStatus: 'PAID', updatedAt: new Date() },
+                });
+              } catch (e) {
+                console.warn('Wave webhook: property booking finalize warning:', (e as any)?.message || e);
+              }
+            }
+
             // If linked to a ride request, set Ride.paymentStatus = PAID
             if ((original as any).rideRequestId) {
               try {
@@ -377,6 +435,8 @@ export class WaveWebhookController {
                     orderId: original.orderId || null,
                     rentalRequestId: (original as any).rentalRequestId || null,
                     rideRequestId: (original as any).rideRequestId || null,
+                    serviceBookingId: (original as any).serviceBookingId || null,
+                    propertyBookingId: (original as any).propertyBookingId || null,
                     customerId: (original.customerId ?? undefined) as any,
                     sellerId: (original.sellerId ?? undefined) as any,
                     gatewayProvider: 'wave_gambia',
@@ -405,6 +465,8 @@ export class WaveWebhookController {
             } catch (e) {
               console.warn('Wave webhook: service fee creation warning:', (e as any)?.message || e);
             }
+
+            void notificationService.sendPaymentCompletedFromExternalTransaction(original);
           }
         }
       }

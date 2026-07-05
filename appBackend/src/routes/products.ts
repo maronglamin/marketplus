@@ -1267,6 +1267,20 @@ router.post('/:productId/interest', authenticate, async (req: AuthRequest, res) 
       interestId: productInterest.id
     });
 
+    const buyerName = `${productInterest.user.firstName} ${productInterest.user.lastName}`.trim();
+    void notificationService.sendInterestNotificationToSeller(
+      product.sellerId,
+      buyerName,
+      productInterest.product.title,
+      productInterest.quantity,
+      productInterest.id
+    ).catch((err) => logger.error('Failed to send interest notification to seller:', err));
+    void notificationService.sendInterestConfirmationToBuyer(
+      req.user.id,
+      productInterest.product.title,
+      productInterest.id
+    ).catch((err) => logger.error('Failed to send interest confirmation to buyer:', err));
+
     res.status(201).json({
       message: 'Interest expressed successfully',
       interest: {
@@ -1780,6 +1794,20 @@ router.post('/:productId/order', authenticate, async (req: AuthRequest, res) => 
       orderNumber: order.orderNumber
     });
 
+    const buyerName = customerName || `${userDetails?.firstName || ''} ${userDetails?.lastName || ''}`.trim() || 'Customer';
+    void notificationService.sendOrderNotificationToSeller(
+      product.seller.id,
+      buyerName,
+      product.title,
+      order.id
+    ).catch((err) => logger.error('Failed to send order notification to seller:', err));
+    void notificationService.sendOrderConfirmationToBuyer(
+      (req as any).user.id,
+      product.title,
+      order.id,
+      order.orderNumber
+    ).catch((err) => logger.error('Failed to send order confirmation to buyer:', err));
+
     res.status(201).json({
       message: 'Order created successfully',
       order: {
@@ -2237,28 +2265,22 @@ router.post('/interests/:interestId/messages', authenticate, async (req: AuthReq
     };
 
     // Send notification to the other party (seller if buyer sent message, buyer if seller sent message)
-    try {
-      if (req.user.id === interest.userId) {
-        // Buyer sent message, notify seller
-        await notificationService.sendMessageNotificationToSeller(
-          interest.product.sellerId,
-          senderName,
-          interest.product.title,
-          messageContent,
-          interestId
-        );
-      } else {
-        // Seller sent message, notify buyer
-        await notificationService.sendMessageNotificationToBuyer(
-          interest.userId,
-          interest.product.title,
-          messageContent,
-          interestId
-        );
-      }
-    } catch (notificationError) {
-      logger.error('Error sending notification:', notificationError);
-      // Don't fail the request if notification fails
+    if (req.user.id === interest.userId) {
+      void notificationService.sendMessageNotificationToSeller(
+        interest.product.sellerId,
+        senderName,
+        interest.product.title,
+        messageContent,
+        interestId
+      ).catch((notificationError) => logger.error('Error sending notification to seller:', notificationError));
+    } else {
+      void notificationService.sendMessageNotificationToBuyer(
+        interest.userId,
+        interest.product.title,
+        messageContent,
+        interestId,
+        senderName
+      ).catch((notificationError) => logger.error('Error sending notification to buyer:', notificationError));
     }
 
     logger.info('Message added to interest:', { interestId, senderId: req.user.id });

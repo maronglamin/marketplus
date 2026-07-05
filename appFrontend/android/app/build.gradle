@@ -24,12 +24,12 @@ if (keystorePropertiesFile.exists()) {
  */
 react {
     root = file(projectRoot).getAbsoluteFile()
-    // Use explicit absolute entry path to avoid Metro resolution issues on Windows (./index.ts from appFrontend/.)
-    entryFile = file(projectRoot + "/index.ts")
+    entryFile = file(["node", "-e", "require('expo/scripts/resolveAppEntry')", projectRoot, "android", "absolute"].execute(null, rootDir).text.trim())
     reactNativeDir = new File(reactNativePath).getAbsoluteFile()
     hermesCommand = reactNativePath + "/sdks/hermesc/%OS-BIN%/" + hermescBin
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
+    enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
     // Use wrapper so bundle runs with cwd = PROJECT_ROOT (canonical path), fixing Metro ./index.ts resolution on Windows when building from C:\mp
     cliFile = file(projectRoot + "/scripts/bundle-export-wrapper.js")
     bundleCommand = "export:embed"
@@ -89,6 +89,15 @@ tasks.findByName("createBundleReleaseJsAndAssets")?.configure { task ->
     task.environment("NODE_ENV", System.getenv("NODE_ENV") ?: "production")
 }
 
+def generatedAdaptiveIconResDir = file("$buildDir/generated/res/adaptiveIcon")
+def copyAdaptiveIconForeground = tasks.register("copyAdaptiveIconForeground", Copy) {
+    def foregroundIcon = file("${projectRoot}/assets/adaptive-icon-foreground.png")
+    inputs.file(foregroundIcon)
+    from(foregroundIcon)
+    into(new File(generatedAdaptiveIconResDir, "drawable"))
+    rename { "adaptive_icon_foreground.png" }
+}
+
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
@@ -114,12 +123,17 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace 'biz.cloudnexus.snap.app'
+    sourceSets {
+        main {
+            res.srcDirs += generatedAdaptiveIconResDir
+        }
+    }
     defaultConfig {
         applicationId 'biz.cloudnexus.snap.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 15
-        versionName "1.0.2"
+        versionCode 17
+        versionName "1.0.4"
     }
     signingConfigs {
         debug {
@@ -171,6 +185,10 @@ android {
     }
 }
 
+tasks.named("preBuild").configure {
+    dependsOn(copyAdaptiveIconForeground)
+}
+
 // Apply static values from `gradle.properties` to the `android.packagingOptions`
 // Accepts values in comma delimited lists, example:
 // android.packagingOptions.pickFirsts=/LICENSE,**/picasa.ini
@@ -220,8 +238,39 @@ dependencies {
     }
 }
 
-// Fail fast if the JS bundle never made it into the AAB (avoids Play-only jniLoadScriptFromAssets crashes).
+// Fail fast if the JS bundle never made it into release artifacts (avoids jniLoadScriptFromAssets crashes).
 afterEvaluate {
+    def packageReleaseApk = tasks.findByName("packageRelease")
+    if (packageReleaseApk != null) {
+        packageReleaseApk.doLast {
+            def apk = file("${layout.buildDirectory.get().asFile}/outputs/apk/release/app-release.apk")
+            if (!apk.exists()) {
+                return
+            }
+            def zip = new java.util.zip.ZipFile(apk)
+            try {
+                def bundleEntry = null
+                zip.entries().each { e ->
+                    if (!e.isDirectory() && e.name.endsWith("index.android.bundle")) {
+                        bundleEntry = e
+                    }
+                }
+                if (bundleEntry == null) {
+                    throw new GradleException(
+                        "Release APK is missing assets/index.android.bundle — installs will crash in jniLoadScriptFromAssets."
+                    )
+                }
+                if (bundleEntry.size < 1024) {
+                    throw new GradleException(
+                        "Release APK index.android.bundle is only ${bundleEntry.size} bytes — bundle step likely failed."
+                    )
+                }
+            } finally {
+                zip.close()
+            }
+        }
+    }
+
     def packageReleaseBundle = tasks.findByName("packageReleaseBundle")
     if (packageReleaseBundle != null) {
         packageReleaseBundle.doLast {

@@ -4,7 +4,7 @@ import { SearchBar } from '../components/SearchBar';
 import { QuickActions } from '../components/QuickActions';
 import { ShopOnline } from '../components/ShopOnline';
 import { PromotionsBanner } from '../components/PromotionsBanner';
-import { RecentActivity } from '../components/RecentActivity';
+import { ServicesSection } from '../components/ServicesSection';
 import { Link } from 'react-router-dom';
 import { ShoppingCart } from 'lucide-react';
 import { orderService } from '../api/orders';
@@ -37,6 +37,7 @@ export function Home() {
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <SearchBar />
       <WelcomeBanner />
+      <ServicesSection />
       <QuickActions />
       <ShopOnline />
       <PromotionsBanner />

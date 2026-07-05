@@ -1,5 +1,6 @@
 import { PrismaClient, RideRequest, RideStatus, RideType, RidePaymentMethod, TransactionStatus } from '@prisma/client';
 import { calculateFare } from '../utils/fareCalculator';
+import { notificationService } from './notificationService';
 
 const prisma = new PrismaClient();
 
@@ -1261,6 +1262,15 @@ export class RideRequestService {
         paymentMethod: 'CARD',
         gatewayFees: Math.round(data.amount * 0.029 + 30),
         serviceFee: Math.round(data.amount * 0.05)
+      });
+
+      void notificationService.sendPaymentCompletedNotifications({
+        customerId: data.customerId,
+        sellerId: ride.driver.userId,
+        amount: data.amount,
+        currency: data.currency.toUpperCase(),
+        context: 'ride',
+        referenceId: rideRequest.id,
       });
 
       return result.originalTransaction;

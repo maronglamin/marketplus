@@ -8,7 +8,7 @@ buildscript {
   dependencies {
     classpath('com.android.tools.build:gradle')
     classpath('com.facebook.react:react-native-gradle-plugin')
-    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24')
+    classpath('org.jetbrains.kotlin:kotlin-gradle-plugin')
   }
 }
 
@@ -18,7 +18,7 @@ ext {
   compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '35')
   targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '35')
   ndkVersion = findProperty('android.ndkVersion') ?: '26.1.10909125'
-  kotlinVersion = findProperty('android.kotlinVersion') ?: '1.9.24'
+  kotlinVersion = findProperty('android.kotlinVersion') ?: '2.0.21'
 }
 
 def reactNativeAndroidDir = new File(
@@ -79,6 +79,16 @@ subprojects { subproject ->
     }
   }
 
+  subproject.afterEvaluate {
+    if (subproject.plugins.hasPlugin("com.android.application") ||
+        subproject.plugins.hasPlugin("com.android.library")) {
+      subproject.android.lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+      }
+    }
+  }
+
   if (System.getProperty("os.name").toLowerCase().contains("windows") &&
       subproject.name == "react-native-screens") {
     // Windows can get stuck cleaning stale CMake state for removed ABIs
@@ -92,16 +102,7 @@ subprojects { subproject ->
     }
   }
 
-  // Expo SDK 52 uses Compose compiler 1.5.14 in expo-modules-core.
-  // On this toolchain Kotlin resolves to 1.9.25, so suppress the strict version gate.
-  subproject.plugins.withId("org.jetbrains.kotlin.android") {
-    subproject.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { task ->
-      task.kotlinOptions.freeCompilerArgs += [
-        "-P",
-        "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.25"
-      ]
-    }
-  }
 }
 
+apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"

@@ -2,10 +2,6 @@
 const fs = require("fs");
 const path = require("path");
 
-if (process.platform !== "win32") {
-  process.exit(0);
-}
-
 const root = path.resolve(__dirname, "..");
 
 function readText(filePath) {
@@ -14,6 +10,16 @@ function readText(filePath) {
 
 function writeText(filePath, contents) {
   fs.writeFileSync(filePath, contents, "utf8");
+}
+
+function ensureTextFile(relativePath, contents) {
+  const filePath = path.join(root, relativePath);
+  if (fs.existsSync(filePath)) {
+    return;
+  }
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  writeText(filePath, contents);
+  console.log(`Created ${relativePath}`);
 }
 
 function replaceOnce(contents, from, to, label) {
@@ -37,6 +43,18 @@ function patchFile(relativePath, transform) {
     writeText(filePath, after);
     console.log(`Patched ${relativePath}`);
   }
+}
+
+ensureTextFile(
+  "node_modules/expo-notifications/android/src/main/res/values/strings.xml",
+  `<resources>
+  <string name="expo_notifications_fallback_channel_name">Miscellaneous</string>
+</resources>
+`
+);
+
+if (process.platform !== "win32") {
+  process.exit(0);
 }
 
 patchFile(

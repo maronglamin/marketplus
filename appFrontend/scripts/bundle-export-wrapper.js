@@ -9,7 +9,7 @@
  */
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 // Local ./gradlew bundleRelease often runs without NODE_ENV; app.config.ts then treats the build as
 // non-production (skips production autolinking / can skew embed). Match EAS production behavior.
@@ -51,8 +51,11 @@ for (let i = 0; i < rawArgs.length; i++) {
   }
 }
 
-const expoArgs = ['expo', 'export:embed', '--platform', 'android', ...args];
-execSync('npx', expoArgs, { stdio: 'inherit' });
+const expoCli = require.resolve('expo/bin/cli', { paths: [resolveCwd, __dirname] });
+const expoArgs = args[0] === 'export:embed'
+  ? args
+  : ['export:embed', '--platform', 'android', ...args];
+execFileSync(process.execPath, [expoCli, ...expoArgs], { stdio: 'inherit' });
 
 // Plugin's Hermes step reads from react/Release (jsBundleDir). Copy bundle there so hermesc finds it.
 if (bundleOutputResolved && fs.existsSync(bundleOutputResolved) && bundleOutputValue) {

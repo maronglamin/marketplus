@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { WebPushRegistration } from './components/WebPushRegistration';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Header } from './components/Header';
 import { BottomNavigation } from './components/BottomNavigation';
@@ -36,10 +37,12 @@ import { ReportsScreen } from './pages/ReportsScreen';
 import { RepOrderReport } from './pages/RepOrderReport';
 import { RepProductReport } from './pages/RepProductReport';
 import RecentActivity from './pages/RecentActivity';
+import { serviceRoutes } from './routes/serviceRoutes';
 
 function App() {
   return (
     <AuthProvider>
+      <WebPushRegistration />
       <Router>
         <Routes>
           {/* Public routes - no authentication required */}
@@ -435,6 +438,9 @@ function App() {
               </div>
             </ProtectedRoute>
           } />
+
+          {/* Home Services & Real Estate */}
+          {serviceRoutes}
 
           {/* Catch-all route for debugging */}
           <Route path="*" element={

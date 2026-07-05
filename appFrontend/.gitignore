@@ -37,6 +37,17 @@ yarn-error.*
 *.tsbuildinfo
 
 /android
+!/android/
+!/android/app/
+!/android/app/src/
+!/android/app/src/main/
+!/android/app/src/main/java/
+!/android/app/src/main/java/biz/
+!/android/app/src/main/java/biz/cloudnexus/
+!/android/app/src/main/java/biz/cloudnexus/snap/
+!/android/app/src/main/java/biz/cloudnexus/snap/app/
+!/android/app/src/main/java/biz/cloudnexus/snap/app/MainActivity.kt
+!/android/app/src/main/java/biz/cloudnexus/snap/app/MainApplication.kt
 /ios
 
 /dist

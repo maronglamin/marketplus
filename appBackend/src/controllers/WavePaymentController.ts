@@ -53,13 +53,54 @@ export class WavePaymentController {
       const originalAmount = Number(amount);
       const currencyCode = String(currency || 'GMD').toUpperCase();
 
-      // Identify order/rental/ride and seller
+      // Identify order/rental/ride/service/property booking and seller
       let sellerId = userId;
       let actualOrderId: string | null = null;
       let isRental = false;
       let isRide = false;
+      let isServiceBooking = false;
+      let isPropertyBooking = false;
 
       if (orderId) {
+        const serviceBooking = await prisma.serviceBooking.findUnique({
+          where: { id: orderId },
+          include: { provider: { include: { user: { select: { id: true } } } } },
+        });
+        if (serviceBooking) {
+          isServiceBooking = true;
+          actualOrderId = serviceBooking.id;
+          sellerId = serviceBooking.provider?.user?.id || sellerId;
+          if (serviceBooking.customerId !== userId) {
+            res.status(403).json({ success: false, message: 'Not authorized to pay for this service booking' });
+            return;
+          }
+        }
+
+        if (!isServiceBooking) {
+          const propertyBooking = await prisma.propertyBooking.findUnique({
+            where: { id: orderId },
+            include: {
+              listing: {
+                include: {
+                  agent: {
+                    include: { user: { select: { id: true } } },
+                  },
+                },
+              },
+            },
+          });
+          if (propertyBooking) {
+            isPropertyBooking = true;
+            actualOrderId = propertyBooking.id;
+            sellerId = propertyBooking.listing.agent.user.id;
+            if (propertyBooking.customerId !== userId) {
+              res.status(403).json({ success: false, message: 'Not authorized to pay for this property booking' });
+              return;
+            }
+          }
+        }
+
+        if (!isServiceBooking && !isPropertyBooking) {
         const rental = await prisma.rentalRequest.findUnique({
           where: { id: orderId },
           include: { driver: { include: { user: { select: { id: true } } } } },
@@ -94,7 +135,7 @@ export class WavePaymentController {
               select: { id: true, sellerId: true, userId: true },
             });
             if (!order) {
-              res.status(404).json({ success: false, message: 'Order, rental, or ride not found' });
+              res.status(404).json({ success: false, message: 'Order, rental, ride, service or property booking not found' });
               return;
             }
             actualOrderId = order.id;
@@ -104,6 +145,7 @@ export class WavePaymentController {
               return;
             }
           }
+        }
         }
       }
 
@@ -156,7 +198,15 @@ export class WavePaymentController {
           appTransactionId,
           gatewayTransactionId: session.transaction_id || session.id,
           gatewayProvider: 'wave_gambia',
-          appService: isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
+          appService: isServiceBooking
+            ? 'HOME_SERVICES'
+            : isPropertyBooking
+              ? 'REAL_ESTATE'
+              : isRental
+                ? 'RENTAL'
+                : isRide
+                  ? 'RIDE'
+                  : 'ECOMMERCE',
           amount: originalAmount,
           currencyCode,
           status: 'PENDING',
@@ -178,7 +228,9 @@ export class WavePaymentController {
           },
         };
 
-        if (isRental) transactionData.rentalRequestId = actualOrderId;
+        if (isServiceBooking) transactionData.serviceBookingId = actualOrderId;
+        else if (isPropertyBooking) transactionData.propertyBookingId = actualOrderId;
+        else if (isRental) transactionData.rentalRequestId = actualOrderId;
         else if (isRide) transactionData.rideRequestId = actualOrderId;
         else transactionData.orderId = actualOrderId;
 
@@ -190,7 +242,15 @@ export class WavePaymentController {
             appTransactionId: serviceFeeTransactionId,
             gatewayTransactionId: session.transaction_id || session.id,
             gatewayProvider: 'wave_gambia',
-            appService: isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
+            appService: isServiceBooking
+            ? 'HOME_SERVICES'
+            : isPropertyBooking
+              ? 'REAL_ESTATE'
+              : isRental
+                ? 'RENTAL'
+                : isRide
+                  ? 'RIDE'
+                  : 'ECOMMERCE',
             amount: serviceFeeAmount,
             currencyCode,
             status: 'PENDING',
@@ -204,7 +264,9 @@ export class WavePaymentController {
               description: `Service fee for Wave payment ${session.id}`,
             },
           };
-          if (isRental) serviceFeeData.rentalRequestId = actualOrderId;
+          if (isServiceBooking) serviceFeeData.serviceBookingId = actualOrderId;
+          else if (isPropertyBooking) serviceFeeData.propertyBookingId = actualOrderId;
+          else if (isRental) serviceFeeData.rentalRequestId = actualOrderId;
           else if (isRide) serviceFeeData.rideRequestId = actualOrderId;
           else serviceFeeData.orderId = actualOrderId;
           await prisma.externalTransaction.create({ data: serviceFeeData });

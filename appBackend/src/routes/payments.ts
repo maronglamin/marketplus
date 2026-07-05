@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { PrismaClient, TransactionType } from '@prisma/client';
 import UCPService from '../services/ucpService';
 import yonnaForexPaymentRoutes from './yonnaForexPaymentRoutes';
+import { notificationService } from '../services/notificationService';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -507,6 +508,15 @@ router.post('/payment-success', authenticate, async (req, res) => {
       return { updatedOrder, originalTransaction, feeTransaction, serviceFeeTransaction };
     });
 
+    void notificationService.sendPaymentCompletedNotifications({
+      customerId: order.userId,
+      sellerId: order.sellerId,
+      amount: originalAmount,
+      currency: paymentIntent.currency.toUpperCase(),
+      context: 'order',
+      referenceId: orderId,
+    });
+
     res.json({
       success: true,
       order: {
@@ -752,6 +762,17 @@ router.post('/bulk-payment-success', authenticate, async (req, res) => {
       return { updatedOrders, transactions };
     });
 
+    for (const paidOrder of result.updatedOrders) {
+      void notificationService.sendPaymentCompletedNotifications({
+        customerId: paidOrder.userId,
+        sellerId: paidOrder.sellerId,
+        amount: Number(paidOrder.totalAmount || 0),
+        currency: (paidOrder.currencyCode || paymentIntent.currency).toUpperCase(),
+        context: 'order',
+        referenceId: paidOrder.id,
+      });
+    }
+
     res.json({
       success: true,
       orders: result.updatedOrders.map(o => ({
@@ -938,6 +959,17 @@ router.post('/bulk-external-success', authenticate, async (req, res) => {
       return { updatedOrders, transactions };
     });
 
+    for (const paidOrder of result.updatedOrders) {
+      void notificationService.sendPaymentCompletedNotifications({
+        customerId: paidOrder.userId,
+        sellerId: paidOrder.sellerId,
+        amount: Number(paidOrder.totalAmount || 0),
+        currency: currencyCode.toUpperCase(),
+        context: 'order',
+        referenceId: paidOrder.id,
+      });
+    }
+
     res.json({
       success: true,
       orders: result.updatedOrders.map(o => ({
@@ -1105,6 +1137,15 @@ router.post('/external-success', authenticate, async (req, res) => {
       });
 
       return { updatedOrder, originalTx, serviceFeeTx };
+    });
+
+    void notificationService.sendPaymentCompletedNotifications({
+      customerId: order.userId,
+      sellerId: order.sellerId,
+      amount,
+      currency: currencyUpper,
+      context: 'order',
+      referenceId: order.id,
     });
 
     res.json({

@@ -9,7 +9,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   ...baseConfig,
   name: 'SNAP',
   slug: 'snap',
-  version: '1.0.2',
+  version: '1.0.3',
   jsEngine: 'jsc',
   orientation: 'portrait',
   icon: './assets/adaptive-icon-foreground.png',
@@ -25,7 +25,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     jsEngine: 'jsc',
     supportsTablet: true,
     bundleIdentifier: 'biz.cloudnexus.snap.app',
-    buildNumber: '15',
+    buildNumber: '16',
     infoPlist: {
       UILaunchStoryboardName: 'SplashScreen',
       UIRequiresFullScreen: true,
@@ -56,7 +56,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       backgroundColor: '#00bcd4'
     },
     package: 'biz.cloudnexus.snap.app',
-    versionCode: 15,
+    versionCode: 17,
     config: {
       googleMaps: {
         apiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo'

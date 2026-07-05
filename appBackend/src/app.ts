@@ -30,6 +30,11 @@ import branchRoutes from './routes/branch';
 import yonnaForexPaymentRoutes from './routes/yonnaForexPaymentRoutes';
 import wavePaymentRoutes from './routes/wavePaymentRoutes';
 import appVersionRoutes from './routes/appVersion';
+import serviceBookingsRoutes from './routes/serviceBookings';
+import serviceProvidersRoutes from './routes/serviceProviders';
+import propertyListingsRoutes from './routes/propertyListings';
+import propertyBookingsRoutes from './routes/propertyBookings';
+import propertyAgentsRoutes from './routes/propertyAgents';
 
 const app = express();
 
@@ -461,6 +466,11 @@ app.use('/api/branches', branchRoutes);
 app.use('/api/payments/yonna-forex', yonnaForexPaymentRoutes);
 app.use('/api/payments/wave-gambia', wavePaymentRoutes);
 app.use('/api/app', appVersionRoutes);
+app.use('/api/service-bookings', serviceBookingsRoutes);
+app.use('/api/service-providers', serviceProvidersRoutes);
+app.use('/api/property-listings', propertyListingsRoutes);
+app.use('/api/property-bookings', propertyBookingsRoutes);
+app.use('/api/property-agents', propertyAgentsRoutes);
 
 // Health check endpoint under /api
 app.get('/api/health', (req, res) => {

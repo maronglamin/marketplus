@@ -79,19 +79,63 @@ export class YonnaForexPaymentController {
       let actualOrderId = null; // Store the actual order/rental/ride UUID
       let isRental = false;
       let isRide = false;
+      let isServiceBooking = false;
+      let isPropertyBooking = false;
       
       if (orderId) {
-        // First try to find as rental request
-        let rental = await prisma.rentalRequest.findUnique({
+        // Service booking
+        const serviceBooking = await prisma.serviceBooking.findUnique({
           where: { id: orderId },
-          include: {
-            driver: { 
-              include: { 
-                user: { select: { id: true } } 
-              } 
+          include: { provider: { include: { user: { select: { id: true } } } } },
+        });
+        if (serviceBooking) {
+          isServiceBooking = true;
+          sellerId = serviceBooking.provider?.user?.id || '';
+          actualOrderId = serviceBooking.id;
+          if (serviceBooking.customerId !== userId) {
+            res.status(403).json({ success: false, message: 'Not authorized' });
+            return;
+          }
+        }
+
+        // Property booking
+        if (!isServiceBooking) {
+          const propertyBooking = await prisma.propertyBooking.findUnique({
+            where: { id: orderId },
+            include: {
+              listing: {
+                include: {
+                  agent: {
+                    include: { user: { select: { id: true } } },
+                  },
+                },
+              },
+            },
+          });
+          if (propertyBooking) {
+            isPropertyBooking = true;
+            sellerId = propertyBooking.listing.agent.user.id;
+            actualOrderId = propertyBooking.id;
+            if (propertyBooking.customerId !== userId) {
+              res.status(403).json({ success: false, message: 'Not authorized' });
+              return;
             }
           }
-        });
+        }
+
+        let rental = null;
+        if (!isServiceBooking && !isPropertyBooking) {
+          rental = await prisma.rentalRequest.findUnique({
+            where: { id: orderId },
+            include: {
+              driver: {
+                include: {
+                  user: { select: { id: true } },
+                },
+              },
+            },
+          });
+        }
         
         if (rental) {
           isRental = true;
@@ -105,7 +149,7 @@ export class YonnaForexPaymentController {
             });
             return;
           }
-        } else {
+        } else if (!isServiceBooking && !isPropertyBooking) {
           // Try to find as ride request
           let rideRequest = await prisma.rideRequest.findUnique({
             where: { requestId: orderId },
@@ -164,10 +208,10 @@ export class YonnaForexPaymentController {
                 });
                 return;
               }
-            } else {
+            } else if (!isServiceBooking && !isPropertyBooking) {
               res.status(404).json({
                 success: false,
-                message: 'Order, rental, or ride request not found'
+                message: 'Order, rental, ride, service or property booking not found'
               });
               return;
             }
@@ -212,7 +256,9 @@ export class YonnaForexPaymentController {
         countryCode: '+220', // Default country code for Yonna Forex
         appTransactionId: appTransactionId,
         description: orderId ? 
-          (isRental ? `Payment for Rental #${orderId} via Yonna Forex Wallet` : 
+          (isServiceBooking ? `Payment for Service Booking #${orderId} via Yonna Forex Wallet` :
+           isPropertyBooking ? `Payment for Property Booking #${orderId} via Yonna Forex Wallet` :
+           isRental ? `Payment for Rental #${orderId} via Yonna Forex Wallet` : 
            isRide ? `Payment for Ride #${orderId} via Yonna Forex Wallet` :
            `Payment for Order #${orderId} via Yonna Forex Wallet`) : 
           `Payment via Yonna Forex Wallet`
@@ -228,7 +274,7 @@ export class YonnaForexPaymentController {
             appTransactionId: appTransactionId,
             gatewayTransactionId: finalTransactionId,
             gatewayProvider: 'yonna_forex',
-            appService: isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
+            appService: isServiceBooking ? 'HOME_SERVICES' : isPropertyBooking ? 'REAL_ESTATE' : isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
             amount: originalAmount,
             currencyCode: currencyCode,
             status: 'PENDING',
@@ -246,7 +292,11 @@ export class YonnaForexPaymentController {
           };
 
           // Add order, rental, or ride reference
-          if (isRental) {
+          if (isServiceBooking) {
+            transactionData.serviceBookingId = actualOrderId;
+          } else if (isPropertyBooking) {
+            transactionData.propertyBookingId = actualOrderId;
+          } else if (isRental) {
             transactionData.rentalRequestId = actualOrderId;
           } else if (isRide) {
             transactionData.rideRequestId = actualOrderId;
@@ -265,7 +315,7 @@ export class YonnaForexPaymentController {
               appTransactionId: serviceFeeTransactionId,
               gatewayTransactionId: `${finalTransactionId}`,
               gatewayProvider: 'yonna_forex',
-              appService: isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
+              appService: isServiceBooking ? 'HOME_SERVICES' : isPropertyBooking ? 'REAL_ESTATE' : isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
               amount: serviceFeeAmount,
               currencyCode: currencyCode,
               status: 'PENDING',
@@ -281,7 +331,11 @@ export class YonnaForexPaymentController {
             };
 
             // Add order, rental, or ride reference
-            if (isRental) {
+            if (isServiceBooking) {
+              serviceFeeData.serviceBookingId = actualOrderId;
+            } else if (isPropertyBooking) {
+              serviceFeeData.propertyBookingId = actualOrderId;
+            } else if (isRental) {
               serviceFeeData.rentalRequestId = actualOrderId;
             } else if (isRide) {
               serviceFeeData.rideRequestId = actualOrderId;

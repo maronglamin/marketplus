@@ -75,6 +75,9 @@ import { RepProductReport } from '../screens/reps-reports/RepProductReport';
 import { ShoppingCart } from '../screens/ShoppingCart';
 import { RentalEarnings } from '../screens/RentalEarnings';
 import { RentalSettlementRequest } from '../screens/transactions/RentalSettlementRequest';
+import { HomeServicesNavigator, type HomeServicesStackParamList } from './HomeServicesNavigator';
+import { RealEstateNavigator, type RealEstateStackParamList } from './RealEstateNavigator';
+import type { NavigatorScreenParams } from '@react-navigation/native';
 
 export type AppStackParamList = {
   Home: { openSearch?: boolean } | undefined;
@@ -266,6 +269,8 @@ export type AppStackParamList = {
     };
   };
   PrivacyPolicy: undefined;
+  HomeServices: NavigatorScreenParams<HomeServicesStackParamList> | undefined;
+  RealEstate: NavigatorScreenParams<RealEstateStackParamList> | undefined;
 };
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -361,6 +366,8 @@ export function AppNavigator() {
         <Stack.Screen name="VehicleDetails" component={VehicleDetailsScreen} />
         <Stack.Screen name="RideTracking" component={RideTracking} />
         <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicy} />
+        <Stack.Screen name="HomeServices" component={HomeServicesNavigator} />
+        <Stack.Screen name="RealEstate" component={RealEstateNavigator} />
       </Stack.Navigator>
     </View>
   );

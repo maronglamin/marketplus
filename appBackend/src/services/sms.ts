@@ -13,16 +13,17 @@ const environment = process.env.NODE_ENV || 'development';
 
 const prisma = new PrismaClient();
 
-if (!accountSid || !authToken || (!fromNumber && !messagingServiceSid)) {
-  console.error('Missing Twilio credentials. Please check your .env file.');
-  console.error('Required environment variables:');
-  console.error('- TWILIO_ACCOUNT_SID');
-  console.error('- TWILIO_AUTH_TOKEN');
-  console.error('- TWILIO_PHONE_NUMBER or TWILIO_MESSAGING_SERVICE_SID');
-  process.exit(1);
+const isTwilioConfigured = Boolean(
+  accountSid && authToken && (fromNumber || messagingServiceSid)
+);
+
+if (!isTwilioConfigured) {
+  console.warn(
+    '[twilio] TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER (or TWILIO_MESSAGING_SERVICE_SID) not set — SMS disabled'
+  );
 }
 
-const client = twilio(accountSid, authToken);
+const client = isTwilioConfigured ? twilio(accountSid!, authToken!) : null;
 
 const validatePhoneNumber = (phoneNumber: string): boolean => {
   // Basic phone number validation
@@ -107,6 +108,14 @@ const logTwilioNotification = async (params: {
 
 export const sendOTP = async (phoneNumber: string, code: string, options?: SmsLogOptions): Promise<void> => {
   try {
+    if (!client) {
+      if (isDevelopment) {
+        console.log(`[DEV] OTP for ${phoneNumber}: ${code}`);
+        return;
+      }
+      throw new Error('Twilio is not configured');
+    }
+
     if (!validatePhoneNumber(phoneNumber)) {
       throw new Error('Invalid phone number format');
     }
@@ -179,6 +188,14 @@ export const sendOTP = async (phoneNumber: string, code: string, options?: SmsLo
 
 export const sendPIN = async (phoneNumber: string, pin: string, options?: SmsLogOptions): Promise<void> => {
   try {
+    if (!client) {
+      if (isDevelopment) {
+        console.log(`[DEV] PIN for ${phoneNumber}: ${pin}`);
+        return;
+      }
+      throw new Error('Twilio is not configured');
+    }
+
     if (!validatePhoneNumber(phoneNumber)) {
       throw new Error('Invalid phone number format');
     }
@@ -256,6 +273,14 @@ export const sendCombinedVerification = async (
   options?: SmsLogOptions
 ): Promise<void> => {
   try {
+    if (!client) {
+      if (isDevelopment) {
+        console.log(`[DEV] Combined verification for ${phoneNumber}: OTP=${otpCode}, PIN=${pinCode}`);
+        return;
+      }
+      throw new Error('Twilio is not configured');
+    }
+
     if (!validatePhoneNumber(phoneNumber)) {
       throw new Error('Invalid phone number format');
     }

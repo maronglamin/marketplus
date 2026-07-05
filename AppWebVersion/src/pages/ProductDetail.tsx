@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Star, Heart, ShoppingCart, Minus, Plus, Shield, Truck, ArrowLeft, RefreshCw, AlertCircle } from 'lucide-react';
 import { productService } from '../api/products';
-import { API_CONFIG, getImageUrl } from '../config/api';
+import { getImageUrl } from '../config/api';
+import { DetailImageCarousel } from '../components/DetailImageCarousel';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProductDetail {
@@ -35,7 +36,6 @@ export function ProductDetail() {
   const { isAuthenticated } = useAuth();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -164,34 +164,12 @@ export function ProductDetail() {
       <div className="max-w-6xl mx-auto p-4">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Product Images */}
-          <div className="space-y-4">
-            <div className="aspect-square bg-white rounded-xl overflow-hidden shadow-sm">
-              <img
-                src={getImageUrl(product.images[currentImageIndex])}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            
-            {product.images.length > 1 && (
-              <div className="flex space-x-2">
-                {product.images.map((image, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setCurrentImageIndex(index)}
-                    className={`w-20 h-20 rounded-lg overflow-hidden border-2 ${
-                      currentImageIndex === index ? 'border-blue-600' : 'border-gray-200'
-                    }`}
-                  >
-                    <img
-                      src={getImageUrl(image)}
-                      alt={`${product.name} ${index + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
+          <div>
+            <DetailImageCarousel
+              images={product.images.map((img) => getImageUrl(img))}
+              alt={product.name}
+              className="aspect-square w-full rounded-xl shadow-sm"
+            />
           </div>
 
           {/* Product Details */}

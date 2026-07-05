@@ -9,6 +9,7 @@ import {
   Alert,
   StatusBar,
   Platform,
+  KeyboardAvoidingView,
   Image,
   Modal,
 } from 'react-native';
@@ -1540,12 +1541,17 @@ export function BecomeRider() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <ScrollView 
-          style={styles.content} 
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 100 }}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            contentContainerStyle={{ paddingBottom: 120 }}
+          >
           {/* Vehicle Type Header */}
           <View style={styles.vehicleHeader}>
             {existingData && (
@@ -1609,6 +1615,7 @@ export function BecomeRider() {
             )}
           </View>
         </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
 
       {/* Date Picker Modal */}

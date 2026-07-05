@@ -1,8 +1,16 @@
 import express from 'express';
-import { notificationService } from '../services/notificationService';
+import { notificationService, getWebPushPublicKey } from '../services/notificationService';
 import { authenticate } from '../middleware/auth';
 
 const router = express.Router();
+
+// VAPID public key for browser PushManager.subscribe (web push)
+router.get('/web-push/public-key', (_req, res) => {
+  res.json({
+    success: true,
+    publicKey: getWebPushPublicKey(),
+  });
+});
 
 // Save FCM token for a user
 router.post('/fcm-token', authenticate, async (req, res) => {

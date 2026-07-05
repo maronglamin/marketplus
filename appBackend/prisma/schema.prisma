@@ -107,6 +107,15 @@ model User {
   parentSellerSettlements      SalesRepSettlement[]   @relation("ParentSellerSettlements")
   salesRepProfile              SalesRep?              @relation("SalesRepUser")
   branches                     Branch[]               @relation("ParentSellerBranches")
+  fcmTokens                    FCMToken[]
+  serviceProviderApplications  ServiceProviderApplication[]
+  serviceProvider              ServiceProvider?
+  customerServiceBookings      ServiceBooking[]       @relation("CustomerServiceBookings")
+  serviceBookingMessages       ServiceBookingMessage[]
+  propertyAgentApplications    PropertyAgentApplication[]
+  propertyAgent                PropertyAgent?
+  customerPropertyBookings     PropertyBooking[]      @relation("CustomerPropertyBookings")
+  propertyInquiries            PropertyInquiry[]
 
   @@index([phoneNumber])
   @@index([status])
@@ -625,16 +634,22 @@ model ExternalTransaction {
   appService           AppService        @default(ECOMMERCE)
   rideRequestId        String?
   rentalRequestId      String?
+  serviceBookingId     String?
+  propertyBookingId    String?
   customer             User              @relation("CustomerTransactions", fields: [customerId], references: [id])
   order                orders?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   paymentMethod        PaymentMethod?    @relation(fields: [paymentMethodId], references: [id])
   rentalRequest        RentalRequest?    @relation(fields: [rentalRequestId], references: [id], onDelete: Cascade)
   rideRequest          RideRequest?      @relation(fields: [rideRequestId], references: [id], onDelete: Cascade)
+  serviceBooking       ServiceBooking?   @relation(fields: [serviceBookingId], references: [id], onDelete: Cascade)
+  propertyBooking      PropertyBooking?  @relation(fields: [propertyBookingId], references: [id], onDelete: Cascade)
   seller               User              @relation("SellerTransactions", fields: [sellerId], references: [id])
 
   @@index([orderId])
   @@index([rideRequestId])
   @@index([rentalRequestId])
+  @@index([serviceBookingId])
+  @@index([propertyBookingId])
   @@index([customerId])
   @@index([sellerId])
   @@index([paymentMethodId])
@@ -1190,6 +1205,16 @@ enum EntityType {
   SNAP_RIDE_RIDE_SERVICE_TIERS
   SNAP_RENTAL
   SNAP_RENTAL_REQUEST
+  SNAP_HOME_SERVICES
+  SNAP_HOME_SERVICES_PROVIDER_APPLICATIONS
+  SNAP_HOME_SERVICES_PROVIDERS
+  SNAP_HOME_SERVICES_BOOKINGS
+  SNAP_HOME_SERVICES_CATEGORIES
+  SNAP_REAL_ESTATE
+  SNAP_REAL_ESTATE_AGENT_APPLICATIONS
+  SNAP_REAL_ESTATE_AGENTS
+  SNAP_REAL_ESTATE_LISTINGS
+  SNAP_REAL_ESTATE_BOOKINGS
   ANALYTICS
   ANALYTICS_REVENUE
   AUTHENTICATION
@@ -1277,6 +1302,8 @@ enum SettlementChannel {
   ECOMMERCE
   RIDES
   RENTALS
+  HOME_SERVICES
+  REAL_ESTATE
 }
 
 enum OrderInterestStatus {
@@ -1408,6 +1435,8 @@ enum AppService {
   ECOMMERCE
   RIDES
   RENTAL
+  HOME_SERVICES
+  REAL_ESTATE
 }
 
 enum TwilioMessageType {
@@ -1495,4 +1524,512 @@ enum SalesRepStatus {
   ACTIVE
   INACTIVE
   SUSPENDED
+}
+
+model FCMToken {
+  id         String   @id @default(uuid())
+  userId     String
+  token      String   @unique
+  deviceType String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([deviceType])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@map("fcm_tokens")
+}
+
+// ─── Home & Professional Services ───────────────────────────────────────────
+
+model ServiceCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  icon        String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  bookings    ServiceBooking[]
+  providers   ServiceProviderCategory[]
+  offerings   ServiceOffering[]
+
+  @@index([isActive])
+  @@index([sortOrder])
+  @@map("service_categories")
+}
+
+model ServiceProviderApplication {
+  id               String                           @id @default(uuid())
+  userId           String
+  firstName        String
+  lastName         String
+  phoneNumber      String
+  email            String?
+  address          String
+  city             String
+  latitude         Float?
+  longitude        Float?
+  bio              String?
+  categoryIds      Json
+  experience       String?
+  status           ServiceProviderApplicationStatus @default(PENDING)
+  rejectionReason  String?
+  reviewedAt       DateTime?
+  createdAt        DateTime                         @default(now())
+  updatedAt        DateTime                         @updatedAt
+  user             User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider         ServiceProvider?
+
+  @@index([userId])
+  @@index([status])
+  @@map("service_provider_applications")
+}
+
+model ServiceProvider {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  applicationId      String   @unique
+  displayName        String
+  bio                String?
+  serviceDescription String?
+  profileImageUrl    String?
+  portfolioImages    Json?
+  address            String?
+  city               String?
+  latitude           Float?
+  longitude          Float?
+  rating             Float    @default(0)
+  reviewCount        Int      @default(0)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application        ServiceProviderApplication @relation(fields: [applicationId], references: [id])
+  categories         ServiceProviderCategory[]
+  bookings           ServiceBooking[]
+  offerings          ServiceOffering[]
+  weeklySchedule     ProviderWeeklySchedule[]
+  blockedSlots       ProviderBlockedSlot[]
+
+  @@index([isActive])
+  @@index([latitude, longitude])
+  @@map("service_providers")
+}
+
+model ServiceProviderCategory {
+  id         String          @id @default(uuid())
+  providerId String
+  categoryId String
+  provider   ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  category   ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, categoryId])
+  @@map("service_provider_categories")
+}
+
+model ServiceOffering {
+  id              String          @id @default(uuid())
+  providerId      String
+  categoryId      String
+  name            String
+  description     String?
+  durationMinutes Int             @default(60)
+  basePrice       Decimal?        @db.Decimal(10, 2)
+  isActive        Boolean         @default(true)
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  provider        ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  category        ServiceCategory @relation(fields: [categoryId], references: [id])
+  bookings        ServiceBooking[]
+
+  @@index([providerId])
+  @@index([categoryId])
+  @@index([isActive])
+  @@map("service_offerings")
+}
+
+model ProviderWeeklySchedule {
+  id         String          @id @default(uuid())
+  providerId String
+  dayOfWeek  Int
+  startTime  String
+  endTime    String
+  isEnabled  Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  provider   ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, dayOfWeek])
+  @@index([providerId])
+  @@map("provider_weekly_schedules")
+}
+
+model ProviderBlockedSlot {
+  id         String          @id @default(uuid())
+  providerId String
+  startAt    DateTime
+  endAt      DateTime
+  reason     String?
+  createdAt  DateTime        @default(now())
+  provider   ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
+  @@index([startAt, endAt])
+  @@map("provider_blocked_slots")
+}
+
+model ServiceBooking {
+  id                 String               @id @default(uuid())
+  bookingRef         String               @unique
+  customerId         String
+  providerId         String?
+  categoryId         String
+  offeringId         String?
+  status             ServiceBookingStatus @default(PENDING_QUOTE)
+  paymentStatus      PaymentStatus        @default(PENDING)
+  slotStatus         ServiceSlotStatus?
+  serviceAddress     String
+  serviceLatitude    Float?
+  serviceLongitude   Float?
+  scheduledAt        DateTime?
+  slotStart          DateTime?
+  slotEnd            DateTime?
+  notes              String?
+  proposedPrice      Decimal?             @db.Decimal(10, 2)
+  agreedPrice        Decimal?             @db.Decimal(10, 2)
+  currency           String               @default("GMD")
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  customer           User                 @relation("CustomerServiceBookings", fields: [customerId], references: [id])
+  provider           ServiceProvider?     @relation(fields: [providerId], references: [id])
+  category           ServiceCategory      @relation(fields: [categoryId], references: [id])
+  offering           ServiceOffering?     @relation(fields: [offeringId], references: [id])
+  messages           ServiceBookingMessage[]
+  transactions       ExternalTransaction[]
+
+  @@index([customerId])
+  @@index([providerId])
+  @@index([categoryId])
+  @@index([offeringId])
+  @@index([status])
+  @@index([slotStart, slotEnd])
+  @@map("service_bookings")
+}
+
+model ServiceBookingMessage {
+  id         String            @id @default(uuid())
+  bookingId  String
+  senderId   String
+  senderType ServiceSenderType
+  content    String
+  isRead     Boolean           @default(false)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  booking    ServiceBooking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  sender     User              @relation(fields: [senderId], references: [id])
+
+  @@index([bookingId])
+  @@map("service_booking_messages")
+}
+
+// ─── Real Estate ─────────────────────────────────────────────────────────────
+
+model PropertyAgentApplication {
+  id                         String                         @id @default(uuid())
+  userId                     String
+  firstName                  String
+  lastName                   String
+  phoneNumber                String
+  email                      String?
+  companyName                String?
+  licenseNumber              String?
+  address                    String
+  city                       String
+  latitude                   Float?
+  longitude                  Float?
+  specializationTypes        Json?
+  bio                        String?
+  idType                     String?
+  idNumber                   String?
+  idDocumentUrl              String?
+  businessRegistrationNumber String?
+  businessRegistrationDocUrl String?
+  taxIdentificationNumber    String?
+  addressProofUrl            String?
+  addressProofDate           DateTime?
+  bankingInfo                Json?
+  status                     PropertyAgentApplicationStatus @default(PENDING)
+  rejectionReason            String?
+  reviewedAt                 DateTime?
+  createdAt                  DateTime                       @default(now())
+  updatedAt                  DateTime                       @updatedAt
+  user                       User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent                      PropertyAgent?
+
+  @@index([userId])
+  @@index([status])
+  @@map("property_agent_applications")
+}
+
+model PropertyAgent {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  applicationId       String   @unique
+  displayName         String
+  companyName         String?
+  bio                 String?
+  specializationTypes Json?
+  latitude            Float?
+  longitude           Float?
+  rating              Float    @default(0)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application         PropertyAgentApplication @relation(fields: [applicationId], references: [id])
+  listings            PropertyListing[]
+
+  @@index([isActive])
+  @@index([latitude, longitude])
+  @@map("property_agents")
+}
+
+model PropertyListing {
+  id           String                @id @default(uuid())
+  agentId      String
+  title        String
+  description  String?
+  listingType  PropertyListingType
+  price        Decimal               @db.Decimal(12, 2)
+  currency     String                @default("GMD")
+  address      String
+  city         String
+  latitude     Float?
+  longitude    Float?
+  bedrooms     Int?
+  bathrooms    Int?
+  areaSqm      Float?
+  amenities    Json?
+  roomTypes    Json?
+  status       PropertyListingStatus @default(PENDING_REVIEW)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  agent        PropertyAgent         @relation(fields: [agentId], references: [id])
+  images       PropertyImage[]
+  virtualTours PropertyVirtualTour[]
+  bookings     PropertyBooking[]
+  inquiries    PropertyInquiry[]
+  roomTypesRel PropertyRoomType[]
+  blockedDates PropertyBlockedDate[]
+
+  @@index([agentId])
+  @@index([listingType])
+  @@index([status])
+  @@index([city])
+  @@index([latitude, longitude])
+  @@map("property_listings")
+}
+
+model PropertyImage {
+  id         String                 @id @default(uuid())
+  listingId  String
+  url        String
+  category   PropertyImageCategory  @default(OTHER)
+  width      Int?
+  height     Int?
+  sortOrder  Int                    @default(0)
+  createdAt  DateTime               @default(now())
+  listing    PropertyListing        @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("property_images")
+}
+
+model PropertyVirtualTour {
+  id        String            @id @default(uuid())
+  listingId String
+  tourType  PropertyTourType
+  tourUrl   String
+  title     String?
+  createdAt DateTime          @default(now())
+  listing   PropertyListing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("property_virtual_tours")
+}
+
+model PropertyRoomType {
+  id             String            @id @default(uuid())
+  listingId      String
+  name           String
+  description    String?
+  bedType        String?
+  maxAdults      Int               @default(2)
+  maxChildren    Int               @default(0)
+  maxOccupancy   Int               @default(2)
+  unitsAvailable Int               @default(1)
+  pricePerNight  Decimal           @db.Decimal(12, 2)
+  amenities      Json?
+  photos         Json?
+  sortOrder      Int               @default(0)
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  listing        PropertyListing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  bookings       PropertyBooking[]
+  blockedDates   PropertyBlockedDate[]
+
+  @@index([listingId])
+  @@map("property_room_types")
+}
+
+model PropertyBlockedDate {
+  id         String            @id @default(uuid())
+  listingId  String
+  roomTypeId String?
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  createdAt  DateTime          @default(now())
+  listing    PropertyListing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  roomType   PropertyRoomType? @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([roomTypeId])
+  @@index([startDate, endDate])
+  @@map("property_blocked_dates")
+}
+
+model PropertyBooking {
+  id            String                @id @default(uuid())
+  bookingRef    String                @unique
+  listingId     String
+  roomTypeId    String?
+  customerId    String
+  checkIn       DateTime
+  checkOut      DateTime
+  guests        Int                   @default(1)
+  adults        Int                   @default(1)
+  children      Int                   @default(0)
+  childAges     Json?
+  roomsBooked   Int                   @default(1)
+  nights        Int
+  totalPrice    Decimal               @db.Decimal(12, 2)
+  currency      String                @default("GMD")
+  status        PropertyBookingStatus @default(PENDING)
+  paymentStatus PaymentStatus         @default(PENDING)
+  notes         String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  listing       PropertyListing       @relation(fields: [listingId], references: [id])
+  roomType      PropertyRoomType?     @relation(fields: [roomTypeId], references: [id])
+  customer      User                  @relation("CustomerPropertyBookings", fields: [customerId], references: [id])
+  transactions  ExternalTransaction[]
+
+  @@index([listingId])
+  @@index([roomTypeId])
+  @@index([customerId])
+  @@index([status])
+  @@index([checkIn, checkOut])
+  @@map("property_bookings")
+}
+
+model PropertyInquiry {
+  id            String                @id @default(uuid())
+  listingId     String
+  customerId    String
+  message       String
+  preferredDate DateTime?
+  status        PropertyInquiryStatus @default(PENDING)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  listing       PropertyListing       @relation(fields: [listingId], references: [id])
+  customer      User                  @relation(fields: [customerId], references: [id])
+
+  @@index([listingId])
+  @@index([customerId])
+  @@map("property_inquiries")
+}
+
+enum ServiceProviderApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ServiceBookingStatus {
+  PENDING_QUOTE
+  QUOTED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  PAID
+  COMPLETED
+}
+
+enum ServiceSenderType {
+  CUSTOMER
+  PROVIDER
+}
+
+enum ServiceSlotStatus {
+  HELD
+  CONFIRMED
+  RELEASED
+}
+
+enum PropertyImageCategory {
+  EXTERIOR
+  ROOM
+  BATHROOM
+  OTHER
+}
+
+enum PropertyAgentApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PropertyListingType {
+  HOTEL
+  APARTMENT_RENTAL
+  HOME_SALE
+  LAND_SALE
+}
+
+enum PropertyListingStatus {
+  PENDING_SETUP
+  PENDING_REVIEW
+  ACTIVE
+  INACTIVE
+  SOLD
+  RENTED
+}
+
+enum PropertyTourType {
+  MATTERPORT
+  YOUTUBE
+  EXTERNAL_URL
+  IMAGE_GALLERY
+}
+
+enum PropertyBookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PropertyInquiryStatus {
+  PENDING
+  CONTACTED
+  CLOSED
 }

@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
+import { notificationService, getWebPushPublicKey } from '../services/notificationService';
 
 const prisma = new PrismaClient();
 
@@ -468,6 +469,62 @@ router.delete('/profile/photo', authenticate, async (req: AuthRequest, res) => {
     logger.error('Error deleting profile photo:', error);
     return res.status(500).json({ error: 'Failed to delete profile photo' });
   }
+});
+
+router.post('/fcm-token', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { token, userId, deviceType } = req.body;
+
+    if (!token || !userId || !deviceType) {
+      return res.status(400).json({
+        error: 'Missing required fields: token, userId, deviceType',
+      });
+    }
+
+    if (!req.user || req.user.id !== userId) {
+      return res.status(403).json({ error: 'Cannot register push token for another user' });
+    }
+
+    const fcmToken = await notificationService.saveFCMToken(userId, token, deviceType);
+
+    res.json({
+      success: true,
+      message: 'Push token saved successfully',
+      data: fcmToken,
+    });
+  } catch (error) {
+    logger.error('Error saving push token:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to save push token',
+    });
+  }
+});
+
+router.delete('/fcm-token', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Missing required field: token' });
+    }
+
+    await notificationService.removeFCMToken(token);
+
+    res.json({
+      success: true,
+      message: 'Push token removed successfully',
+    });
+  } catch (error) {
+    logger.error('Error removing push token:', error);
+    res.status(500).json({ error: 'Failed to remove push token' });
+  }
+});
+
+router.get('/web-push/public-key', (_req, res) => {
+  res.json({
+    success: true,
+    publicKey: getWebPushPublicKey(),
+  });
 });
 
 export default router; 

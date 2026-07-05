@@ -1,11 +1,34 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import YonnaForexPaymentController from '../controllers/YonnaForexPaymentController';
 import yonnaForexWebhookRoutes from './yonnaForexWebhookRoutes';
 import yonnaForexTestRoutes from './yonnaForexTestRoutes';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
-const yonnaForexController = new YonnaForexPaymentController();
+
+const isYonnaConfigured = (): boolean =>
+  Boolean(process.env.YONNA_FOREX_API_URL?.trim()) &&
+  Boolean(process.env.YONNA_FOREX_SECRET_KEY?.trim()) &&
+  Boolean(process.env.YONNA_FOREX_CLIENT_ID?.trim());
+
+let yonnaForexController: YonnaForexPaymentController | null = null;
+
+const getController = (): YonnaForexPaymentController | null => {
+  if (!isYonnaConfigured()) {
+    return null;
+  }
+  if (!yonnaForexController) {
+    yonnaForexController = new YonnaForexPaymentController();
+  }
+  return yonnaForexController;
+};
+
+const serviceUnavailable = (_req: Request, res: Response): void => {
+  res.status(503).json({
+    success: false,
+    message: 'Yonna Forex is not configured. Set YONNA_FOREX_API_URL, YONNA_FOREX_SECRET_KEY, and YONNA_FOREX_CLIENT_ID.',
+  });
+};
 
 /**
  * @route POST /api/payments/yonna-forex/process
@@ -13,7 +36,9 @@ const yonnaForexController = new YonnaForexPaymentController();
  * @access Private (requires authentication)
  */
 router.post('/process', authenticate, (req, res) => {
-  yonnaForexController.processPayment(req, res);
+  const controller = getController();
+  if (!controller) return serviceUnavailable(req, res);
+  controller.processPayment(req, res);
 });
 
 /**
@@ -22,7 +47,9 @@ router.post('/process', authenticate, (req, res) => {
  * @access Private (requires authentication)
  */
 router.post('/verify', authenticate, (req, res) => {
-  yonnaForexController.verifyPayment(req, res);
+  const controller = getController();
+  if (!controller) return serviceUnavailable(req, res);
+  controller.verifyPayment(req, res);
 });
 
 /**
@@ -31,7 +58,9 @@ router.post('/verify', authenticate, (req, res) => {
  * @access Private (requires authentication)
  */
 router.get('/status/:transactionId', authenticate, (req, res) => {
-  yonnaForexController.getPaymentStatus(req, res);
+  const controller = getController();
+  if (!controller) return serviceUnavailable(req, res);
+  controller.getPaymentStatus(req, res);
 });
 
 /**
@@ -40,7 +69,9 @@ router.get('/status/:transactionId', authenticate, (req, res) => {
  * @access Public
  */
 router.get('/currencies', (req, res) => {
-  yonnaForexController.getSupportedCurrencies(req, res);
+  const controller = getController();
+  if (!controller) return serviceUnavailable(req, res);
+  controller.getSupportedCurrencies(req, res);
 });
 
 /**
@@ -49,7 +80,9 @@ router.get('/currencies', (req, res) => {
  * @access Private (requires authentication)
  */
 router.get('/check-transactions/:orderId', authenticate, (req, res) => {
-  yonnaForexController.checkExistingTransactions(req, res);
+  const controller = getController();
+  if (!controller) return serviceUnavailable(req, res);
+  controller.checkExistingTransactions(req, res);
 });
 
 // Include webhook routes

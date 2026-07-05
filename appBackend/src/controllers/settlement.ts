@@ -478,6 +478,63 @@ export const getAvailableRentalEarnings = async (req: AuthRequest, res: Response
     });
   }
 };
+// Get available home service earnings for settlement
+export const getAvailableHomeServiceEarnings = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) return res.status(401).json({ message: 'User not authenticated' });
+    const txs = await prisma.externalTransaction.findMany({
+      where: {
+        sellerId: req.user.id,
+        appService: 'HOME_SERVICES',
+        status: 'SUCCESS',
+        transactionType: 'ORIGINAL',
+        serviceBookingId: { not: null },
+      },
+      select: { amount: true, currencyCode: true, serviceBookingId: true },
+    });
+    const byCurrency: Record<string, number> = {};
+    for (const t of txs) {
+      byCurrency[t.currencyCode] = (byCurrency[t.currencyCode] || 0) + Number(t.amount);
+    }
+    const earnings = Object.entries(byCurrency).map(([currency, amount]) => ({
+      currency,
+      amount: Math.round(amount * 100) / 100,
+      currencySymbol: getCurrencySymbol(currency),
+    }));
+    res.json({ earnings, count: earnings.length });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to get home service earnings' });
+  }
+};
+
+// Get available real estate earnings for settlement
+export const getAvailableRealEstateEarnings = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.id) return res.status(401).json({ message: 'User not authenticated' });
+    const txs = await prisma.externalTransaction.findMany({
+      where: {
+        sellerId: req.user.id,
+        appService: 'REAL_ESTATE',
+        status: 'SUCCESS',
+        transactionType: 'ORIGINAL',
+        propertyBookingId: { not: null },
+      },
+      select: { amount: true, currencyCode: true, propertyBookingId: true },
+    });
+    const byCurrency: Record<string, number> = {};
+    for (const t of txs) {
+      byCurrency[t.currencyCode] = (byCurrency[t.currencyCode] || 0) + Number(t.amount);
+    }
+    const earnings = Object.entries(byCurrency).map(([currency, amount]) => ({
+      currency,
+      amount: Math.round(amount * 100) / 100,
+      currencySymbol: getCurrencySymbol(currency),
+    }));
+    res.json({ earnings, count: earnings.length });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to get real estate earnings' });
+  }
+};
 // Get seller's bank accounts
 export const getBankAccounts = async (req: AuthRequest, res: Response) => {
   try {

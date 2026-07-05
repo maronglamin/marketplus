@@ -3,6 +3,7 @@ import { RideRequestService } from '../services/rideRequestService';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validators';
 import { RideRequestController } from '../controllers/rideRequest';
+import { notificationService } from '../services/notificationService';
 
 const router = express.Router();
 
@@ -426,7 +427,10 @@ router.post('/direct-driver', async (req: AuthRequest, res) => {
     const prismaClient = new PrismaClient();
     const targetDriver = await prismaClient.driver.findUnique({
       where: { id: driverId },
-      select: { userId: true }
+      select: {
+        userId: true,
+        user: { select: { firstName: true, lastName: true } },
+      },
     });
     if (!targetDriver) {
       await prismaClient.$disconnect().catch(() => {});
@@ -469,7 +473,29 @@ router.post('/direct-driver', async (req: AuthRequest, res) => {
       where: { id: request.id },
       data: { driverId: driverId }
     });
+
+    const customer = await prismaClient.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, lastName: true },
+    });
     await prismaClient.$disconnect().catch(() => {});
+
+    const customerName = customer
+      ? `${customer.firstName} ${customer.lastName}`.trim()
+      : 'A customer';
+    const pickupAddress =
+      typeof updated.pickupLocation === 'object' &&
+      updated.pickupLocation !== null &&
+      'address' in (updated.pickupLocation as object)
+        ? String((updated.pickupLocation as { address?: string }).address || 'your area')
+        : 'your area';
+
+    void notificationService.sendRideBookingNotificationToDriver(
+      targetDriver.userId,
+      customerName,
+      pickupAddress,
+      updated.requestId
+    ).catch((err) => console.warn('Failed to send ride booking push notification:', err));
 
     // Optionally, notify the targeted driver via WebSocket (best-effort)
     try {

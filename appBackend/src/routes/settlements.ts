@@ -3,6 +3,8 @@ import {
   getAvailableRevenue,
   getAvailableRideEarnings,
   getAvailableRentalEarnings,
+  getAvailableHomeServiceEarnings,
+  getAvailableRealEstateEarnings,
   getBankAccounts,
   getWallets,
   createSettlementRequest,
@@ -23,6 +25,8 @@ router.get('/available-ride-earnings', authenticate, getAvailableRideEarnings);
 
 // Get available rental earnings for settlement (rentals)
 router.get('/available-rental-earnings', authenticate, getAvailableRentalEarnings);
+router.get('/available-home-service-earnings', authenticate, getAvailableHomeServiceEarnings);
+router.get('/available-real-estate-earnings', authenticate, getAvailableRealEstateEarnings);
 
 // Get seller's bank accounts
 router.get('/bank-accounts', authenticate, getBankAccounts);
