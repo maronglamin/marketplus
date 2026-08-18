@@ -1,13 +1,18 @@
-# SNAPlication Documentation
+# SNAP Documentation
 
 ## Overview
-This documentation provides comprehensive information about the SNAPlication, covering its architecture, functionality, and business aspects. The documentation is organized into four main sections:
 
-1. [Architecture Documentation](ARCHITECTURE.md)
-2. [Functional Documentation](FUNCTIONAL.md)
-3. [Business Documentation](BUSINESS.md)
-4. [Admin Panel Documentation](ADMIN_PANEL.md)
-5. [Admin Implementation Guide](ADMIN_IMPLEMENTATION_GUIDE.md)
+SNAP (CloudNexus) is the consumer marketplace in **marketplus**, operated from the sibling admin repo **snap-admin**. Start here:
+
+1. **[Project Overview](PROJECT_OVERVIEW.md)** — product verticals, architecture, subscriptions, **Google Play Open Testing**, and **iOS store-build status**
+2. **[Consumer API](API.md)** — full `appBackend` endpoint catalog
+3. **[Admin API](../../snap-admin/docs/ADMIN_API.md)** — snap-admin operator API
+4. [Architecture Documentation](ARCHITECTURE.md)
+5. [Functional Documentation](FUNCTIONAL.md)
+6. [Business Documentation](BUSINESS.md)
+7. [Admin Panel Documentation](ADMIN_PANEL.md)
+8. [Admin Implementation Guide](ADMIN_IMPLEMENTATION_GUIDE.md)
+9. [Development Setup](DEVELOPMENT.md)
 
 ## Documentation Structure
 
