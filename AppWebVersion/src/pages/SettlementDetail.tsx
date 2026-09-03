@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, Clock, XCircle, AlertCircle, CreditCard, Wallet, Calendar, MapPin, Truck } from 'lucide-react';
-import { settlementService, type SettlementRequest, type IncludedOrder } from '../api/settlementService';
+import { settlementService, type SettlementRequest, type IncludedOrder, type IncludedPropertyBooking } from '../api/settlementService';
 
 export function SettlementDetail() {
   const { settlementId } = useParams<{ settlementId: string }>();
@@ -11,6 +11,8 @@ export function SettlementDetail() {
   const [settlement, setSettlement] = useState<SettlementRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [includedOrders, setIncludedOrders] = useState<IncludedOrder[]>([]);
+  const [includedPropertyBookings, setIncludedPropertyBookings] = useState<IncludedPropertyBooking[]>([]);
+  const [includedServiceBookings, setIncludedServiceBookings] = useState<IncludedPropertyBooking[]>([]);
 
   const currency = searchParams.get('currency') || 'USD';
   const currencySymbol = searchParams.get('symbol') || '$';
@@ -28,7 +30,9 @@ export function SettlementDetail() {
       
       const response = await settlementService.getSettlementDetails(settlementId!);
       setSettlement(response.settlement);
-      setIncludedOrders(response.includedOrders);
+      setIncludedOrders(response.includedOrders || []);
+      setIncludedPropertyBookings(response.includedPropertyBookings || []);
+      setIncludedServiceBookings(response.includedServiceBookings || []);
     } catch (error: any) {
       console.error('Error loading settlement detail:', error);
       setError(error.message || 'Failed to load settlement details');
@@ -361,6 +365,56 @@ export function SettlementDetail() {
                         {formatAmount(order.totalAmount, order.currencyCode)}
                       </p>
                     </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {includedPropertyBookings.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Included Property Bookings / Sales</h3>
+              <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                {includedPropertyBookings.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {includedPropertyBookings.map((item, index) => (
+                <div key={item.id} className={`p-4 rounded-lg ${index % 2 === 1 ? 'bg-gray-50' : 'bg-white'} border border-gray-200`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-mono text-gray-900">{item.bookingRef}</p>
+                      {item.title ? <p className="text-sm text-gray-600">{item.title}</p> : null}
+                      <p className="text-sm text-gray-500">{formatDate(item.createdAt)}</p>
+                    </div>
+                    <p className="font-semibold text-green-600">{formatAmount(item.totalPrice, item.currency)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {includedServiceBookings.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Included Service Bookings</h3>
+              <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                {includedServiceBookings.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {includedServiceBookings.map((item, index) => (
+                <div key={item.id} className={`p-4 rounded-lg ${index % 2 === 1 ? 'bg-gray-50' : 'bg-white'} border border-gray-200`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-mono text-gray-900">{item.bookingRef}</p>
+                      {item.title ? <p className="text-sm text-gray-600">{item.title}</p> : null}
+                      <p className="text-sm text-gray-500">{formatDate(item.createdAt)}</p>
+                    </div>
+                    <p className="font-semibold text-green-600">{formatAmount(item.totalPrice, item.currency)}</p>
                   </div>
                 </div>
               ))}

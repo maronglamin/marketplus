@@ -4,6 +4,7 @@ import { PrismaClient, TransactionType } from '@prisma/client';
 import WavePaymentService from '../services/WavePaymentService';
 import UCPService from '../services/ucpService';
 import { notificationService } from '../services/notificationService';
+import { activateFromPayment } from '../services/providerSubscriptionService';
 
 const prisma = new PrismaClient();
 
@@ -175,7 +176,7 @@ export class WaveWebhookController {
                   ...(resolvedTransactionId ? [{ gatewayTransactionId: resolvedTransactionId }] : []),
                   ...(waveSessionId ? [{ gatewayResponse: { path: ['waveSessionId'], equals: waveSessionId } as any }] : []),
                 ] as any,
-                transactionType: 'ORIGINAL',
+                transactionType: { in: ['ORIGINAL', 'SUBSCRIPTION'] },
               },
               orderBy: { createdAt: 'desc' },
             })) ||
@@ -183,7 +184,7 @@ export class WaveWebhookController {
               ? await prisma.externalTransaction.findFirst({
                   where: {
                     gatewayProvider: 'wave_gambia',
-                    transactionType: 'ORIGINAL',
+                    transactionType: { in: ['ORIGINAL', 'SUBSCRIPTION'] },
                     OR: [
                       { gatewayResponse: { path: ['clientReference'], equals: clientReference } as any },
                       { appTransactionId: clientReference },
@@ -200,7 +201,7 @@ export class WaveWebhookController {
                 original = await prisma.externalTransaction.findFirst({
                   where: {
                     gatewayProvider: 'wave_gambia',
-                    transactionType: 'ORIGINAL',
+                    transactionType: { in: ['ORIGINAL', 'SUBSCRIPTION'] },
                     serviceBookingId: serviceBooking.id,
                   },
                   orderBy: { createdAt: 'desc' },
@@ -216,7 +217,7 @@ export class WaveWebhookController {
                 original = await prisma.externalTransaction.findFirst({
                   where: {
                     gatewayProvider: 'wave_gambia',
-                    transactionType: 'ORIGINAL',
+                    transactionType: { in: ['ORIGINAL', 'SUBSCRIPTION'] },
                     propertyBookingId: propertyBooking.id,
                   },
                   orderBy: { createdAt: 'desc' },
@@ -234,7 +235,7 @@ export class WaveWebhookController {
                 original = await prisma.externalTransaction.findFirst({
                   where: {
                     gatewayProvider: 'wave_gambia',
-                    transactionType: 'ORIGINAL',
+                    transactionType: { in: ['ORIGINAL', 'SUBSCRIPTION'] },
                     orderId: order.id,
                   },
                   orderBy: { createdAt: 'desc' },
@@ -250,7 +251,7 @@ export class WaveWebhookController {
                 original = await prisma.externalTransaction.findFirst({
                   where: {
                     gatewayProvider: 'wave_gambia',
-                    transactionType: 'ORIGINAL',
+                    transactionType: { in: ['ORIGINAL', 'SUBSCRIPTION'] },
                     rentalRequestId: rental.id,
                   },
                   orderBy: { createdAt: 'desc' },
@@ -271,8 +272,22 @@ export class WaveWebhookController {
                 original = await prisma.externalTransaction.findFirst({
                   where: {
                     gatewayProvider: 'wave_gambia',
-                    transactionType: 'ORIGINAL',
+                    transactionType: { in: ['ORIGINAL', 'SUBSCRIPTION'] },
                     rideRequestId: rideReq.id,
+                  },
+                  orderBy: { createdAt: 'desc' },
+                });
+              }
+            } catch {}
+          }
+          if (!original && clientReference) {
+            try {
+              const subPay = await prisma.providerSubscriptionPayment.findUnique({ where: { id: clientReference } });
+              if (subPay) {
+                original = await prisma.externalTransaction.findFirst({
+                  where: {
+                    gatewayProvider: 'wave_gambia',
+                    providerSubscriptionPaymentId: subPay.id,
                   },
                   orderBy: { createdAt: 'desc' },
                 });
@@ -288,15 +303,16 @@ export class WaveWebhookController {
             });
           } catch {}
           if (original) {
+            const isSubscription = original.transactionType === 'SUBSCRIPTION' || !!(original as any).providerSubscriptionPaymentId;
             // Check if a fee transaction is already present for this appTransactionId
-            const existingFee = await prisma.externalTransaction.findFirst({
+            const existingFee = isSubscription ? null : await prisma.externalTransaction.findFirst({
               where: {
                 gatewayProvider: 'wave_gambia',
                 transactionType: 'FEE',
                 appTransactionId: original.appTransactionId,
               },
             });
-            if (!existingFee) {
+            if (!existingFee && !isSubscription) {
               const percent = 0.01;
               const baseAmount = Number(original.amount || 0);
               const currencyCode = (original.currencyCode || 'GMD').toUpperCase();
@@ -398,6 +414,37 @@ export class WaveWebhookController {
               }
             }
 
+            // If linked to a property sale inquiry, mark purchased + listing SOLD
+            if ((original as any).propertyInquiryId) {
+              try {
+                const inquiryId = (original as any).propertyInquiryId as string;
+                const inquiry = await prisma.propertyInquiry.findUnique({
+                  where: { id: inquiryId },
+                  include: { listing: true },
+                });
+                if (inquiry) {
+                  await prisma.propertyListing.updateMany({
+                    where: { id: inquiry.listingId, status: 'ACTIVE' },
+                    data: { status: 'SOLD' },
+                  });
+                  await prisma.propertyInquiry.update({
+                    where: { id: inquiryId },
+                    data: { paymentStatus: 'PAID', status: 'PURCHASED', updatedAt: new Date() },
+                  });
+                  await prisma.propertyInquiry.updateMany({
+                    where: {
+                      listingId: inquiry.listingId,
+                      id: { not: inquiryId },
+                      status: { in: ['PENDING', 'CONTACTED'] },
+                    },
+                    data: { status: 'CLOSED' },
+                  });
+                }
+              } catch (e) {
+                console.warn('Wave webhook: property inquiry finalize warning:', (e as any)?.message || e);
+              }
+            }
+
             // If linked to a ride request, set Ride.paymentStatus = PAID
             if ((original as any).rideRequestId) {
               try {
@@ -416,8 +463,19 @@ export class WaveWebhookController {
               }
             }
 
+            if (isSubscription && (original as any).providerSubscriptionPaymentId) {
+              try {
+                await activateFromPayment((original as any).providerSubscriptionPaymentId);
+              } catch (e) {
+                console.warn('Wave webhook: subscription activate warning:', (e as any)?.message || e);
+              }
+            }
+
             // Ensure SERVICE_FEE transaction exists (platform fee via UCP)
             try {
+              if (isSubscription) {
+                // Subscription payments have no platform service fee
+              } else {
               const existingServiceFee = await prisma.externalTransaction.findFirst({
                 where: {
                   gatewayProvider: 'wave_gambia',
@@ -461,6 +519,7 @@ export class WaveWebhookController {
                     processedAt: new Date(),
                   },
                 });
+              }
               }
             } catch (e) {
               console.warn('Wave webhook: service fee creation warning:', (e as any)?.message || e);

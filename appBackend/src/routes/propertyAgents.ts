@@ -7,7 +7,7 @@ const router = Router();
 const prisma = new PrismaClient();
 
 const ID_TYPES = ['PASSPORT', 'DRIVERS_LICENSE'];
-const LISTING_TYPES = ['HOTEL', 'APARTMENT_RENTAL', 'HOME_SALE', 'LAND_SALE'];
+const LISTING_TYPES = ['HOTEL', 'APARTMENT_RENTAL', 'GUEST_HOUSE', 'BOAT_TRIP', 'HOME_SALE', 'LAND_SALE'];
 
 function parseCoords(latitude: unknown, longitude: unknown): { lat: number; lng: number } | null {
   const lat = parseFloat(String(latitude));

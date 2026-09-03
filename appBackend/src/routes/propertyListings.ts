@@ -4,8 +4,8 @@ import { authenticate } from '../middleware/auth';
 import {
   getRoomTypeAvailability,
   searchListingsWithAvailability,
-  validatePropertyBooking,
 } from '../services/availabilityService';
+import { assertCanOperate, publicListingAgentWhere, sendSubscriptionBlocked } from '../services/providerSubscriptionService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -13,7 +13,7 @@ const prisma = new PrismaClient();
 const MIN_HOTEL_PHOTOS = 5;
 const MIN_PHOTO_WIDTH = 1024;
 const MIN_PHOTO_HEIGHT = 683;
-const STAY_TYPES = ['HOTEL', 'APARTMENT_RENTAL'];
+const STAY_TYPES = ['HOTEL', 'APARTMENT_RENTAL', 'GUEST_HOUSE', 'BOAT_TRIP'];
 
 function parseCoords(latitude: unknown, longitude: unknown): { lat: number; lng: number } | null {
   const lat = parseFloat(String(latitude));
@@ -30,11 +30,14 @@ function validateStayPhotos(body: any): string | null {
   if (imgs.length < MIN_HOTEL_PHOTOS) {
     return `At least ${MIN_HOTEL_PHOTOS} high-resolution photos are required`;
   }
-  const hasExterior = imgs.some((i: any) => i.category === 'EXTERIOR');
-  const hasRoom = imgs.some((i: any) => i.category === 'ROOM');
-  const hasBathroom = imgs.some((i: any) => i.category === 'BATHROOM');
-  if (!hasExterior || !hasRoom || !hasBathroom) {
-    return 'Photos must include exterior, room, and bathroom shots';
+  // Boat trips don't require room/bathroom categories
+  if (listingType !== 'BOAT_TRIP') {
+    const hasExterior = imgs.some((i: any) => i.category === 'EXTERIOR');
+    const hasRoom = imgs.some((i: any) => i.category === 'ROOM');
+    const hasBathroom = imgs.some((i: any) => i.category === 'BATHROOM');
+    if (!hasExterior || !hasRoom || !hasBathroom) {
+      return 'Photos must include exterior, room, and bathroom shots';
+    }
   }
   for (const img of imgs) {
     if (img.width && img.height && (img.width < MIN_PHOTO_WIDTH || img.height < MIN_PHOTO_HEIGHT)) {
@@ -104,7 +107,7 @@ router.get('/featured', async (req, res) => {
   try {
     const limit = parseInt(String(req.query.limit || '6'), 10);
     const listings = await prisma.propertyListing.findMany({
-      where: { status: 'ACTIVE' },
+      where: { status: 'ACTIVE', agent: await publicListingAgentWhere() },
       include: {
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
         roomTypesRel: { where: { isActive: true }, take: 1 },
@@ -137,6 +140,7 @@ router.get('/', async (req, res) => {
     const listings = await prisma.propertyListing.findMany({
       where: {
         status: 'ACTIVE',
+        agent: await publicListingAgentWhere(),
         ...(listingType ? { listingType: String(listingType) as any } : {}),
         ...(city ? { city: { contains: String(city), mode: 'insensitive' } } : {}),
       },
@@ -209,6 +213,14 @@ router.get('/:id', async (req, res) => {
       },
     });
     if (!listing) return res.status(404).json({ success: false, message: 'Listing not found' });
+    if (listing.status === 'ACTIVE') {
+      const agentWhere = await publicListingAgentWhere();
+      const visible = await prisma.propertyListing.findFirst({
+        where: { id: listing.id, status: 'ACTIVE', agent: agentWhere },
+        select: { id: true },
+      });
+      if (!visible) return res.status(404).json({ success: false, message: 'Listing not found' });
+    }
     return res.json({ success: true, data: listing });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error?.message });
@@ -220,6 +232,11 @@ router.post('/', authenticate, async (req: any, res) => {
   try {
     const agent = await getAgentForUser(req.user.id);
     if (!agent) return res.status(403).json({ success: false, message: 'Must be an approved property agent' });
+    try {
+      await assertCanOperate(req.user.id, 'REAL_ESTATE');
+    } catch (error) {
+      return sendSubscriptionBlocked(res, error);
+    }
 
     const {
       title, description, listingType, price, currency, address, city,
@@ -348,6 +365,11 @@ router.post('/:id/publish', authenticate, async (req: any, res) => {
   try {
     const agent = await assertListingOwner(req.params.id, req.user.id);
     if (!agent) return res.status(403).json({ success: false, message: 'Access denied' });
+    try {
+      await assertCanOperate(req.user.id, 'REAL_ESTATE');
+    } catch (error) {
+      return sendSubscriptionBlocked(res, error);
+    }
     const result = await publishStayListing(req.params.id);
     if (!result.ok) {
       return res.status(400).json({ success: false, message: result.message });

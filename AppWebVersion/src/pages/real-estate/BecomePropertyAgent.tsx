@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../components/PageHeader';
 import { FormStepIndicator } from '../../components/FormStepIndicator';
 import { LocationPickerField } from '../../components/LocationPickerField';
@@ -15,12 +15,18 @@ const STEPS = ['Personal Info', 'Specializations', 'Location', 'Legal & ID', 'Pr
 const SPECIALIZATION_OPTIONS: { value: PropertyListingType; label: string }[] = [
   { value: 'HOTEL', label: 'Hotels' },
   { value: 'APARTMENT_RENTAL', label: 'Apartments' },
-  { value: 'HOME_SALE', label: 'Homes for Sale' },
-  { value: 'LAND_SALE', label: 'Land for Sale' },
+  { value: 'GUEST_HOUSE', label: 'Guest House & Lodge' },
+  { value: 'BOAT_TRIP', label: 'Leisure & Trips (Boat Trip)' },
+  { value: 'HOME_SALE', label: 'Home Sales' },
+  { value: 'LAND_SALE', label: 'Land Sales' },
 ];
 
 export function BecomePropertyAgent() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const section = searchParams.get('section') || 'all';
+  const pageTitle =
+    section === 'stay' ? 'Become a Hospitality Partner' : 'Become a Property Agent';
   const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -245,7 +251,7 @@ export function BecomePropertyAgent() {
 
   return (
     <div className="max-w-4xl mx-auto bg-white min-h-full">
-      <PageHeader title="Become a Property Agent" subtitle="Register to list properties" backTo="/real-estate" />
+      <PageHeader title={pageTitle} subtitle="Register to list properties" backTo="/real-estate" />
       {!formDisabled && <FormStepIndicator steps={STEPS} currentStep={step} accent="bg-violet-500" />}
 
       <div className="p-4 space-y-4">

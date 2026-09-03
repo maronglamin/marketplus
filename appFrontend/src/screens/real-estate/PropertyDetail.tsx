@@ -19,7 +19,7 @@ import { differenceInDays } from 'date-fns';
 import type { RealEstateStackParamList } from '../../navigation/RealEstateNavigator';
 import { LocationMapPreview } from '../../components/LocationMapPreview';
 import { isValidMapCoordinates } from '../../utils/mapCoordinates';
-import { realEstateApi, type PropertyListing, type PropertyRoomType, type GuestSelection, type StaySummary } from '../../services/realEstateApi';
+import { realEstateApi, type PropertyListing, type PropertyRoomType, type GuestSelection, type StaySummary, isStayListingType } from '../../services/realEstateApi';
 import { getImageUrl } from '../../config/env';
 import { GuestSelector } from '../../components/GuestSelector';
 import { StayBookingDates } from '../../components/StayBookingDates';
@@ -39,8 +39,6 @@ const formatPrice = (price: number, currency: string) => {
   const symbol = currency === 'GMD' ? 'D' : currency === 'USD' ? '$' : currency;
   return `${symbol}${Number(price).toLocaleString()}`;
 };
-
-const isStayType = (type: string) => type === 'HOTEL' || type === 'APARTMENT_RENTAL';
 
 export function PropertyDetail() {
   const navigation = useNavigation<Nav>();
@@ -66,7 +64,7 @@ export function PropertyDetail() {
       .finally(() => setLoading(false));
   }, [listingId]);
 
-  const isStay = listing ? isStayType(listing.listingType) : false;
+  const isStay = listing ? isStayListingType(listing.listingType) : false;
 
   useEffect(() => {
     if (!listing || !isStay || checkOut <= checkIn) {
@@ -361,14 +359,20 @@ export function PropertyDetail() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[
+              styles.primaryButton,
+              listing.status === 'SOLD' && styles.primaryButtonDisabled,
+            ]}
+            disabled={listing.status === 'SOLD'}
             onPress={() => {
               if (!requireAuth('Login to inquire about this property.')) return;
               navigation.navigate('PropertyInquiryForm', { listingId });
             }}
           >
             <Ionicons name="mail-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.primaryButtonText}>Inquire</Text>
+            <Text style={styles.primaryButtonText}>
+              {listing.status === 'SOLD' ? 'Sold' : 'Inquire / Purchase'}
+            </Text>
           </TouchableOpacity>
         )}
       </SafeAreaView>

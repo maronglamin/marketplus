@@ -336,7 +336,7 @@ export function BecomeServiceProvider() {
               <Ionicons name="arrow-back" size={24} color="#374151" />
             </TouchableOpacity>
             <View style={styles.headerText}>
-              <Text style={styles.headerTitle}>Become a Provider</Text>
+              <Text style={styles.headerTitle}>Become a Service Provider</Text>
             </View>
           </View>
           <View style={styles.redirecting}>
@@ -361,7 +361,7 @@ export function BecomeServiceProvider() {
               <Ionicons name="arrow-back" size={24} color="#374151" />
             </TouchableOpacity>
             <View style={styles.headerText}>
-              <Text style={styles.headerTitle}>Become a Provider</Text>
+              <Text style={styles.headerTitle}>Become a Service Provider</Text>
               <Text style={styles.headerSubtitle}>Register your professional services</Text>
             </View>
           </View>

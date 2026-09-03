@@ -5,7 +5,7 @@
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
-const STAY_TYPES = ['HOTEL', 'APARTMENT_RENTAL'];
+const STAY_TYPES = ['HOTEL', 'APARTMENT_RENTAL', 'GUEST_HOUSE', 'BOAT_TRIP'];
 
 async function main() {
   const listings = await prisma.propertyListing.findMany({

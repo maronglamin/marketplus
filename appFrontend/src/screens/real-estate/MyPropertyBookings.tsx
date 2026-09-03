@@ -29,6 +29,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { StripePayment } from '../../components/StripePayment';
 import YonnaPaymentModal from '../../components/YonnaPaymentModal';
 import {
+  PaymentMethodIcon,
+  getPaymentMethodAccountLabel,
+  getPaymentMethodProviderName,
+} from '../../components/PaymentMethodIcon';
+import {
   ensureSavedPaymentMethods,
   getDefaultPaymentMethodId,
   resolveGatewayPaymentMethodId,
@@ -57,7 +62,9 @@ export function MyPropertyBookings() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [payingBooking, setPayingBooking] = useState<PropertyBooking | null>(null);
+  const [payingInquiry, setPayingInquiry] = useState<PropertyInquiry | null>(null);
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [paymentProgressMessage, setPaymentProgressMessage] = useState('Processing payment...');
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
@@ -109,48 +116,100 @@ export function MyPropertyBookings() {
   );
 
   const completePayment = async (gatewayId: string, paymentIntentId?: string) => {
+    if (payingInquiry) {
+      const result = await realEstateApi.processInquiryPayment(payingInquiry.id, gatewayId, paymentIntentId);
+      const launchUrl = result?.data?.waveLaunchUrl || result?.waveLaunchUrl;
+      if (launchUrl) {
+        setPaymentProgressMessage('Opening Wave…');
+        await Linking.openURL(launchUrl);
+        return;
+      }
+      if (gatewayId !== 'test-payment' && gatewayId !== 'simulate') {
+        Alert.alert('Success', 'Payment processed. The property is now marked as sold.');
+        loadData(true);
+      }
+      return;
+    }
+
     if (!payingBooking) return;
     const result = await realEstateApi.processPayment(payingBooking.id, gatewayId, paymentIntentId);
     const launchUrl = result?.data?.waveLaunchUrl || result?.waveLaunchUrl;
     if (launchUrl) {
+      setPaymentProgressMessage('Opening Wave…');
       await Linking.openURL(launchUrl);
       return;
     }
-    Alert.alert('Success', 'Payment processed successfully.');
-    loadData(true);
+    if (gatewayId !== 'test-payment' && gatewayId !== 'simulate') {
+      Alert.alert('Success', 'Payment processed successfully.');
+      loadData(true);
+    }
   };
 
   const handlePaymentMethodSelect = async (paymentMethod: any) => {
-    if (!payingBooking) return;
+    if (!payingBooking && !payingInquiry) return;
 
     const providerName = (paymentMethod.provider || paymentMethod.metadata?.providerName || '')
       .toString()
       .toLowerCase();
     const isYonna = providerName.includes('yonna');
     const isWave = providerName.includes('wave');
+    const isTestPayment =
+      paymentMethod.id === 'test-payment' ||
+      paymentMethod.metadata?.simulated === true ||
+      providerName.includes('test payment');
 
     if (paymentMethod.type === 'CASH') {
       Alert.alert('Not Available', 'Cash payment is not supported. Please add a card or mobile wallet.');
       return;
     }
 
+    if (isTestPayment) {
+      const wasSalePurchase = !!payingInquiry;
+      try {
+        setProcessingPayment(true);
+        setPaymentProgressMessage('Simulating payment…');
+        await completePayment('test-payment');
+        setShowPaymentSelector(false);
+        setPayingBooking(null);
+        setPayingInquiry(null);
+        Alert.alert(
+          'Test Payment Complete',
+          wasSalePurchase
+            ? 'Property purchase marked as paid and listing is now sold.'
+            : 'Booking marked as paid. You can now test settlement.',
+        );
+        loadData(true);
+      } catch (err: any) {
+        Alert.alert('Payment Error', err?.response?.data?.message || 'Failed to process test payment.');
+      } finally {
+        setProcessingPayment(false);
+        setPaymentProgressMessage('Processing payment...');
+      }
+      return;
+    }
+
     switch (paymentMethod.type) {
       case 'CREDIT_CARD':
       case 'DEBIT_CARD':
+        setShowPaymentSelector(false);
         setShowStripePayment(true);
         break;
 
       case 'MOBILE_MONEY':
         if (isYonna) {
+          setShowPaymentSelector(false);
           setShowYonnaPayment(true);
         } else if (isWave) {
           try {
             setProcessingPayment(true);
+            setPaymentProgressMessage('Connecting to Wave…');
             await completePayment('wave-gambia');
+            setShowPaymentSelector(false);
           } catch (err: any) {
             Alert.alert('Payment Error', err?.response?.data?.message || 'Failed to process Wave payment.');
           } finally {
             setProcessingPayment(false);
+            setPaymentProgressMessage('Processing payment...');
           }
         } else {
           Alert.alert('Unsupported', 'This mobile wallet is not supported yet.');
@@ -160,12 +219,35 @@ export function MyPropertyBookings() {
       default:
         try {
           setProcessingPayment(true);
+          setPaymentProgressMessage('Processing payment…');
           await completePayment(resolveGatewayPaymentMethodId(paymentMethod));
+          setShowPaymentSelector(false);
+          setPayingBooking(null);
+          setPayingInquiry(null);
         } catch (err: any) {
           Alert.alert('Payment Error', err?.response?.data?.message || 'Failed to process payment.');
         } finally {
           setProcessingPayment(false);
+          setPaymentProgressMessage('Processing payment...');
         }
+    }
+  };
+
+  const openPayForInquiry = async (inquiry: PropertyInquiry) => {
+    try {
+      setPayingInquiry(inquiry);
+      setPayingBooking(null);
+      setLoadingPaymentMethods(true);
+      const methods = await ensureSavedPaymentMethods(navigation);
+      if (!methods) {
+        setPayingInquiry(null);
+        return;
+      }
+      setPaymentMethods(methods);
+      setSelectedPaymentMethodId(getDefaultPaymentMethodId(methods));
+      setShowPaymentSelector(true);
+    } finally {
+      setLoadingPaymentMethods(false);
     }
   };
 
@@ -199,6 +281,7 @@ export function MyPropertyBookings() {
       await completePayment('stripe', paymentIntentId);
       setShowStripePayment(false);
       setPayingBooking(null);
+      setPayingInquiry(null);
     } catch (err: any) {
       Alert.alert('Payment Error', err?.response?.data?.message || 'Payment could not be completed.');
     } finally {
@@ -212,6 +295,7 @@ export function MyPropertyBookings() {
       await completePayment('yonna-forex');
       setShowYonnaPayment(false);
       setPayingBooking(null);
+      setPayingInquiry(null);
     } catch (err: any) {
       Alert.alert('Payment Error', err?.response?.data?.message || 'Payment could not be completed.');
     } finally {
@@ -252,23 +336,68 @@ export function MyPropertyBookings() {
     );
   };
 
-  const renderInquiry = ({ item }: { item: PropertyInquiry }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle} numberOfLines={1}>{item.listing.title}</Text>
-        <View style={[styles.badge, { backgroundColor: '#F5F3FF' }]}>
-          <Text style={[styles.badgeText, { color: ACCENT }]}>{item.status}</Text>
+  const renderInquiry = ({ item }: { item: PropertyInquiry }) => {
+    const salePrice = Number(item.salePrice ?? item.listing?.price ?? 0);
+    const currency = item.currency || item.listing?.currency || 'GMD';
+    const canPay =
+      item.status === 'OFFERED' &&
+      item.paymentStatus !== 'PAID' &&
+      item.status !== 'PURCHASED' &&
+      item.listing?.status !== 'SOLD' &&
+      salePrice > 0;
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle} numberOfLines={1}>{item.listing.title}</Text>
+          <View style={[styles.badge, { backgroundColor: '#F5F3FF' }]}>
+            <Text style={[styles.badgeText, { color: ACCENT }]}>
+              {item.paymentStatus === 'PAID' || item.status === 'PURCHASED' ? 'PURCHASED' : item.status}
+            </Text>
+          </View>
         </View>
+        <Text style={styles.messageText} numberOfLines={3}>{item.message}</Text>
+        {salePrice > 0 && (
+          <Text style={styles.priceText}>{formatPrice(salePrice, currency)}</Text>
+        )}
+        {item.preferredDate && (
+          <Text style={styles.dateText}>
+            Preferred: {format(new Date(item.preferredDate), 'MMM d, yyyy')}
+          </Text>
+        )}
+        <Text style={styles.detailText}>{format(new Date(item.createdAt), 'MMM d, yyyy')}</Text>
+        {canPay && (
+          <TouchableOpacity
+            style={styles.payButton}
+            onPress={() => openPayForInquiry(item)}
+            disabled={loadingPaymentMethods}
+          >
+            {loadingPaymentMethods && payingInquiry?.id === item.id ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.payButtonText}>Pay to Purchase</Text>
+            )}
+          </TouchableOpacity>
+        )}
+        {(item.paymentStatus === 'PAID' || item.status === 'PURCHASED') && (
+          <Text style={styles.purchasedHint}>You purchased this property</Text>
+        )}
+        {item.status === 'OFFERED' && item.paymentStatus !== 'PAID' && item.listing?.status !== 'SOLD' && (
+          <Text style={styles.offeredHint}>The agent invited you to purchase this property</Text>
+        )}
+        {item.status !== 'OFFERED' &&
+          item.paymentStatus !== 'PAID' &&
+          item.status !== 'PURCHASED' &&
+          item.status !== 'CLOSED' &&
+          item.listing?.status !== 'SOLD' && (
+          <Text style={styles.awaitingHint}>Waiting for the agent to offer purchase</Text>
+        )}
+        {item.listing?.status === 'SOLD' && item.paymentStatus !== 'PAID' && item.status !== 'PURCHASED' && (
+          <Text style={styles.soldHint}>This property has been sold</Text>
+        )}
       </View>
-      <Text style={styles.messageText} numberOfLines={3}>{item.message}</Text>
-      {item.preferredDate && (
-        <Text style={styles.dateText}>
-          Preferred: {format(new Date(item.preferredDate), 'MMM d, yyyy')}
-        </Text>
-      )}
-      <Text style={styles.detailText}>{format(new Date(item.createdAt), 'MMM d, yyyy')}</Text>
-    </View>
-  );
+    );
+  };
 
   if (authLoading) {
     return (
@@ -366,20 +495,35 @@ export function MyPropertyBookings() {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select Payment Method</Text>
             <TouchableOpacity
+              disabled={processingPayment}
               onPress={() => {
+                if (processingPayment) return;
                 setShowPaymentSelector(false);
                 setPayingBooking(null);
+                setPayingInquiry(null);
                 setSelectedPaymentMethodId(null);
               }}
             >
-              <Ionicons name="close" size={24} color="#6B7280" />
+              <Ionicons name="close" size={24} color={processingPayment ? '#D1D5DB' : '#6B7280'} />
             </TouchableOpacity>
           </View>
 
-          {payingBooking ? (
+          {(payingBooking || payingInquiry) ? (
             <View style={styles.paymentAmountContainer}>
               <Text style={styles.paymentAmountText}>
-                Amount: {formatPrice(payingBooking.totalPrice, payingBooking.currency)}
+                Amount:{' '}
+                {formatPrice(
+                  Number(
+                    payingBooking?.totalPrice ??
+                      payingInquiry?.salePrice ??
+                      payingInquiry?.listing?.price ??
+                      0,
+                  ),
+                  payingBooking?.currency ||
+                    payingInquiry?.currency ||
+                    payingInquiry?.listing?.currency ||
+                    'GMD',
+                )}
               </Text>
             </View>
           ) : null}
@@ -387,20 +531,26 @@ export function MyPropertyBookings() {
           {loadingPaymentMethods ? (
             <ActivityIndicator size="large" color={ACCENT} style={{ marginTop: 40 }} />
           ) : (
-            <ScrollView style={styles.paymentList}>
+            <ScrollView style={styles.paymentList} pointerEvents={processingPayment ? 'none' : 'auto'}>
               {paymentMethods.map((method) => (
                 <TouchableOpacity
                   key={method.id}
                   style={[
                     styles.paymentItem,
                     selectedPaymentMethodId === method.id && styles.paymentItemSelected,
+                    (method.id === 'test-payment' || method.metadata?.simulated) && styles.paymentItemTest,
                   ]}
                   onPress={() => setSelectedPaymentMethodId(method.id)}
+                  disabled={processingPayment}
                 >
-                  <Ionicons name="wallet-outline" size={22} color={ACCENT} />
+                  <View style={styles.paymentItemIcon}>
+                    <PaymentMethodIcon method={method} size={28} color={ACCENT} />
+                  </View>
                   <View style={styles.paymentItemInfo}>
-                    <Text style={styles.paymentItemName}>{method.accountName || method.provider}</Text>
-                    <Text style={styles.paymentItemType}>{method.type.replace(/_/g, ' ')}</Text>
+                    <Text style={styles.paymentItemName}>{getPaymentMethodProviderName(method)}</Text>
+                    {!!getPaymentMethodAccountLabel(method) && (
+                      <Text style={styles.paymentItemType}>{getPaymentMethodAccountLabel(method)}</Text>
+                    )}
                   </View>
                   <Ionicons
                     name={selectedPaymentMethodId === method.id ? 'radio-button-on' : 'radio-button-off'}
@@ -414,39 +564,70 @@ export function MyPropertyBookings() {
 
           <View style={styles.modalFooter}>
             <TouchableOpacity
-              style={[styles.processButton, !selectedPaymentMethodId && styles.buttonDisabled]}
+              style={[styles.processButton, (!selectedPaymentMethodId || processingPayment) && styles.buttonDisabled]}
               disabled={!selectedPaymentMethodId || processingPayment}
               onPress={async () => {
                 const method = paymentMethods.find((item) => item.id === selectedPaymentMethodId);
                 if (!method) return;
-                setShowPaymentSelector(false);
                 await handlePaymentMethodSelect(method);
               }}
             >
-              <Text style={styles.processButtonText}>Process Payment</Text>
+              {processingPayment ? (
+                <View style={styles.processButtonContent}>
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <Text style={styles.processButtonText}>Please wait…</Text>
+                </View>
+              ) : (
+                <Text style={styles.processButtonText}>Process Payment</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.managePaymentButton}
+              disabled={processingPayment}
               onPress={() => {
                 setShowPaymentSelector(false);
                 navigateToRootScreen(navigation, 'PaymentMethods');
               }}
             >
-              <Ionicons name="add-circle-outline" size={20} color={ACCENT} />
-              <Text style={styles.managePaymentText}>Manage Payment Methods</Text>
+              <Ionicons name="add-circle-outline" size={20} color={processingPayment ? '#D1D5DB' : ACCENT} />
+              <Text style={[styles.managePaymentText, processingPayment && { color: '#D1D5DB' }]}>
+                Manage Payment Methods
+              </Text>
             </TouchableOpacity>
           </View>
+
+          {processingPayment ? (
+            <View style={styles.processingOverlay}>
+              <View style={styles.processingCard}>
+                <ActivityIndicator size="large" color={ACCENT} />
+                <Text style={styles.processingTitle}>{paymentProgressMessage}</Text>
+                <Text style={styles.processingSubtitle}>
+                  This can take a few seconds. Please don’t close the app.
+                </Text>
+              </View>
+            </View>
+          ) : null}
         </SafeAreaView>
       </Modal>
 
-      {payingBooking && user?.id ? (
+      {(payingBooking || payingInquiry) && user?.id ? (
         <StripePayment
           visible={showStripePayment}
           onClose={() => setShowStripePayment(false)}
-          amount={payingBooking.totalPrice}
-          currency={payingBooking.currency}
-          orderId={payingBooking.id}
+          amount={Number(
+            payingBooking?.totalPrice ??
+              payingInquiry?.salePrice ??
+              payingInquiry?.listing?.price ??
+              0,
+          )}
+          currency={
+            payingBooking?.currency ||
+            payingInquiry?.currency ||
+            payingInquiry?.listing?.currency ||
+            'GMD'
+          }
+          orderId={(payingBooking?.id || payingInquiry?.id)!}
           customerId={user.id}
           onPaymentSuccess={handleStripeSuccess}
           onPaymentError={(msg) => Alert.alert('Payment Failed', msg)}
@@ -454,12 +635,22 @@ export function MyPropertyBookings() {
         />
       ) : null}
 
-      {payingBooking ? (
+      {(payingBooking || payingInquiry) ? (
         <YonnaPaymentModal
           visible={showYonnaPayment}
-          amount={payingBooking.totalPrice}
-          currency={payingBooking.currency}
-          orderId={payingBooking.id}
+          amount={Number(
+            payingBooking?.totalPrice ??
+              payingInquiry?.salePrice ??
+              payingInquiry?.listing?.price ??
+              0,
+          )}
+          currency={
+            payingBooking?.currency ||
+            payingInquiry?.currency ||
+            payingInquiry?.listing?.currency ||
+            'GMD'
+          }
+          orderId={(payingBooking?.id || payingInquiry?.id)!}
           onPaymentSuccess={handleYonnaSuccess}
           onPaymentError={(msg) => Alert.alert('Payment Failed', msg)}
           onClose={() => setShowYonnaPayment(false)}
@@ -524,6 +715,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   payButtonText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+  purchasedHint: { marginTop: 8, fontSize: 13, fontWeight: '600', color: '#059669' },
+  offeredHint: { marginTop: 8, fontSize: 13, fontWeight: '600', color: '#7C3AED' },
+  awaitingHint: { marginTop: 8, fontSize: 13, fontWeight: '500', color: '#6B7280' },
+  soldHint: { marginTop: 8, fontSize: 13, fontWeight: '600', color: '#DC2626' },
   empty: { alignItems: 'center', marginTop: 80 },
   emptyTitle: { fontSize: 16, color: '#9CA3AF', marginTop: 12 },
   loginPrompt: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
@@ -567,8 +762,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   paymentItemSelected: { borderColor: ACCENT, backgroundColor: '#F5F3FF' },
+  paymentItemTest: { borderColor: '#F59E0B', backgroundColor: '#FFFBEB' },
+  paymentItemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+  },
   paymentItemInfo: { flex: 1 },
-  paymentItemName: { fontSize: 15, fontWeight: '500', color: '#1F2937' },
+  paymentItemName: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
   paymentItemType: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   modalFooter: { paddingBottom: 16 },
   processButton: {
@@ -579,7 +783,45 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
   },
+  processButtonContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   processButtonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    zIndex: 20,
+  },
+  processingCard: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+    maxWidth: 320,
+  },
+  processingTitle: {
+    marginTop: 16,
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  processingSubtitle: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   buttonDisabled: { opacity: 0.6 },
   managePaymentButton: {
     flexDirection: 'row',

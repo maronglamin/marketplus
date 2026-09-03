@@ -2,7 +2,7 @@
   "apps": [
     {
       "name": "snap-backend",
-      "cwd": "/var/www/snap-app/marketplus/appBackend",
+      "cwd": ".",
       "script": "dist/index.js",
       "exec_mode": "fork",
       "instances": 1,
@@ -22,4 +22,3 @@
     }
   ]
 }
-

@@ -12,16 +12,42 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
 import { settlementService, type SettlementRequest } from '../../services/settlementService';
 
+type SettlementChannel = 'ECOMMERCE' | 'RIDES' | 'RENTALS' | 'REAL_ESTATE' | 'HOME_SERVICES';
 type SettlementHistoryNavigationProp = NativeStackNavigationProp<AppStackParamList, 'SettlementHistory'>;
+type SettlementHistoryRouteProp = RouteProp<AppStackParamList, 'SettlementHistory'>;
+
+const CHANNEL_LABELS: Record<SettlementChannel, string> = {
+  ECOMMERCE: 'Ecommerce',
+  RIDES: 'Rides',
+  RENTALS: 'Rentals',
+  REAL_ESTATE: 'Stay & Realty',
+  HOME_SERVICES: 'Home Services',
+};
+
+function getRequestScreen(channel: SettlementChannel): keyof AppStackParamList {
+  switch (channel) {
+    case 'RIDES':
+      return 'RideSettlementRequest';
+    case 'RENTALS':
+      return 'RentalSettlementRequest';
+    case 'REAL_ESTATE':
+      return 'RealEstateSettlementRequest';
+    case 'HOME_SERVICES':
+      return 'HomeServiceSettlementRequest';
+    default:
+      return 'SettlementRequest';
+  }
+}
 
 export function SettlementHistory() {
   const navigation = useNavigation<SettlementHistoryNavigationProp>();
+  const route = useRoute<SettlementHistoryRouteProp>();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [settlements, setSettlements] = useState<SettlementRequest[]>([]);
@@ -30,7 +56,9 @@ export function SettlementHistory() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month' | 'all'>('all');
-  const [selectedChannel, setSelectedChannel] = useState<'ECOMMERCE' | 'RIDES'>('ECOMMERCE');
+  const [selectedChannel, setSelectedChannel] = useState<SettlementChannel>(
+    route.params?.channel ?? 'ECOMMERCE',
+  );
 
   useEffect(() => {
     loadSettlements();
@@ -60,7 +88,7 @@ export function SettlementHistory() {
       setHasMore(response.hasMore);
     } catch (error: any) {
       console.error('Error loading settlements:', error);
-      setError(error.message || `Failed to load ${selectedChannel === 'ECOMMERCE' ? 'ecommerce' : 'ride'} settlement history`);
+      setError(error.message || `Failed to load ${CHANNEL_LABELS[selectedChannel].toLowerCase()} settlement history`);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -78,10 +106,14 @@ export function SettlementHistory() {
     setHasMore(true);
   };
 
-  const handleChannelChange = (channel: 'ECOMMERCE' | 'RIDES') => {
+  const handleChannelChange = (channel: SettlementChannel) => {
     setSelectedChannel(channel);
     setCurrentPage(1);
     setHasMore(true);
+  };
+
+  const openNewRequest = () => {
+    navigation.navigate(getRequestScreen(selectedChannel) as any);
   };
 
   const loadMore = () => {
@@ -278,18 +310,18 @@ export function SettlementHistory() {
     <View style={styles.emptyState}>
       <Ionicons name="receipt-outline" size={64} color="#9CA3AF" />
       <Text style={styles.emptyStateTitle}>
-        No {selectedChannel === 'ECOMMERCE' ? 'Settlement' : 'Ride'} History
+        No {CHANNEL_LABELS[selectedChannel]} History
       </Text>
       <Text style={styles.emptyStateText}>
-        No {selectedChannel === 'ECOMMERCE' ? 'settlement' : 'ride'} requests yet. Your history will appear here once you submit requests.
+        No {CHANNEL_LABELS[selectedChannel].toLowerCase()} settlement requests yet. Your history will appear here once you submit requests.
       </Text>
       <TouchableOpacity
         style={styles.newSettlementButton}
-        onPress={() => navigation.navigate(selectedChannel === 'ECOMMERCE' ? 'SettlementRequest' : 'RideSettlementRequest')}
+        onPress={openNewRequest}
       >
         <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
         <Text style={styles.newSettlementButtonText}>
-          New {selectedChannel === 'ECOMMERCE' ? 'Settlement' : 'Ride'} Request
+          New Settlement Request
         </Text>
       </TouchableOpacity>
     </View>
@@ -311,7 +343,7 @@ export function SettlementHistory() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>
-            Loading {selectedChannel === 'ECOMMERCE' ? 'settlement' : 'ride'} history...
+            Loading {CHANNEL_LABELS[selectedChannel].toLowerCase()} history...
           </Text>
         </View>
       </SafeAreaView>
@@ -329,9 +361,7 @@ export function SettlementHistory() {
             >
               <Ionicons name="arrow-back" size={24} color="#000" />
             </TouchableOpacity>
-            <Text style={styles.title}>
-              {selectedChannel === 'ECOMMERCE' ? 'Settlement History' : 'Ride History'}
-            </Text>
+            <Text style={styles.title}>Settlement History</Text>
             <View style={styles.placeholder} />
           </View>
           <View style={styles.errorContainer}>
@@ -361,11 +391,9 @@ export function SettlementHistory() {
           >
             <Ionicons name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.title}>
-            {selectedChannel === 'ECOMMERCE' ? 'Settlement History' : 'Ride History'}
-          </Text>
+          <Text style={styles.title}>Settlement History</Text>
           <TouchableOpacity
-            onPress={() => navigation.navigate(selectedChannel === 'ECOMMERCE' ? 'SettlementRequest' : 'RideSettlementRequest')}
+            onPress={openNewRequest}
             style={styles.newButton}
           >
             <Ionicons name="add-circle-outline" size={24} color="#2563EB" />
@@ -379,35 +407,23 @@ export function SettlementHistory() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filterScrollContent}
           >
-            <TouchableOpacity
-              style={[
-                styles.filterButton,
-                selectedChannel === 'ECOMMERCE' && styles.filterButtonActive
-              ]}
-              onPress={() => handleChannelChange('ECOMMERCE')}
-            >
-              <Text style={[
-                styles.filterButtonText,
-                selectedChannel === 'ECOMMERCE' && styles.filterButtonTextActive
-              ]}>
-                Ecommerce
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.filterButton,
-                selectedChannel === 'RIDES' && styles.filterButtonActive
-              ]}
-              onPress={() => handleChannelChange('RIDES')}
-            >
-              <Text style={[
-                styles.filterButtonText,
-                selectedChannel === 'RIDES' && styles.filterButtonTextActive
-              ]}>
-                Rides
-              </Text>
-            </TouchableOpacity>
+            {(['ECOMMERCE', 'RIDES', 'RENTALS', 'REAL_ESTATE', 'HOME_SERVICES'] as SettlementChannel[]).map((channel) => (
+              <TouchableOpacity
+                key={channel}
+                style={[
+                  styles.filterButton,
+                  selectedChannel === channel && styles.filterButtonActive
+                ]}
+                onPress={() => handleChannelChange(channel)}
+              >
+                <Text style={[
+                  styles.filterButtonText,
+                  selectedChannel === channel && styles.filterButtonTextActive
+                ]}>
+                  {CHANNEL_LABELS[channel]}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
         </View>
 

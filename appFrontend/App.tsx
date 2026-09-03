@@ -71,9 +71,14 @@ export type MainStackParamList = {
   BranchesScreen: undefined;
   RevenueDetails: undefined;
   TransactionHistory: { currency: string; currencySymbol: string };
-  SettlementHistory: undefined;
+  SettlementHistory: { channel?: 'ECOMMERCE' | 'RIDES' | 'RENTALS' | 'REAL_ESTATE' | 'HOME_SERVICES' } | undefined;
   SellerInterestDetail: { interestId: string };
   SettlementRequest: undefined;
+  RideSettlementRequest: undefined;
+  RentalSettlementRequest: { defaultCurrency?: string } | undefined;
+  RealEstateSettlementRequest: { defaultCurrency?: string } | undefined;
+  HomeServiceSettlementRequest: { defaultCurrency?: string } | undefined;
+  SettlementDetail: { settlementId: string; currency: string; currencySymbol: string };
   TransactionDetail: { transactionId: string; currency: string; currencySymbol: string };
   DriverDashboard: undefined;
   DriverSettings: undefined;
@@ -270,6 +275,8 @@ function MainNavigator() {
       <MainStack.Screen name="SettlementHistory" getComponent={() => require('./src/screens/transactions/SettlementHistory').SettlementHistory} />
       <MainStack.Screen name="SellerInterestDetail" getComponent={() => require('./src/screens/SellerInterestDetail').SellerInterestDetail} />
       <MainStack.Screen name="SettlementRequest" getComponent={() => require('./src/screens/transactions/SettlementRequest').SettlementRequest} />
+      <MainStack.Screen name="RideSettlementRequest" getComponent={() => require('./src/screens/transactions/RideSettlementRequest').RideSettlementRequest} />
+      <MainStack.Screen name="SettlementDetail" getComponent={() => require('./src/screens/transactions/SettlementDetail').SettlementDetail} />
       <MainStack.Screen name="TransactionDetail" getComponent={() => require('./src/screens/transactions/TransactionDetail').TransactionDetail} />
       <MainStack.Screen name="DriverDashboard" getComponent={() => require('./src/screens/DriverDashboard').DriverDashboard} />
       <MainStack.Screen name="DriverSettings" getComponent={() => require('./src/screens/driverManagement/DriverSettings').DriverSettings} />
@@ -277,6 +284,9 @@ function MainNavigator() {
       <MainStack.Screen name="DriverEarnings" getComponent={() => require('./src/screens/DriverEarnings').DriverEarnings} />
       <MainStack.Screen name="DriverRequests" getComponent={() => require('./src/screens/DriverRequests').DriverRequests} />
       <MainStack.Screen name="RentalEarnings" getComponent={() => require('./src/screens/RentalEarnings').RentalEarnings} />
+      <MainStack.Screen name="RentalSettlementRequest" getComponent={() => require('./src/screens/transactions/RentalSettlementRequest').RentalSettlementRequest} />
+      <MainStack.Screen name="RealEstateSettlementRequest" getComponent={() => require('./src/screens/real-estate/RealEstateSettlementRequest').RealEstateSettlementRequest} />
+      <MainStack.Screen name="HomeServiceSettlementRequest" getComponent={() => require('./src/screens/home-services/HomeServiceSettlementRequest').HomeServiceSettlementRequest} />
       <MainStack.Screen name="AssetRental" getComponent={() => require('./src/screens/AssetRental').default} />
       {/* Seller KYC flow */}
       <MainStack.Screen name="SellerKycForm" getComponent={() => require('./src/screens/SellerKycForm').SellerKycForm} />

@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { authenticate } from '../middleware/auth';
 import { notificationService } from '../services/notificationService';
 import { validateAndHoldServiceSlot, releaseServiceSlot, confirmServiceSlot } from '../services/availabilityService';
+import { assertCanOperate, assertProviderVisible, sendSubscriptionBlocked } from '../services/providerSubscriptionService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -74,6 +75,17 @@ router.post('/', authenticate, async (req: any, res) => {
       resolvedOfferingId = offering.id;
     } else if (!categoryId) {
       return res.status(400).json({ success: false, message: 'offeringId+slotStart+providerId or categoryId is required' });
+    }
+
+    if (resolvedProviderId) {
+      const provider = await prisma.serviceProvider.findUnique({ where: { id: resolvedProviderId } });
+      if (provider) {
+        try {
+          await assertProviderVisible(provider.userId, 'HOME_SERVICES');
+        } catch (error) {
+          return sendSubscriptionBlocked(res, error);
+        }
+      }
     }
 
     const bookingRef = `SB-${Date.now().toString(36).toUpperCase()}`;
@@ -170,6 +182,11 @@ router.patch('/:id/quote', authenticate, async (req: any, res) => {
     const { proposedPrice } = req.body;
     const provider = await prisma.serviceProvider.findUnique({ where: { userId: req.user.id } });
     if (!provider) return res.status(403).json({ success: false, message: 'Not a provider' });
+    try {
+      await assertCanOperate(req.user.id, 'HOME_SERVICES');
+    } catch (error) {
+      return sendSubscriptionBlocked(res, error);
+    }
     const existing = await prisma.serviceBooking.findFirst({
       where: { id: req.params.id, providerId: provider.id },
     });
@@ -345,6 +362,70 @@ router.post('/:id/payment', authenticate, async (req: any, res) => {
     if (booking.status !== 'ACCEPTED' || !booking.agreedPrice) {
       return res.status(400).json({ success: false, message: 'Booking must be accepted with agreed price' });
     }
+    if (booking.paymentStatus === 'PAID') {
+      return res.status(400).json({ success: false, message: 'Booking is already paid' });
+    }
+
+    const sellerUserId = booking.provider?.userId;
+    if (!sellerUserId) return res.status(400).json({ success: false, message: 'Provider not found' });
+
+    const allowTestPayments =
+      process.env.ALLOW_TEST_PAYMENTS === 'true' ||
+      (process.env.NODE_ENV === 'development' && process.env.ALLOW_TEST_PAYMENTS !== 'false');
+
+    // Simulated payment for local/dev settlement testing
+    if (paymentMethodId === 'test-payment' || paymentMethodId === 'simulate') {
+      if (!allowTestPayments) {
+        return res.status(403).json({
+          success: false,
+          message: 'Test payments are disabled. Set NODE_ENV=development or ALLOW_TEST_PAYMENTS=true.',
+        });
+      }
+
+      const amount = Number(booking.agreedPrice);
+      const appTransactionId = `TEST-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
+
+      await prisma.$transaction(async (tx) => {
+        await tx.externalTransaction.create({
+          data: {
+            serviceBookingId: booking.id,
+            customerId: booking.customerId,
+            sellerId: sellerUserId,
+            gatewayProvider: 'test',
+            gatewayTransactionId: `test-${booking.id}-${Date.now()}`,
+            paymentReference: `TEST-${booking.bookingRef}`,
+            appTransactionId,
+            appService: 'HOME_SERVICES',
+            transactionType: 'ORIGINAL',
+            amount,
+            currencyCode: booking.currency,
+            paidThroughGateway: true,
+            status: 'SUCCESS',
+            processedAt: new Date(),
+            gatewayResponse: {
+              simulated: true,
+              mode: 'development',
+              note: 'Test payment for home services settlement development',
+            },
+          },
+        });
+        await tx.serviceBooking.update({
+          where: { id: booking.id },
+          data: { status: 'PAID', paymentStatus: 'PAID', slotStatus: 'CONFIRMED' },
+        });
+      });
+
+      void notificationService.sendServiceBookingPaidNotifications({
+        customerId: booking.customerId,
+        providerUserId: sellerUserId,
+        amount,
+        currency: booking.currency,
+        bookingRef: booking.bookingRef,
+        bookingId: booking.id,
+      });
+
+      return res.json({ success: true, message: 'Test payment processed', simulated: true });
+    }
 
     const isYonna = paymentMethodId === 'yonna-forex';
     const isWave = paymentMethodId === 'wave-gambia' || paymentMethodId === 'wave';
@@ -377,9 +458,6 @@ router.post('/:id/payment', authenticate, async (req: any, res) => {
         },
       }, res);
     }
-
-    const sellerUserId = booking.provider?.userId;
-    if (!sellerUserId) return res.status(400).json({ success: false, message: 'Provider not found' });
 
     const appTransactionId = `TXN-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
     const amount = Number(booking.agreedPrice);

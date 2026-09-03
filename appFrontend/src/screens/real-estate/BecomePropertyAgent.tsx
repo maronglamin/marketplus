@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -34,11 +34,14 @@ const TOTAL_STEPS = STEPS.length;
 const SPECIALIZATION_OPTIONS: { value: PropertyListingType; label: string }[] = [
   { value: 'HOTEL', label: 'Hotels' },
   { value: 'APARTMENT_RENTAL', label: 'Apartments' },
-  { value: 'HOME_SALE', label: 'Homes for Sale' },
-  { value: 'LAND_SALE', label: 'Land for Sale' },
+  { value: 'GUEST_HOUSE', label: 'Guest House & Lodge' },
+  { value: 'BOAT_TRIP', label: 'Leisure & Trips (Boat Trip)' },
+  { value: 'HOME_SALE', label: 'Home Sales' },
+  { value: 'LAND_SALE', label: 'Land Sales' },
 ];
 
 type Nav = NativeStackNavigationProp<RealEstateStackParamList, 'BecomePropertyAgent'>;
+type BecomeRoute = RouteProp<RealEstateStackParamList, 'BecomePropertyAgent'>;
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   PENDING: { bg: '#FEF3C7', text: '#D97706' },
@@ -48,6 +51,10 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 export function BecomePropertyAgent() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<BecomeRoute>();
+  const section = route.params?.section ?? 'all';
+  const headerTitle =
+    section === 'stay' ? 'Become a Hospitality Partner' : 'Become a Property Agent';
   const { user, isLoading: authLoading, isAuthenticated, promptLogin } = useRequireAuth(
     'Login to register as a property agent.',
   );
@@ -496,7 +503,7 @@ export function BecomePropertyAgent() {
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#374151" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Become Property Agent</Text>
+            <Text style={styles.headerTitle}>{headerTitle}</Text>
           </View>
           <View style={styles.loginPrompt}>
             <Ionicons name="lock-closed-outline" size={48} color="#D1D5DB" />
@@ -521,7 +528,7 @@ export function BecomePropertyAgent() {
             <TouchableOpacity style={styles.backButton} onPress={handleBack}>
               <Ionicons name="arrow-back" size={24} color="#374151" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Become Property Agent</Text>
+            <Text style={styles.headerTitle}>{headerTitle}</Text>
           </View>
         }
         footer={

@@ -131,7 +131,7 @@ export function BecomeServiceProvider() {
 
   return (
     <div className="max-w-4xl mx-auto bg-white min-h-full">
-      <PageHeader title="Become a Provider" subtitle="Register your professional services" backTo="/home-services" />
+      <PageHeader title="Become a Service Provider" subtitle="Register your professional services" backTo="/home-services" />
       {!formDisabled && <FormStepIndicator steps={STEPS} currentStep={step} />}
 
       <div className="p-4 space-y-4">

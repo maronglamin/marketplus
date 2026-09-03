@@ -71,10 +71,27 @@ export interface IncludedRide {
   currency: string;
 }
 
+export interface IncludedPropertyBooking {
+  id: string;
+  bookingRef: string;
+  createdAt: string;
+  totalPrice: number;
+  currency: string;
+  title?: string;
+}
+
 export interface SettlementDetails {
   settlement: SettlementRequest;
   includedOrders: IncludedOrder[];
   includedRides: IncludedRide[];
+  includedPropertyBookings?: IncludedPropertyBooking[];
+  includedServiceBookings?: IncludedPropertyBooking[];
+  includedRentals?: Array<{
+    id: string;
+    createdAt: string;
+    totalAmount: number;
+    currency: string;
+  }>;
 }
 
 export interface AvailableRevenue {
@@ -136,17 +153,53 @@ export interface AvailableRentalEarnings {
   rentals: RentalDetail[];
 }
 
+export interface PropertyBookingDetail {
+  id: string;
+  bookingRef?: string;
+  title?: string;
+  earnings: number;
+  createdAt: string;
+}
+
+export interface AvailableRealEstateEarnings {
+  currency: string;
+  amount: number;
+  currencySymbol: string;
+  bookingsCount: number;
+  bookings: PropertyBookingDetail[];
+}
+
+export interface ServiceBookingDetail {
+  id: string;
+  bookingRef?: string;
+  title?: string;
+  earnings: number;
+  createdAt: string;
+}
+
+export interface AvailableHomeServiceEarnings {
+  currency: string;
+  amount: number;
+  currencySymbol: string;
+  bookingsCount: number;
+  bookings: ServiceBookingDetail[];
+}
+
 export interface SettlementRequestData {
   amount: number;
   currency: string;
   type: 'BANK_TRANSFER' | 'WALLET_TRANSFER';
-  channel?: 'ECOMMERCE' | 'RIDES' | 'RENTALS';
+  channel?: 'ECOMMERCE' | 'RIDES' | 'RENTALS' | 'REAL_ESTATE' | 'HOME_SERVICES';
   bankAccountId?: string;
   walletId?: string;
   includedRideIds?: string[];
   totalRidesCount?: number;
   includedRentalIds?: string[];
   totalRentalsCount?: number;
+  includedPropertyBookingIds?: string[];
+  totalPropertyBookingsCount?: number;
+  includedServiceBookingIds?: string[];
+  totalServiceBookingsCount?: number;
 }
 
 class SettlementService {
@@ -191,6 +244,36 @@ class SettlementService {
         throw new Error(error.response.data.message);
       } else {
         throw new Error('Failed to fetch available rental earnings');
+      }
+    }
+  }
+
+  // Get available real estate earnings for settlement (property agents)
+  async getAvailableRealEstateEarnings(): Promise<AvailableRealEstateEarnings[]> {
+    try {
+      const response = await api.get('/api/settlements/available-real-estate-earnings');
+      return response.data.earnings ?? [];
+    } catch (error: any) {
+      console.error('Error fetching available real estate earnings:', error);
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      } else {
+        throw new Error('Failed to fetch available real estate earnings');
+      }
+    }
+  }
+
+  // Get available home service earnings for settlement (service providers)
+  async getAvailableHomeServiceEarnings(): Promise<AvailableHomeServiceEarnings[]> {
+    try {
+      const response = await api.get('/api/settlements/available-home-service-earnings');
+      return response.data.earnings ?? [];
+    } catch (error: any) {
+      console.error('Error fetching available home service earnings:', error);
+      if (error.response?.data?.message) {
+        throw new Error(error.response.data.message);
+      } else {
+        throw new Error('Failed to fetch available home service earnings');
       }
     }
   }
@@ -294,7 +377,7 @@ class SettlementService {
   }
 
   // Get settlement history
-  async getSettlementHistory(page: number = 1, limit: number = 20, channel?: 'ECOMMERCE' | 'RIDES', period?: 'today' | 'week' | 'month' | 'all'): Promise<{
+  async getSettlementHistory(page: number = 1, limit: number = 20, channel?: 'ECOMMERCE' | 'RIDES' | 'RENTALS' | 'REAL_ESTATE' | 'HOME_SERVICES', period?: 'today' | 'week' | 'month' | 'all'): Promise<{
     settlements: SettlementRequest[];
     totalCount: number;
     currentPage: number;

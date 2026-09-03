@@ -22,6 +22,11 @@ import { LocationMapPreview } from '../../components/LocationMapPreview';
 import { isValidMapCoordinates } from '../../utils/mapCoordinates';
 import { StripePayment } from '../../components/StripePayment';
 import YonnaPaymentModal from '../../components/YonnaPaymentModal';
+import {
+  PaymentMethodIcon,
+  getPaymentMethodAccountLabel,
+  getPaymentMethodProviderName,
+} from '../../components/PaymentMethodIcon';
 import { useAuth } from '../../contexts/AuthContext';
 import { navigateToRootScreen } from '../../navigation/sectionNavigation';
 import {
@@ -52,6 +57,7 @@ export function ServiceBookingDetail() {
   const [booking, setBooking] = useState<ServiceBooking | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [paymentProgressMessage, setPaymentProgressMessage] = useState('Processing payment...');
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
@@ -121,10 +127,13 @@ export function ServiceBookingDetail() {
     const result = await homeServicesApi.processPayment(bookingId, gatewayId, paymentIntentId);
     const launchUrl = result?.data?.waveLaunchUrl || result?.waveLaunchUrl;
     if (launchUrl) {
+      setPaymentProgressMessage('Opening Wave…');
       await Linking.openURL(launchUrl);
       return;
     }
-    Alert.alert('Success', 'Payment processed successfully.');
+    if (gatewayId !== 'test-payment' && gatewayId !== 'simulate') {
+      Alert.alert('Success', 'Payment processed successfully.');
+    }
     loadBooking();
   };
 
@@ -136,29 +145,54 @@ export function ServiceBookingDetail() {
       .toLowerCase();
     const isYonna = providerName.includes('yonna');
     const isWave = providerName.includes('wave');
+    const isTestPayment =
+      paymentMethod.id === 'test-payment' ||
+      paymentMethod.metadata?.simulated === true ||
+      providerName.includes('test payment');
 
     if (paymentMethod.type === 'CASH') {
       Alert.alert('Not Available', 'Cash payment is not supported. Please add a card or mobile wallet.');
       return;
     }
 
+    if (isTestPayment) {
+      try {
+        setActionLoading(true);
+        setPaymentProgressMessage('Simulating payment…');
+        await completePayment('test-payment');
+        setShowPaymentSelector(false);
+        Alert.alert('Test Payment Complete', 'Booking marked as paid.');
+      } catch (error: any) {
+        Alert.alert('Payment Failed', error?.response?.data?.message || 'Could not process test payment.');
+      } finally {
+        setActionLoading(false);
+        setPaymentProgressMessage('Processing payment...');
+      }
+      return;
+    }
+
     switch (paymentMethod.type) {
       case 'CREDIT_CARD':
       case 'DEBIT_CARD':
+        setShowPaymentSelector(false);
         setShowStripePayment(true);
         break;
 
       case 'MOBILE_MONEY':
         if (isYonna) {
+          setShowPaymentSelector(false);
           setShowYonnaPayment(true);
         } else if (isWave) {
           try {
             setActionLoading(true);
+            setPaymentProgressMessage('Connecting to Wave…');
             await completePayment('wave-gambia');
+            setShowPaymentSelector(false);
           } catch (error: any) {
             Alert.alert('Payment Failed', error?.response?.data?.message || 'Could not process Wave payment.');
           } finally {
             setActionLoading(false);
+            setPaymentProgressMessage('Processing payment...');
           }
         } else {
           Alert.alert('Unsupported', 'This mobile wallet is not supported yet.');
@@ -170,11 +204,14 @@ export function ServiceBookingDetail() {
       case 'DIGITAL_WALLET':
         try {
           setActionLoading(true);
+          setPaymentProgressMessage('Processing payment…');
           await completePayment(resolveGatewayPaymentMethodId(paymentMethod));
+          setShowPaymentSelector(false);
         } catch (error: any) {
           Alert.alert('Payment Failed', error?.response?.data?.message || 'Payment could not be processed.');
         } finally {
           setActionLoading(false);
+          setPaymentProgressMessage('Processing payment...');
         }
         break;
 
@@ -340,12 +377,14 @@ export function ServiceBookingDetail() {
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Select Payment Method</Text>
             <TouchableOpacity
+              disabled={actionLoading}
               onPress={() => {
+                if (actionLoading) return;
                 setShowPaymentSelector(false);
                 setSelectedPaymentMethodId(null);
               }}
             >
-              <Ionicons name="close" size={24} color="#6B7280" />
+              <Ionicons name="close" size={24} color={actionLoading ? '#D1D5DB' : '#6B7280'} />
             </TouchableOpacity>
           </View>
 
@@ -358,7 +397,7 @@ export function ServiceBookingDetail() {
           {loadingPaymentMethods ? (
             <ActivityIndicator size="large" color="#0EA5E9" style={{ marginTop: 40 }} />
           ) : (
-            <ScrollView style={styles.paymentList}>
+            <ScrollView style={styles.paymentList} pointerEvents={actionLoading ? 'none' : 'auto'}>
               {paymentMethods.map((method) => (
                 <TouchableOpacity
                   key={method.id}
@@ -368,17 +407,16 @@ export function ServiceBookingDetail() {
                     method.isDefault && styles.paymentItemDefault,
                   ]}
                   onPress={() => setSelectedPaymentMethodId(method.id)}
+                  disabled={actionLoading}
                 >
-                  <Ionicons name="wallet-outline" size={22} color="#0EA5E9" />
+                  <View style={styles.paymentItemIcon}>
+                    <PaymentMethodIcon method={method} size={28} color="#0EA5E9" />
+                  </View>
                   <View style={styles.paymentItemInfo}>
-                    <Text style={styles.paymentItemName}>{method.accountName || method.provider}</Text>
-                    <Text style={styles.paymentItemType}>
-                      {method.type === 'CREDIT_CARD'
-                        ? 'Card'
-                        : method.type === 'MOBILE_MONEY'
-                          ? 'Mobile Money'
-                          : method.type.replace(/_/g, ' ')}
-                    </Text>
+                    <Text style={styles.paymentItemName}>{getPaymentMethodProviderName(method)}</Text>
+                    {!!getPaymentMethodAccountLabel(method) && (
+                      <Text style={styles.paymentItemType}>{getPaymentMethodAccountLabel(method)}</Text>
+                    )}
                     {method.isDefault ? <Text style={styles.defaultBadge}>Default</Text> : null}
                   </View>
                   <Ionicons
@@ -396,30 +434,51 @@ export function ServiceBookingDetail() {
               style={[
                 styles.primaryButton,
                 { marginHorizontal: 16, marginBottom: 10 },
-                !selectedPaymentMethodId && styles.buttonDisabled,
+                (!selectedPaymentMethodId || actionLoading) && styles.buttonDisabled,
               ]}
               disabled={!selectedPaymentMethodId || actionLoading}
               onPress={async () => {
                 const method = paymentMethods.find((item) => item.id === selectedPaymentMethodId);
                 if (!method) return;
-                setShowPaymentSelector(false);
                 await handlePaymentMethodSelect(method);
               }}
             >
-              <Text style={styles.primaryButtonText}>Process Payment</Text>
+              {actionLoading ? (
+                <View style={styles.processButtonContent}>
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <Text style={styles.primaryButtonText}>Please wait…</Text>
+                </View>
+              ) : (
+                <Text style={styles.primaryButtonText}>Process Payment</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.addMorePaymentButton}
+              disabled={actionLoading}
               onPress={() => {
                 setShowPaymentSelector(false);
                 navigateToRootScreen(navigation, 'PaymentMethods');
               }}
             >
-              <Ionicons name="add-circle-outline" size={20} color="#0EA5E9" />
-              <Text style={styles.addMorePaymentText}>Manage Payment Methods</Text>
+              <Ionicons name="add-circle-outline" size={20} color={actionLoading ? '#D1D5DB' : '#0EA5E9'} />
+              <Text style={[styles.addMorePaymentText, actionLoading && { color: '#D1D5DB' }]}>
+                Manage Payment Methods
+              </Text>
             </TouchableOpacity>
           </View>
+
+          {actionLoading ? (
+            <View style={styles.processingOverlay}>
+              <View style={styles.processingCard}>
+                <ActivityIndicator size="large" color="#0EA5E9" />
+                <Text style={styles.processingTitle}>{paymentProgressMessage}</Text>
+                <Text style={styles.processingSubtitle}>
+                  This can take a few seconds. Please don’t close the app.
+                </Text>
+              </View>
+            </View>
+          ) : null}
         </SafeAreaView>
       </Modal>
 
@@ -553,11 +612,52 @@ const styles = StyleSheet.create({
   },
   paymentItemSelected: { borderColor: '#0EA5E9', backgroundColor: '#F0F9FF' },
   paymentItemDefault: { borderColor: '#BAE6FD' },
+  paymentItemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+  },
   paymentItemInfo: { flex: 1 },
-  paymentItemName: { fontSize: 15, fontWeight: '500', color: '#1F2937' },
+  paymentItemName: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
   paymentItemType: { fontSize: 12, color: '#6B7280', marginTop: 2 },
   defaultBadge: { fontSize: 11, color: '#0EA5E9', fontWeight: '600', marginTop: 4 },
   modalFooter: { paddingBottom: 16 },
+  processButtonContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    zIndex: 20,
+  },
+  processingCard: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    maxWidth: 320,
+  },
+  processingTitle: {
+    marginTop: 16,
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  processingSubtitle: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
   addMorePaymentButton: {
     flexDirection: 'row',
     alignItems: 'center',

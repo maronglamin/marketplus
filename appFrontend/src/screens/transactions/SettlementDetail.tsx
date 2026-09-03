@@ -16,7 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import type { AppStackParamList } from '../../navigation/AppNavigator';
-import { settlementService, type SettlementRequest, type IncludedOrder } from '../../services/settlementService';
+import { settlementService, type SettlementRequest, type IncludedOrder, type IncludedPropertyBooking } from '../../services/settlementService';
 
 type SettlementDetailNavigationProp = NativeStackNavigationProp<AppStackParamList, 'SettlementDetail'>;
 type SettlementDetailRouteProp = RouteProp<AppStackParamList, 'SettlementDetail'>;
@@ -30,6 +30,8 @@ export function SettlementDetail() {
   const [settlement, setSettlement] = useState<SettlementRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [includedOrders, setIncludedOrders] = useState<IncludedOrder[]>([]);
+  const [includedPropertyBookings, setIncludedPropertyBookings] = useState<IncludedPropertyBooking[]>([]);
+  const [includedServiceBookings, setIncludedServiceBookings] = useState<IncludedPropertyBooking[]>([]);
 
   useEffect(() => {
     loadSettlementDetail();
@@ -44,7 +46,9 @@ export function SettlementDetail() {
       const response = await settlementService.getSettlementDetails(settlementId);
       
       setSettlement(response.settlement);
-      setIncludedOrders(response.includedOrders);
+      setIncludedOrders(response.includedOrders ?? []);
+      setIncludedPropertyBookings(response.includedPropertyBookings ?? []);
+      setIncludedServiceBookings(response.includedServiceBookings ?? []);
       
     } catch (error: any) {
       console.error('Error loading settlement detail:', error);
@@ -399,6 +403,114 @@ export function SettlementDetail() {
                       </View>
                     </View>
                     {index < includedOrders.length - 1 && <View style={styles.orderDivider} />}
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Included Property Bookings Section */}
+          {includedPropertyBookings.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Included Bookings</Text>
+              <View style={styles.ordersCard}>
+                <View style={styles.ordersHeader}>
+                  <Text style={styles.ordersHeaderText}>Booking Details</Text>
+                  <Text style={styles.ordersCountText}>
+                    {includedPropertyBookings.length} booking{includedPropertyBookings.length === 1 ? '' : 's'}
+                  </Text>
+                </View>
+                {includedPropertyBookings.map((booking, index) => (
+                  <View
+                    key={booking.id}
+                    style={[
+                      styles.orderItem,
+                      index % 2 === 1 && styles.orderItemAlternate,
+                    ]}
+                  >
+                    <View style={styles.orderHeader}>
+                      <View style={styles.orderNumberSection}>
+                        <View style={styles.orderNumberRow}>
+                          <Text style={styles.orderIndexText}>#{index + 1}</Text>
+                          <Text style={styles.orderNumberText}>{booking.bookingRef}</Text>
+                        </View>
+                        <View style={styles.orderDetailsColumn}>
+                          {!!booking.title && (
+                            <View style={styles.orderDetailRow}>
+                              <Text style={styles.orderDetailLabel}>Property:</Text>
+                              <Text style={styles.orderDateText}>{booking.title}</Text>
+                            </View>
+                          )}
+                          <View style={styles.orderDetailRow}>
+                            <Text style={styles.orderDetailLabel}>Total Amount:</Text>
+                            <Text style={styles.orderAmountText}>
+                              {formatAmount(booking.totalPrice, booking.currency)}
+                            </Text>
+                          </View>
+                          <View style={styles.orderDetailRow}>
+                            <Text style={styles.orderDetailLabel}>Date:</Text>
+                            <Text style={styles.orderDateText}>
+                              {formatDate(booking.createdAt)}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                    {index < includedPropertyBookings.length - 1 && <View style={styles.orderDivider} />}
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Included Service Bookings Section */}
+          {includedServiceBookings.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Included Service Bookings</Text>
+              <View style={styles.ordersCard}>
+                <View style={styles.ordersHeader}>
+                  <Text style={styles.ordersHeaderText}>Booking Details</Text>
+                  <Text style={styles.ordersCountText}>
+                    {includedServiceBookings.length} booking{includedServiceBookings.length === 1 ? '' : 's'}
+                  </Text>
+                </View>
+                {includedServiceBookings.map((booking, index) => (
+                  <View
+                    key={booking.id}
+                    style={[
+                      styles.orderItem,
+                      index % 2 === 1 && styles.orderItemAlternate,
+                    ]}
+                  >
+                    <View style={styles.orderHeader}>
+                      <View style={styles.orderNumberSection}>
+                        <View style={styles.orderNumberRow}>
+                          <Text style={styles.orderIndexText}>#{index + 1}</Text>
+                          <Text style={styles.orderNumberText}>{booking.bookingRef}</Text>
+                        </View>
+                        <View style={styles.orderDetailsColumn}>
+                          {!!booking.title && (
+                            <View style={styles.orderDetailRow}>
+                              <Text style={styles.orderDetailLabel}>Service:</Text>
+                              <Text style={styles.orderDateText}>{booking.title}</Text>
+                            </View>
+                          )}
+                          <View style={styles.orderDetailRow}>
+                            <Text style={styles.orderDetailLabel}>Total Amount:</Text>
+                            <Text style={styles.orderAmountText}>
+                              {formatAmount(booking.totalPrice, booking.currency)}
+                            </Text>
+                          </View>
+                          <View style={styles.orderDetailRow}>
+                            <Text style={styles.orderDetailLabel}>Date:</Text>
+                            <Text style={styles.orderDateText}>
+                              {formatDate(booking.createdAt)}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                    {index < includedServiceBookings.length - 1 && <View style={styles.orderDivider} />}
                   </View>
                 ))}
               </View>

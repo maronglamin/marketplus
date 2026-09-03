@@ -3,6 +3,7 @@ import { getWebhookConfig, getWebhookUrls } from '../utils/webhookConfig';
 import { PrismaClient } from '@prisma/client';
 import UCPService from '../services/ucpService';
 import { notificationService } from '../services/notificationService';
+import { activateFromPayment } from '../services/providerSubscriptionService';
 
 const prisma = new PrismaClient();
 
@@ -381,11 +382,45 @@ export class YonnaForexWebhookController {
             }
           }
 
+          if ((ext as any)?.providerSubscriptionPaymentId && (normalized === 'success' || normalized === 'completed')) {
+            try {
+              await activateFromPayment((ext as any).providerSubscriptionPaymentId);
+            } catch (e) {
+              console.warn('Yonna webhook: subscription activate warning:', (e as any)?.message || e);
+            }
+          }
+
           if (ext?.propertyBookingId) {
             if (normalized === 'success' || normalized === 'completed') {
               await prisma.propertyBooking.update({
                 where: { id: ext.propertyBookingId },
                 data: { status: 'CONFIRMED', paymentStatus: 'PAID', updatedAt: new Date() },
+              });
+            }
+          }
+
+          if ((ext as any)?.propertyInquiryId && (normalized === 'success' || normalized === 'completed')) {
+            const inquiryId = (ext as any).propertyInquiryId as string;
+            const inquiry = await prisma.propertyInquiry.findUnique({
+              where: { id: inquiryId },
+              include: { listing: true },
+            });
+            if (inquiry) {
+              await prisma.propertyListing.updateMany({
+                where: { id: inquiry.listingId, status: 'ACTIVE' },
+                data: { status: 'SOLD' },
+              });
+              await prisma.propertyInquiry.update({
+                where: { id: inquiryId },
+                data: { paymentStatus: 'PAID', status: 'PURCHASED', updatedAt: new Date() },
+              });
+              await prisma.propertyInquiry.updateMany({
+                where: {
+                  listingId: inquiry.listingId,
+                  id: { not: inquiryId },
+                  status: { in: ['PENDING', 'CONTACTED'] },
+                },
+                data: { status: 'CLOSED' },
               });
             }
           }

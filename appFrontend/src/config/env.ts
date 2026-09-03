@@ -16,6 +16,9 @@ export const ENV_CONFIG = {
   // Feature Flags
   ENABLE_DEBUG_LOGGING: __DEV__,
   ENABLE_ANALYTICS: !__DEV__,
+  ALLOW_TEST_PAYMENTS:
+    process.env.EXPO_PUBLIC_ALLOW_TEST_PAYMENTS === 'true' ||
+    (process.env.EXPO_PUBLIC_ALLOW_TEST_PAYMENTS !== 'false' && __DEV__),
 };
 
 // Helper function to get API URL

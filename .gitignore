@@ -4,6 +4,8 @@ appBackend/uploads/
 .env
 .env.*
 !**/.env.example
+!**/deploy.env.example
+deploy/deploy.env
 AppWebVersion/build/
 # Android local config (SDK path)
 **/android/local.properties

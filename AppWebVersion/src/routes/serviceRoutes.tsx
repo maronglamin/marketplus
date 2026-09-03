@@ -26,6 +26,11 @@ import { BecomePropertyAgent } from '../pages/real-estate/BecomePropertyAgent';
 import { ManageListings } from '../pages/real-estate/ManageListings';
 import { ListProperty } from '../pages/real-estate/ListProperty';
 import { ListingSetup } from '../pages/real-estate/ListingSetup';
+import { RealEstateSettlementRequest } from '../pages/real-estate/RealEstateSettlementRequest';
+import { HomeServiceSettlementRequest } from '../pages/home-services/HomeServiceSettlementRequest';
+import { HomeServiceSubscriptionPay, RealEstateSubscriptionPay } from '../pages/shared/SubscriptionPay';
+import { AgentReservationDetail } from '../pages/real-estate/AgentReservationDetail';
+import { AgentInquiryDetail } from '../pages/real-estate/AgentInquiryDetail';
 
 function AppLayout({ children, protected: isProtected = false }: { children: React.ReactNode; protected?: boolean }) {
   const content = (
@@ -52,6 +57,8 @@ export const serviceRoutes = (
     <Route path="/home-services/dashboard/services" element={<AppLayout protected><ManageServiceOfferings /></AppLayout>} />
     <Route path="/home-services/dashboard/availability" element={<AppLayout protected><ProviderAvailabilityEditor /></AppLayout>} />
     <Route path="/home-services/provider/bookings/:bookingId" element={<AppLayout protected><ServiceProviderBookingDetail /></AppLayout>} />
+    <Route path="/home-services/settlement-request" element={<AppLayout protected><HomeServiceSettlementRequest /></AppLayout>} />
+    <Route path="/home-services/subscription" element={<AppLayout protected><HomeServiceSubscriptionPay /></AppLayout>} />
     <Route path="/real-estate" element={<AppLayout><RealEstateHub /></AppLayout>} />
     <Route path="/real-estate/browse/:listingType" element={<AppLayout><PropertyListingBrowse /></AppLayout>} />
     <Route path="/real-estate/listings/:listingId" element={<AppLayout><PropertyDetail /></AppLayout>} />
@@ -63,5 +70,9 @@ export const serviceRoutes = (
     <Route path="/real-estate/become-agent" element={<AppLayout protected><BecomePropertyAgent /></AppLayout>} />
     <Route path="/real-estate/manage-listings" element={<AppLayout protected><ManageListings /></AppLayout>} />
     <Route path="/real-estate/list-property" element={<AppLayout protected><ListProperty /></AppLayout>} />
+    <Route path="/real-estate/settlement-request" element={<AppLayout protected><RealEstateSettlementRequest /></AppLayout>} />
+    <Route path="/real-estate/subscription" element={<AppLayout protected><RealEstateSubscriptionPay /></AppLayout>} />
+    <Route path="/real-estate/reservations/:bookingId" element={<AppLayout protected><AgentReservationDetail /></AppLayout>} />
+    <Route path="/real-estate/inquiries/:inquiryId" element={<AppLayout protected><AgentInquiryDetail /></AppLayout>} />
   </>
 );

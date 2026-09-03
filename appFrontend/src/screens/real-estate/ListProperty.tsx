@@ -16,7 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import type { RealEstateStackParamList } from '../../navigation/RealEstateNavigator';
-import { realEstateApi, type PropertyListingType } from '../../services/realEstateApi';
+import { realEstateApi, type PropertyListingType, isStayListingType, isSaleListingType } from '../../services/realEstateApi';
 import { FormStepIndicator } from '../../components/FormStepIndicator';
 import { FormScreenLayout } from '../../components/FormScreenLayout';
 import { LocationPickerField } from '../../components/LocationPickerField';
@@ -39,9 +39,11 @@ type Nav = NativeStackNavigationProp<RealEstateStackParamList, 'ListProperty'>;
 
 const LISTING_TYPES: { value: PropertyListingType; label: string }[] = [
   { value: 'HOTEL', label: 'Hotel' },
-  { value: 'APARTMENT_RENTAL', label: 'Apartment Rental' },
-  { value: 'HOME_SALE', label: 'Home for Sale' },
-  { value: 'LAND_SALE', label: 'Land for Sale' },
+  { value: 'APARTMENT_RENTAL', label: 'Apartment' },
+  { value: 'GUEST_HOUSE', label: 'Guest House & Lodge' },
+  { value: 'BOAT_TRIP', label: 'Leisure & Trips (Boat Trip)' },
+  { value: 'HOME_SALE', label: 'Home Sale' },
+  { value: 'LAND_SALE', label: 'Land Sale' },
 ];
 
 const PHOTO_CATEGORIES: { value: ListingPhoto['category']; label: string }[] = [
@@ -50,8 +52,6 @@ const PHOTO_CATEGORIES: { value: ListingPhoto['category']; label: string }[] = [
   { value: 'BATHROOM', label: 'Bathroom' },
   { value: 'OTHER', label: 'Other' },
 ];
-
-const isStayType = (type: PropertyListingType) => type === 'HOTEL' || type === 'APARTMENT_RENTAL';
 
 const emptyRoom = (): RoomTypeConfig => ({
   name: '',
@@ -74,12 +74,14 @@ export function ListProperty() {
   const [description, setDescription] = useState('');
   const [listingType, setListingType] = useState<PropertyListingType>('HOTEL');
   const [price, setPrice] = useState('');
+  const [tourUrl, setTourUrl] = useState('');
   const [location, setLocation] = useState<MapLocationWithCity | null>(null);
   const [photos, setPhotos] = useState<ListingPhoto[]>([]);
   const [roomTypes, setRoomTypes] = useState<RoomTypeConfig[]>([emptyRoom()]);
   const [showTypePicker, setShowTypePicker] = useState(false);
 
-  const stayListing = isStayType(listingType);
+  const stayListing = isStayListingType(listingType);
+  const saleListing = isSaleListingType(listingType);
   const STEPS = stayListing
     ? ['Property Details', 'Photos', 'Review']
     : ['Details', 'Location & Price', 'Photos', 'Review'];
@@ -164,6 +166,14 @@ export function ListProperty() {
         Alert.alert('Invalid price', 'Enter a valid price.');
         return false;
       }
+      const trimmedTour = tourUrl.trim();
+      if (trimmedTour) {
+        const valid = /^https?:\/\/.+/i.test(trimmedTour);
+        if (!valid) {
+          Alert.alert('Invalid tour URL', 'Enter a valid URL starting with http:// or https://.');
+          return false;
+        }
+      }
     }
 
     const photoStep = stayListing ? 2 : 3;
@@ -175,7 +185,7 @@ export function ListProperty() {
           : 'Upload at least 3 photos.');
         return false;
       }
-      if (stayListing) {
+      if (stayListing && listingType !== 'BOAT_TRIP') {
         const hasExterior = photos.some((p) => p.category === 'EXTERIOR');
         const hasRoom = photos.some((p) => p.category === 'ROOM');
         const hasBathroom = photos.some((p) => p.category === 'BATHROOM');
@@ -184,10 +194,6 @@ export function ListProperty() {
           return false;
         }
       }
-    }
-
-    if (stayListing && currentStep === 3) {
-      // review step — no extra validation
     }
 
     return true;
@@ -235,6 +241,16 @@ export function ListProperty() {
         longitude: location.longitude,
         images: uploadedImages,
       };
+
+      if (saleListing && tourUrl.trim()) {
+        payload.virtualTours = [
+          {
+            tourType: 'EXTERNAL_URL',
+            tourUrl: tourUrl.trim(),
+            title: 'Property Tour',
+          },
+        ];
+      }
 
       await realEstateApi.createListing(payload);
 
@@ -427,6 +443,19 @@ export function ListProperty() {
               label="Property Location"
               accent={ACCENT}
             />
+            <Text style={styles.label}>Tour URL</Text>
+            <Text style={styles.stepSubtitle}>
+              Optional virtual tour link (Matterport, YouTube, or other property tour URL).
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={tourUrl}
+              onChangeText={setTourUrl}
+              placeholder="https://..."
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
           </>
         );
       case 3: return renderPhotosStep();
@@ -439,6 +468,9 @@ export function ListProperty() {
               <Text style={styles.reviewLine}>{location?.address}, {location?.city}</Text>
               <Text style={styles.reviewPrice}>{price}</Text>
               <Text style={styles.reviewLine}>{photos.length} photos</Text>
+              {tourUrl.trim() ? (
+                <Text style={styles.reviewLine}>Tour: {tourUrl.trim()}</Text>
+              ) : null}
             </View>
           </>
         );

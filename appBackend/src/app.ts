@@ -35,6 +35,8 @@ import serviceProvidersRoutes from './routes/serviceProviders';
 import propertyListingsRoutes from './routes/propertyListings';
 import propertyBookingsRoutes from './routes/propertyBookings';
 import propertyAgentsRoutes from './routes/propertyAgents';
+import providerSubscriptionsRoutes from './routes/providerSubscriptions';
+import { backfillGraceSubscriptions, expireDueSubscriptions } from './services/providerSubscriptionService';
 
 const app = express();
 
@@ -471,6 +473,7 @@ app.use('/api/service-providers', serviceProvidersRoutes);
 app.use('/api/property-listings', propertyListingsRoutes);
 app.use('/api/property-bookings', propertyBookingsRoutes);
 app.use('/api/property-agents', propertyAgentsRoutes);
+app.use('/api/provider-subscriptions', providerSubscriptionsRoutes);
 
 // Health check endpoint under /api
 app.get('/api/health', (req, res) => {
@@ -498,7 +501,17 @@ const cleanupExpiredRequests = async () => {
 // Run cleanup every minute
 setInterval(cleanupExpiredRequests, 60 * 1000);
 
-// Run initial cleanup on startup
-cleanupExpiredRequests();
+const runSubscriptionMaintenance = async () => {
+  try {
+    const backfill = await backfillGraceSubscriptions();
+    const expired = await expireDueSubscriptions();
+    logger.info('✅ Provider subscription maintenance', { backfill, expired });
+  } catch (error) {
+    logger.error('❌ Error running provider subscription maintenance:', error);
+  }
+};
+
+setInterval(runSubscriptionMaintenance, 60 * 60 * 1000);
+runSubscriptionMaintenance();
 
 export default app; 

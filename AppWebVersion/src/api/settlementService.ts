@@ -2,6 +2,8 @@ import { getApi } from './config';
 
 const api = getApi();
 
+export type SettlementChannel = 'ECOMMERCE' | 'RIDES' | 'RENTALS' | 'REAL_ESTATE' | 'HOME_SERVICES';
+
 export interface BankAccount {
   id: string;
   accountName: string;
@@ -36,6 +38,7 @@ export interface SettlementRequest {
   currency: string;
   type: 'BANK_TRANSFER' | 'WALLET_TRANSFER';
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  channel?: SettlementChannel;
   reference: string;
   bankAccount?: BankAccount;
   wallet?: Wallet;
@@ -67,6 +70,38 @@ export interface AvailableRevenueResponse {
   };
 }
 
+export interface PropertyBookingDetail {
+  id: string;
+  bookingRef?: string;
+  title?: string;
+  earnings: number;
+  createdAt: string;
+}
+
+export interface AvailableRealEstateEarnings {
+  currency: string;
+  amount: number;
+  currencySymbol: string;
+  bookingsCount: number;
+  bookings: PropertyBookingDetail[];
+}
+
+export interface ServiceBookingDetail {
+  id: string;
+  bookingRef?: string;
+  title?: string;
+  earnings: number;
+  createdAt: string;
+}
+
+export interface AvailableHomeServiceEarnings {
+  currency: string;
+  amount: number;
+  currencySymbol: string;
+  bookingsCount: number;
+  bookings: ServiceBookingDetail[];
+}
+
 export interface SettlementHistoryResponse {
   settlements: SettlementRequest[];
   hasMore: boolean;
@@ -74,23 +109,41 @@ export interface SettlementHistoryResponse {
   total: number;
 }
 
+export interface IncludedOrder {
+  id: string;
+  orderNumber: string;
+  totalAmount: number;
+  currencyCode: string;
+  createdAt: string;
+}
+
+export interface IncludedPropertyBooking {
+  id: string;
+  bookingRef: string;
+  createdAt: string;
+  totalPrice: number;
+  currency: string;
+  title?: string;
+}
+
 export interface SettlementDetailsResponse {
   settlement: SettlementRequest;
-  includedOrders: Array<{
-    id: string;
-    orderNumber: string;
-    totalAmount: number;
-    currencyCode: string;
-    createdAt: string;
-  }>;
+  includedOrders: IncludedOrder[];
+  includedPropertyBookings?: IncludedPropertyBooking[];
+  includedServiceBookings?: IncludedPropertyBooking[];
 }
 
 export interface CreateSettlementRequest {
   amount: number;
   currency: string;
   type: 'BANK_TRANSFER' | 'WALLET_TRANSFER';
+  channel?: SettlementChannel;
   bankAccountId?: string;
   walletId?: string;
+  includedPropertyBookingIds?: string[];
+  totalPropertyBookingsCount?: number;
+  includedServiceBookingIds?: string[];
+  totalServiceBookingsCount?: number;
 }
 
 export interface CreateBankAccountRequest {
@@ -113,85 +166,76 @@ export interface CreateWalletRequest {
   isDefault?: boolean;
 }
 
-export interface IncludedOrder {
-  id: string;
-  orderNumber: string;
-  totalAmount: number;
-  currencyCode: string;
-  createdAt: string;
+function asArray<T>(data: any, keys: string[]): T[] {
+  if (Array.isArray(data)) return data;
+  for (const key of keys) {
+    if (data && Array.isArray(data[key])) return data[key];
+  }
+  return [];
 }
 
 export class SettlementService {
-  /**
-   * Get available revenue for settlement
-   */
   async getAvailableRevenue(): Promise<AvailableRevenueResponse> {
     const res = await api.get('/settlements/available-revenue');
     return res.data;
   }
 
-  /**
-   * Get settlement history
-   */
-  async getSettlementHistory(page: number = 1, limit: number = 20): Promise<SettlementHistoryResponse> {
-    const res = await api.get(`/settlements/history?page=${page}&limit=${limit}`);
+  async getAvailableRealEstateEarnings(): Promise<AvailableRealEstateEarnings[]> {
+    const res = await api.get('/settlements/available-real-estate-earnings');
+    return res.data?.earnings ?? [];
+  }
+
+  async getAvailableHomeServiceEarnings(): Promise<AvailableHomeServiceEarnings[]> {
+    const res = await api.get('/settlements/available-home-service-earnings');
+    return res.data?.earnings ?? [];
+  }
+
+  async getSettlementHistory(
+    page: number = 1,
+    limit: number = 20,
+    channel?: SettlementChannel,
+  ): Promise<SettlementHistoryResponse> {
+    const params = new URLSearchParams();
+    params.append('page', String(page));
+    params.append('limit', String(limit));
+    if (channel) params.append('channel', channel);
+    const res = await api.get(`/settlements/history?${params.toString()}`);
     return res.data;
   }
 
-  /**
-   * Get settlement details
-   */
   async getSettlementDetails(settlementId: string): Promise<SettlementDetailsResponse> {
     const res = await api.get(`/settlements/${settlementId}`);
     return res.data;
   }
 
-  /**
-   * Create settlement request
-   */
   async createSettlementRequest(data: CreateSettlementRequest): Promise<SettlementRequest> {
     const res = await api.post('/settlements/request', data);
-    return res.data;
+    return res.data?.settlement ?? res.data;
   }
 
-  /**
-   * Create sales rep settlement request
-   */
   async createSalesRepSettlementRequest(salesRepId: string, data: CreateSettlementRequest): Promise<SettlementRequest> {
     const res = await api.post(`/settlements/request/sales-rep/${salesRepId}`, data);
-    return res.data;
+    return res.data?.settlement ?? res.data;
   }
 
-  /**
-   * Get bank accounts
-   */
   async getBankAccounts(): Promise<BankAccount[]> {
     const res = await api.get('/settlements/bank-accounts');
-    return res.data;
+    return asArray<BankAccount>(res.data, ['bankAccounts', 'accounts', 'data']);
   }
 
-  /**
-   * Add bank account
-   */
   async addBankAccount(data: CreateBankAccountRequest): Promise<BankAccount> {
     const res = await api.post('/settlements/bank-accounts', data);
-    return res.data;
+    return res.data?.bankAccount ?? res.data;
   }
 
-  /**
-   * Get wallets
-   */
   async getWallets(): Promise<Wallet[]> {
     const res = await api.get('/settlements/wallets');
-    return res.data;
+    return asArray<Wallet>(res.data, ['wallets', 'accounts', 'data']);
   }
 
-  /**
-   * Add wallet
-   */
   async addWallet(data: CreateWalletRequest): Promise<Wallet> {
     const res = await api.post('/settlements/wallets', data);
-    return res.data;
+    return res.data?.wallet ?? res.data;
   }
 }
 

@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Wallet } from 'lucide-react';
 import { PageHeader } from '../../components/PageHeader';
 import { getImageUrl } from '../../config/api';
 import { uploadService } from '../../api/upload';
 import { homeServicesApi, type ServiceBooking, type ServiceProvider } from '../../api/homeServicesApi';
-import { formatStatus } from '../../utils/formatPrice';
+import { settlementService, type AvailableHomeServiceEarnings } from '../../api/settlementService';
+import { formatPrice, formatStatus } from '../../utils/formatPrice';
 import { useApprovalRedirect } from '../../hooks/useApprovalRedirect';
+import { providerSubscriptionApi, type SubscriptionSnapshot } from '../../api/providerSubscriptionApi';
 import { ManageServiceOfferings } from './ManageServiceOfferings';
 import { ProviderAvailabilityEditor } from './ProviderAvailabilityEditor';
 
@@ -24,6 +27,7 @@ export function ServiceProviderDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [offeringsCount, setOfferingsCount] = useState(0);
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
+  const [availableEarnings, setAvailableEarnings] = useState<AvailableHomeServiceEarnings[]>([]);
   const [provider, setProvider] = useState<ServiceProvider | null>(null);
   const [loading, setLoading] = useState(true);
   const [notApproved, setNotApproved] = useState(false);
@@ -34,6 +38,7 @@ export function ServiceProviderDashboard() {
   const [bio, setBio] = useState('');
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [portfolioImages, setPortfolioImages] = useState<string[]>([]);
+  const [subscription, setSubscription] = useState<SubscriptionSnapshot | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -44,6 +49,7 @@ export function ServiceProviderDashboard() {
         setNotApproved(true);
         setProvider(null);
         setBookings([]);
+        setAvailableEarnings([]);
         return;
       }
       setNotApproved(false);
@@ -57,6 +63,17 @@ export function ServiceProviderDashboard() {
       setBookings(data);
       const offerings = await homeServicesApi.getMyOfferings();
       setOfferingsCount(offerings.filter((o) => o.isActive).length);
+      try {
+        const earnings = await settlementService.getAvailableHomeServiceEarnings();
+        setAvailableEarnings(earnings ?? []);
+      } catch {
+        setAvailableEarnings([]);
+      }
+      try {
+        setSubscription(await providerSubscriptionApi.getMine('HOME_SERVICES'));
+      } catch {
+        setSubscription(null);
+      }
     } catch {
       setBookings([]);
     } finally {
@@ -200,6 +217,23 @@ export function ServiceProviderDashboard() {
           Complete setup: add at least one service and set your availability.
         </div>
       )}
+      {subscription?.settings?.isRequired && subscription.subscription && subscription.subscription.status !== 'ACTIVE' && (
+        <button
+          type="button"
+          onClick={() => navigate('/home-services/subscription')}
+          className={`mx-4 mt-3 p-3 rounded-lg border text-sm text-left ${
+            subscription.subscription.status === 'SUSPENDED'
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : 'bg-amber-50 border-amber-200 text-amber-800'
+          }`}
+        >
+          {subscription.subscription.status === 'GRACE'
+            ? `Pay by ${new Date(subscription.subscription.gracePeriodEndsAt).toLocaleDateString()} to stay listed.`
+            : subscription.subscription.status === 'PAST_DUE'
+              ? 'Renew now to avoid suspension.'
+              : 'Pay to restore your listing.'}
+        </button>
+      )}
 
       {activeTab === 'overview' && (
         <div className="p-4 space-y-4">
@@ -218,6 +252,41 @@ export function ServiceProviderDashboard() {
             <StatCard label="Active" value={stats.active} />
             <StatCard label="Completed" value={stats.completed} />
           </div>
+
+          <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Wallet className="w-4 h-4 text-sky-700" />
+              <h3 className="font-semibold text-gray-900">Available for settlement</h3>
+            </div>
+            {availableEarnings.length === 0 ? (
+              <p className="text-sm text-gray-600">No settleable earnings yet. Completed paid jobs will appear here.</p>
+            ) : (
+              <div className="space-y-2 mb-3">
+                {availableEarnings.map((earning) => (
+                  <div key={earning.currency}>
+                    <p className="text-xl font-bold text-sky-700">{formatPrice(earning.amount, earning.currency)}</p>
+                    <p className="text-sm text-gray-500">{earning.bookingsCount} booking(s) ready</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={availableEarnings.length === 0}
+              onClick={() => navigate('/home-services/settlement-request')}
+              className="w-full py-2.5 rounded-xl bg-sky-600 text-white text-sm font-semibold disabled:opacity-45"
+            >
+              Request Settlement
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/settlement-history?channel=HOME_SERVICES')}
+              className="w-full mt-2 text-sm text-sky-700 font-medium"
+            >
+              View settlement history
+            </button>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <button type="button" onClick={() => setActiveTab('profile')} className="py-3 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 text-sm font-semibold">
               Edit Profile

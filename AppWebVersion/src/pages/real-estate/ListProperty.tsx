@@ -5,7 +5,7 @@ import { FormStepIndicator } from '../../components/FormStepIndicator';
 import { LocationPickerField } from '../../components/LocationPickerField';
 import type { MapLocationWithCity } from '../../services/mapLocationService';
 import { uploadService } from '../../api/upload';
-import { realEstateApi, type PropertyListingType } from '../../api/realEstateApi';
+import { realEstateApi, type PropertyListingType, isStayListingType, isSaleListingType } from '../../api/realEstateApi';
 import {
   MIN_HOTEL_PHOTOS,
   MIN_PHOTO_HEIGHT,
@@ -16,13 +16,14 @@ import {
 
 const LISTING_TYPES: { value: PropertyListingType; label: string }[] = [
   { value: 'HOTEL', label: 'Hotel' },
-  { value: 'APARTMENT_RENTAL', label: 'Apartment Rental' },
-  { value: 'HOME_SALE', label: 'Home for Sale' },
-  { value: 'LAND_SALE', label: 'Land for Sale' },
+  { value: 'APARTMENT_RENTAL', label: 'Apartment' },
+  { value: 'GUEST_HOUSE', label: 'Guest House & Lodge' },
+  { value: 'BOAT_TRIP', label: 'Leisure & Trips (Boat Trip)' },
+  { value: 'HOME_SALE', label: 'Home Sale' },
+  { value: 'LAND_SALE', label: 'Land Sale' },
 ];
 
 const PHOTO_CATEGORIES = ['EXTERIOR', 'ROOM', 'BATHROOM', 'OTHER'] as const;
-const isStayType = (type: PropertyListingType) => type === 'HOTEL' || type === 'APARTMENT_RENTAL';
 
 export function ListProperty() {
   const navigate = useNavigate();
@@ -38,10 +39,12 @@ export function ListProperty() {
   const [description, setDescription] = useState('');
   const [listingType, setListingType] = useState<PropertyListingType>('HOTEL');
   const [price, setPrice] = useState('');
+  const [tourUrl, setTourUrl] = useState('');
   const [location, setLocation] = useState<MapLocationWithCity | null>(null);
   const [photos, setPhotos] = useState<ListingPhoto[]>([]);
 
-  const stayListing = isStayType(listingType);
+  const stayListing = isStayListingType(listingType);
+  const saleListing = isSaleListingType(listingType);
   const stepLabels = stayListing
     ? ['Property Details', 'Photos', 'Review']
     : ['Details', 'Location & Price', 'Photos', 'Review'];
@@ -118,6 +121,11 @@ export function ListProperty() {
         setError('Enter a valid price.');
         return false;
       }
+      const trimmedTour = tourUrl.trim();
+      if (trimmedTour && !/^https?:\/\/.+/i.test(trimmedTour)) {
+        setError('Enter a valid tour URL starting with http:// or https://.');
+        return false;
+      }
     }
 
     const photoStep = stayListing ? 2 : 3;
@@ -129,7 +137,7 @@ export function ListProperty() {
           : 'Upload at least 3 photos.');
         return false;
       }
-      if (stayListing) {
+      if (stayListing && listingType !== 'BOAT_TRIP') {
         const hasExterior = photos.some((p) => p.category === 'EXTERIOR');
         const hasRoom = photos.some((p) => p.category === 'ROOM');
         const hasBathroom = photos.some((p) => p.category === 'BATHROOM');
@@ -162,7 +170,14 @@ export function ListProperty() {
         city: location.city.trim(),
         latitude: location.latitude,
         longitude: location.longitude,
-        images: photos.filter((p) => p.url).map((p, i) => ({ url: p.url!, category: p.category, width: p.width, height: p.height })),
+        images: photos.filter((p) => p.url).map((p) => ({ url: p.url!, category: p.category, width: p.width, height: p.height })),
+        ...(saleListing && tourUrl.trim()
+          ? {
+              virtualTours: [
+                { tourType: 'EXTERNAL_URL', tourUrl: tourUrl.trim(), title: 'Property Tour' },
+              ],
+            }
+          : {}),
       });
       alert(stayListing
         ? 'Property shell created. Add room types and rates from your dashboard to start accepting bookings.'
@@ -280,6 +295,17 @@ export function ListProperty() {
           <div className="space-y-3">
             <Field label="Price *" value={price} onChange={setPrice} type="number" />
             <LocationPickerField value={location} onChange={setLocation} label="Property Location" accent="bg-violet-600" />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tour URL</label>
+              <p className="text-xs text-gray-500 mb-1">Optional virtual tour link (Matterport, YouTube, or other property tour URL).</p>
+              <input
+                type="url"
+                value={tourUrl}
+                onChange={(e) => setTourUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm"
+              />
+            </div>
           </div>
         )}
 
@@ -292,6 +318,7 @@ export function ListProperty() {
             <p>{location?.address}, {location?.city}</p>
             <p>Price: GMD {price}</p>
             <p>{photos.length} photo(s)</p>
+            {tourUrl.trim() ? <p>Tour: {tourUrl.trim()}</p> : null}
           </div>
         )}
 

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { notificationService } from '../services/notificationService';
+import { publicProviderWhere, assertCanOperate, sendSubscriptionBlocked } from '../services/providerSubscriptionService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -18,9 +19,10 @@ function parseCoords(latitude: unknown, longitude: unknown): { lat: number; lng:
 router.get('/', async (req, res) => {
   try {
     const { categoryId } = req.query;
+    const visibility = await publicProviderWhere('HOME_SERVICES');
     const providers = await prisma.serviceProvider.findMany({
       where: {
-        isActive: true,
+        ...visibility,
         ...(categoryId
           ? {
               OR: [
@@ -183,6 +185,11 @@ router.post('/offerings', authenticate, async (req: any, res) => {
   try {
     const provider = await getProviderForUser(req.user.id);
     if (!provider) return res.status(403).json({ success: false, message: 'Not a provider' });
+    try {
+      await assertCanOperate(req.user.id, 'HOME_SERVICES');
+    } catch (error) {
+      return sendSubscriptionBlocked(res, error);
+    }
     const { name, description, categoryId, durationMinutes, basePrice, sortOrder } = req.body;
     if (!name?.trim() || !categoryId) {
       return res.status(400).json({ success: false, message: 'name and categoryId are required' });
@@ -352,6 +359,12 @@ router.get('/:id/available-slots', async (req, res) => {
     if (!offeringId || !from || !to) {
       return res.status(400).json({ success: false, message: 'offeringId, from, and to are required' });
     }
+    const visibility = await publicProviderWhere('HOME_SERVICES');
+    const provider = await prisma.serviceProvider.findFirst({
+      where: { id: req.params.id, ...visibility },
+      select: { id: true },
+    });
+    if (!provider) return res.status(404).json({ success: false, message: 'Provider not found' });
     const { generateProviderAvailableSlots } = require('../services/availabilityService');
     const slots = await generateProviderAvailableSlots(
       req.params.id,
@@ -368,8 +381,9 @@ router.get('/:id/available-slots', async (req, res) => {
 // GET /:id - single provider profile (must be after static routes)
 router.get('/:id', async (req, res) => {
   try {
+    const visibility = await publicProviderWhere('HOME_SERVICES');
     const provider = await prisma.serviceProvider.findFirst({
-      where: { id: req.params.id, isActive: true },
+      where: { id: req.params.id, ...visibility },
       include: {
         categories: { include: { category: true } },
         offerings: { where: { isActive: true }, include: { category: true }, orderBy: { sortOrder: 'asc' } },

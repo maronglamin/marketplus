@@ -16,7 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import type { RealEstateStackParamList } from '../../navigation/RealEstateNavigator';
-import { realEstateApi, type PropertyListing } from '../../services/realEstateApi';
+import { realEstateApi, type PropertyListing, isStayListingType } from '../../services/realEstateApi';
 import { getImageUrl } from '../../config/env';
 
 const ACCENT = '#7C3AED';
@@ -38,7 +38,7 @@ export function PropertyListingBrowse() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const isStaySearch = (listingType === 'HOTEL' || listingType === 'APARTMENT_RENTAL') && checkIn && checkOut;
+  const isStaySearch = isStayListingType(listingType) && !!checkIn && !!checkOut;
 
   const loadListings = useCallback(async (isRefresh = false) => {
     try {

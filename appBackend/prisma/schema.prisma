@@ -116,6 +116,7 @@ model User {
   propertyAgent                PropertyAgent?
   customerPropertyBookings     PropertyBooking[]      @relation("CustomerPropertyBookings")
   propertyInquiries            PropertyInquiry[]
+  providerSubscriptions        ProviderSubscription[]
 
   @@index([phoneNumber])
   @@index([status])
@@ -528,6 +529,10 @@ model Settlement {
   totalRidesCount     Int               @default(0)
   includedRentalIds   Json?
   totalRentalsCount   Int               @default(0)
+  includedPropertyBookingIds Json?
+  totalPropertyBookingsCount Int        @default(0)
+  includedServiceBookingIds Json?
+  totalServiceBookingsCount Int         @default(0)
   bankAccount         BankAccount?      @relation(fields: [bankAccountId], references: [id])
   user                User              @relation(fields: [userId], references: [id])
   wallet              Wallet?           @relation(fields: [walletId], references: [id])
@@ -636,6 +641,8 @@ model ExternalTransaction {
   rentalRequestId      String?
   serviceBookingId     String?
   propertyBookingId    String?
+  propertyInquiryId    String?
+  providerSubscriptionPaymentId String?
   customer             User              @relation("CustomerTransactions", fields: [customerId], references: [id])
   order                orders?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   paymentMethod        PaymentMethod?    @relation(fields: [paymentMethodId], references: [id])
@@ -643,6 +650,8 @@ model ExternalTransaction {
   rideRequest          RideRequest?      @relation(fields: [rideRequestId], references: [id], onDelete: Cascade)
   serviceBooking       ServiceBooking?   @relation(fields: [serviceBookingId], references: [id], onDelete: Cascade)
   propertyBooking      PropertyBooking?  @relation(fields: [propertyBookingId], references: [id], onDelete: Cascade)
+  propertyInquiry      PropertyInquiry?  @relation(fields: [propertyInquiryId], references: [id], onDelete: Cascade)
+  providerSubscriptionPayment ProviderSubscriptionPayment? @relation(fields: [providerSubscriptionPaymentId], references: [id], onDelete: SetNull)
   seller               User              @relation("SellerTransactions", fields: [sellerId], references: [id])
 
   @@index([orderId])
@@ -650,6 +659,8 @@ model ExternalTransaction {
   @@index([rentalRequestId])
   @@index([serviceBookingId])
   @@index([propertyBookingId])
+  @@index([propertyInquiryId])
+  @@index([providerSubscriptionPaymentId])
   @@index([customerId])
   @@index([sellerId])
   @@index([paymentMethodId])
@@ -1370,6 +1381,7 @@ enum TransactionType {
   ORIGINAL
   FEE
   SERVICE_FEE
+  SUBSCRIPTION
 }
 
 enum RiderVehicleType {
@@ -1616,6 +1628,7 @@ model ServiceProvider {
   offerings          ServiceOffering[]
   weeklySchedule     ProviderWeeklySchedule[]
   blockedSlots       ProviderBlockedSlot[]
+  subscription       ProviderSubscription?
 
   @@index([isActive])
   @@index([latitude, longitude])
@@ -1694,6 +1707,7 @@ model ServiceBooking {
   offeringId         String?
   status             ServiceBookingStatus @default(PENDING_QUOTE)
   paymentStatus      PaymentStatus        @default(PENDING)
+  settlementStatus   PaymentStatus        @default(PENDING)
   slotStatus         ServiceSlotStatus?
   serviceAddress     String
   serviceLatitude    Float?
@@ -1719,6 +1733,7 @@ model ServiceBooking {
   @@index([categoryId])
   @@index([offeringId])
   @@index([status])
+  @@index([settlementStatus])
   @@index([slotStart, slotEnd])
   @@map("service_bookings")
 }
@@ -1795,6 +1810,7 @@ model PropertyAgent {
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   application         PropertyAgentApplication @relation(fields: [applicationId], references: [id])
   listings            PropertyListing[]
+  subscription        ProviderSubscription?
 
   @@index([isActive])
   @@index([latitude, longitude])
@@ -1925,6 +1941,7 @@ model PropertyBooking {
   currency      String                @default("GMD")
   status        PropertyBookingStatus @default(PENDING)
   paymentStatus PaymentStatus         @default(PENDING)
+  settlementStatus PaymentStatus      @default(PENDING)
   notes         String?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
@@ -1942,19 +1959,28 @@ model PropertyBooking {
 }
 
 model PropertyInquiry {
-  id            String                @id @default(uuid())
-  listingId     String
-  customerId    String
-  message       String
-  preferredDate DateTime?
-  status        PropertyInquiryStatus @default(PENDING)
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  listing       PropertyListing       @relation(fields: [listingId], references: [id])
-  customer      User                  @relation(fields: [customerId], references: [id])
+  id               String                @id @default(uuid())
+  purchaseRef      String?               @unique
+  listingId        String
+  customerId       String
+  message          String
+  preferredDate    DateTime?
+  salePrice        Decimal?              @db.Decimal(12, 2)
+  currency         String                @default("GMD")
+  status           PropertyInquiryStatus @default(PENDING)
+  paymentStatus    PaymentStatus         @default(PENDING)
+  settlementStatus PaymentStatus         @default(PENDING)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  listing          PropertyListing       @relation(fields: [listingId], references: [id])
+  customer         User                  @relation(fields: [customerId], references: [id])
+  transactions     ExternalTransaction[]
 
   @@index([listingId])
   @@index([customerId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([settlementStatus])
   @@map("property_inquiries")
 }
 
@@ -2001,6 +2027,8 @@ enum PropertyAgentApplicationStatus {
 enum PropertyListingType {
   HOTEL
   APARTMENT_RENTAL
+  GUEST_HOUSE
+  BOAT_TRIP
   HOME_SALE
   LAND_SALE
 }
@@ -2031,5 +2059,115 @@ enum PropertyBookingStatus {
 enum PropertyInquiryStatus {
   PENDING
   CONTACTED
+  OFFERED
   CLOSED
+  PURCHASED
+}
+
+enum SubscriptionVertical {
+  HOME_SERVICES
+  REAL_ESTATE
+}
+
+enum SubscriptionInterval {
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUAL
+  YEARLY
+}
+
+enum ProviderSubscriptionStatus {
+  GRACE
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+}
+
+enum ProviderSubscriptionPaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model ProviderSubscriptionSettings {
+  id              String                @id @default(uuid())
+  vertical        SubscriptionVertical  @unique
+  isRequired      Boolean               @default(true)
+  gracePeriodDays Int                   @default(7)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@map("provider_subscription_settings")
+}
+
+model ProviderSubscriptionPlan {
+  id            String                @id @default(uuid())
+  vertical      SubscriptionVertical
+  name          String
+  interval      SubscriptionInterval
+  amount        Decimal               @db.Decimal(10, 2)
+  currency      String                @default("GMD")
+  isActive      Boolean               @default(true)
+  sortOrder     Int                   @default(0)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  subscriptions ProviderSubscription[]
+  payments      ProviderSubscriptionPayment[]
+
+  @@index([vertical])
+  @@index([isActive])
+  @@map("provider_subscription_plans")
+}
+
+model ProviderSubscription {
+  id                 String                      @id @default(uuid())
+  userId             String
+  vertical           SubscriptionVertical
+  serviceProviderId  String?                     @unique
+  propertyAgentId    String?                     @unique
+  planId             String?
+  status             ProviderSubscriptionStatus  @default(GRACE)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  gracePeriodEndsAt  DateTime
+  suspendedAt        DateTime?
+  lastPaidAt         DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  serviceProvider    ServiceProvider?            @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+  propertyAgent      PropertyAgent?              @relation(fields: [propertyAgentId], references: [id], onDelete: Cascade)
+  plan               ProviderSubscriptionPlan?   @relation(fields: [planId], references: [id])
+  payments           ProviderSubscriptionPayment[]
+
+  @@unique([userId, vertical])
+  @@index([status])
+  @@index([gracePeriodEndsAt])
+  @@index([currentPeriodEnd])
+  @@map("provider_subscriptions")
+}
+
+model ProviderSubscriptionPayment {
+  id                    String                             @id @default(uuid())
+  subscriptionId        String
+  planId                String
+  amount                Decimal                            @db.Decimal(10, 2)
+  currency              String                             @default("GMD")
+  status                ProviderSubscriptionPaymentStatus  @default(PENDING)
+  gatewayProvider       String?
+  paymentMethodId       String?
+  periodStart           DateTime?
+  periodEnd             DateTime?
+  failureReason         String?
+  processedAt           DateTime?
+  createdAt             DateTime                           @default(now())
+  updatedAt             DateTime                           @updatedAt
+  subscription          ProviderSubscription               @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  plan                  ProviderSubscriptionPlan           @relation(fields: [planId], references: [id])
+  transactions          ExternalTransaction[]
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@map("provider_subscription_payments")
 }

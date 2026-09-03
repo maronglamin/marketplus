@@ -5,6 +5,181 @@ import { logger } from '../utils/logger';
 
 const prisma = new PrismaClient();
 
+type PayoutProfileWithBanks = Awaited<ReturnType<typeof prisma.sellerKyc.findUnique>> & {
+  bankAccounts: Array<{ id: string; accountNumber: string; status: string; isDefault: boolean }>;
+};
+type PayoutProfileWithWallets = Awaited<ReturnType<typeof prisma.sellerKyc.findUnique>> & {
+  wallets: Array<{ id: string; walletAddress: string; status: string; isDefault: boolean }>;
+};
+
+/**
+ * Bank/wallet payout methods are stored on SellerKyc.
+ * Ensure an approved payout profile exists for any service provider who can settle:
+ * sellers, riders/drivers, property agents, home-service providers, or users with earnings.
+ */
+async function ensurePayoutProfile(
+  userId: string,
+  include: 'bankAccounts'
+): Promise<{ sellerKyc: PayoutProfileWithBanks | null; error: string | null }>;
+async function ensurePayoutProfile(
+  userId: string,
+  include: 'wallets'
+): Promise<{ sellerKyc: PayoutProfileWithWallets | null; error: string | null }>;
+async function ensurePayoutProfile(userId: string, include: 'bankAccounts' | 'wallets') {
+  const existing = await prisma.sellerKyc.findUnique({
+    where: { userId },
+    include: {
+      bankAccounts: include === 'bankAccounts' ? { where: { status: 'ACTIVE' } } : false,
+      wallets: include === 'wallets' ? { where: { status: 'ACTIVE' } } : false,
+    },
+  });
+  if (existing) return { sellerKyc: existing, error: null };
+
+  const [
+    user,
+    driver,
+    riderApp,
+    propertyAgent,
+    propertyAgentApp,
+    serviceProvider,
+    serviceProviderApp,
+    defaultAddress,
+    hasEarnings,
+  ] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, lastName: true, phoneNumber: true },
+    }),
+    prisma.driver.findUnique({ where: { userId } }),
+    prisma.riderApplication.findFirst({
+      where: { userId, status: 'APPROVED' },
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.propertyAgent.findUnique({ where: { userId } }),
+    prisma.propertyAgentApplication.findFirst({
+      where: { userId, status: 'APPROVED' },
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.serviceProvider.findUnique({ where: { userId } }),
+    prisma.serviceProviderApplication.findFirst({
+      where: { userId, status: 'APPROVED' },
+      orderBy: { updatedAt: 'desc' },
+    }),
+    prisma.deliveryAddress.findFirst({
+      where: { userId, isDefault: true },
+    }),
+    prisma.externalTransaction.findFirst({
+      where: { sellerId: userId, status: 'SUCCESS' },
+      select: { id: true },
+    }),
+  ]);
+
+  const isEligibleProvider = Boolean(
+    driver ||
+      riderApp ||
+      propertyAgent ||
+      propertyAgentApp ||
+      serviceProvider ||
+      serviceProviderApp ||
+      hasEarnings
+  );
+
+  if (!isEligibleProvider) {
+    return {
+      sellerKyc: null,
+      error:
+        'No approved provider profile found. You must be an approved seller, rider, property agent, or service provider to add payout methods.',
+    };
+  }
+
+  const displayName =
+    propertyAgent?.displayName ||
+    serviceProvider?.displayName ||
+    propertyAgentApp?.companyName ||
+    `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() ||
+    'Individual';
+
+  const address =
+    defaultAddress?.address ||
+    propertyAgentApp?.address ||
+    serviceProvider?.address ||
+    serviceProviderApp?.address ||
+    riderApp?.address ||
+    'N/A';
+
+  const city =
+    defaultAddress?.city ||
+    propertyAgentApp?.city ||
+    serviceProvider?.city ||
+    serviceProviderApp?.city ||
+    riderApp?.city ||
+    'N/A';
+
+  const documentType =
+    riderApp || driver
+      ? 'DRIVERS_LICENSE'
+      : propertyAgentApp?.idType === 'PASSPORT'
+        ? 'PASSPORT'
+        : 'NATIONAL_ID';
+
+  const documentNumber =
+    propertyAgentApp?.idNumber ||
+    propertyAgentApp?.licenseNumber ||
+    riderApp?.licenseNumber ||
+    user?.phoneNumber ||
+    'N/A';
+
+  const documentUrl =
+    propertyAgentApp?.idDocumentUrl ||
+    (riderApp as any)?.documents?.[0]?.documentUrl ||
+    'N/A';
+
+  await prisma.sellerKyc.create({
+    data: {
+      userId,
+      businessName: displayName,
+      businessType:
+        propertyAgentApp?.companyName || serviceProvider
+          ? 'SOLE_PROPRIETORSHIP'
+          : 'INDIVIDUAL',
+      address,
+      city,
+      state: defaultAddress?.state || '',
+      postalCode: defaultAddress?.postalCode || '',
+      documentType,
+      documentNumber,
+      documentUrl,
+      status: 'APPROVED',
+      country: defaultAddress?.country ? [defaultAddress.country] : ['GM'],
+    },
+  });
+
+  const sellerKyc = await prisma.sellerKyc.findUnique({
+    where: { userId },
+    include: {
+      bankAccounts: include === 'bankAccounts' ? { where: { status: 'ACTIVE' } } : false,
+      wallets: include === 'wallets' ? { where: { status: 'ACTIVE' } } : false,
+    },
+  });
+
+  if (!sellerKyc) {
+    return { sellerKyc: null, error: 'Unable to prepare payout profile for this user' };
+  }
+
+  logger.info('Created payout profile for provider:', {
+    userId,
+    roles: {
+      driver: !!driver,
+      rider: !!riderApp,
+      propertyAgent: !!(propertyAgent || propertyAgentApp),
+      serviceProvider: !!(serviceProvider || serviceProviderApp),
+      hasEarnings: !!hasEarnings,
+    },
+  });
+
+  return { sellerKyc, error: null };
+}
+
 // Get available revenue for settlement (ecommerce)
 export const getAvailableRevenue = async (req: AuthRequest, res: Response) => {
   try {
@@ -482,27 +657,99 @@ export const getAvailableRentalEarnings = async (req: AuthRequest, res: Response
 export const getAvailableHomeServiceEarnings = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user?.id) return res.status(401).json({ message: 'User not authenticated' });
+
     const txs = await prisma.externalTransaction.findMany({
       where: {
         sellerId: req.user.id,
         appService: 'HOME_SERVICES',
         status: 'SUCCESS',
-        transactionType: 'ORIGINAL',
         serviceBookingId: { not: null },
       },
-      select: { amount: true, currencyCode: true, serviceBookingId: true },
+      select: {
+        serviceBookingId: true,
+        amount: true,
+        currencyCode: true,
+        transactionType: true,
+      },
     });
-    const byCurrency: Record<string, number> = {};
-    for (const t of txs) {
-      byCurrency[t.currencyCode] = (byCurrency[t.currencyCode] || 0) + Number(t.amount);
+
+    if (txs.length === 0) {
+      return res.json({ earnings: [], count: 0, totalBookings: 0 });
     }
-    const earnings = Object.entries(byCurrency).map(([currency, amount]) => ({
+
+    const bookingIds = Array.from(new Set(txs.map((t) => t.serviceBookingId!).filter(Boolean)));
+    const bookings = await prisma.serviceBooking.findMany({
+      where: { id: { in: bookingIds } },
+      select: {
+        id: true,
+        bookingRef: true,
+        currency: true,
+        createdAt: true,
+        settlementStatus: true,
+        paymentStatus: true,
+        category: { select: { name: true } },
+        offering: { select: { name: true } },
+      },
+    });
+    const bookingById = new Map(bookings.map((b) => [b.id, b]));
+
+    const originalsByBooking = new Map<string, number>();
+    const serviceFeesByBooking = new Map<string, number>();
+
+    for (const t of txs) {
+      const bid = t.serviceBookingId!;
+      const booking = bookingById.get(bid);
+      if (!booking) continue;
+      if (booking.paymentStatus !== 'PAID') continue;
+      if ((booking.settlementStatus as any) === 'SETTLED') continue;
+
+      const amt = parseFloat(t.amount.toString());
+      if (t.transactionType === 'SERVICE_FEE') {
+        serviceFeesByBooking.set(bid, (serviceFeesByBooking.get(bid) || 0) + amt);
+      } else if (t.transactionType === 'ORIGINAL') {
+        originalsByBooking.set(bid, (originalsByBooking.get(bid) || 0) + amt);
+      }
+    }
+
+    const earningsByCurrency = new Map<string, { amount: number; bookings: any[] }>();
+    for (const bid of originalsByBooking.keys()) {
+      const booking = bookingById.get(bid);
+      if (!booking) continue;
+      const currency = booking.currency || 'GMD';
+      const gross = originalsByBooking.get(bid) || 0;
+      const svc = serviceFeesByBooking.get(bid) || 0;
+      const net = Math.max(0, gross - svc);
+      if (net <= 0) continue;
+
+      if (!earningsByCurrency.has(currency)) {
+        earningsByCurrency.set(currency, { amount: 0, bookings: [] });
+      }
+      const bucket = earningsByCurrency.get(currency)!;
+      bucket.amount += net;
+      bucket.bookings.push({
+        id: bid,
+        bookingRef: booking.bookingRef,
+        title: booking.offering?.name || booking.category?.name,
+        earnings: net,
+        createdAt: booking.createdAt,
+      });
+    }
+
+    const earnings = Array.from(earningsByCurrency.entries()).map(([currency, data]) => ({
       currency,
-      amount: Math.round(amount * 100) / 100,
+      amount: Math.round(data.amount * 100) / 100,
       currencySymbol: getCurrencySymbol(currency),
+      bookingsCount: data.bookings.length,
+      bookings: data.bookings,
     }));
-    res.json({ earnings, count: earnings.length });
+
+    res.json({
+      earnings,
+      count: earnings.length,
+      totalBookings: earnings.reduce((sum, e) => sum + e.bookingsCount, 0),
+    });
   } catch (error) {
+    logger.error('Error getting home service earnings:', error);
     res.status(500).json({ message: 'Failed to get home service earnings' });
   }
 };
@@ -511,27 +758,132 @@ export const getAvailableHomeServiceEarnings = async (req: AuthRequest, res: Res
 export const getAvailableRealEstateEarnings = async (req: AuthRequest, res: Response) => {
   try {
     if (!req.user?.id) return res.status(401).json({ message: 'User not authenticated' });
+
     const txs = await prisma.externalTransaction.findMany({
       where: {
         sellerId: req.user.id,
         appService: 'REAL_ESTATE',
         status: 'SUCCESS',
-        transactionType: 'ORIGINAL',
-        propertyBookingId: { not: null },
+        OR: [
+          { propertyBookingId: { not: null } },
+          { propertyInquiryId: { not: null } },
+        ],
       },
-      select: { amount: true, currencyCode: true, propertyBookingId: true },
+      select: {
+        propertyBookingId: true,
+        propertyInquiryId: true,
+        amount: true,
+        currencyCode: true,
+        transactionType: true,
+      },
     });
-    const byCurrency: Record<string, number> = {};
-    for (const t of txs) {
-      byCurrency[t.currencyCode] = (byCurrency[t.currencyCode] || 0) + Number(t.amount);
+
+    if (txs.length === 0) {
+      return res.json({ earnings: [], count: 0, totalBookings: 0 });
     }
-    const earnings = Object.entries(byCurrency).map(([currency, amount]) => ({
+
+    const bookingIds = Array.from(new Set(txs.map((t) => t.propertyBookingId!).filter(Boolean)));
+    const inquiryIds = Array.from(new Set(txs.map((t) => t.propertyInquiryId!).filter(Boolean)));
+
+    const [bookings, inquiries] = await Promise.all([
+      bookingIds.length
+        ? prisma.propertyBooking.findMany({
+            where: { id: { in: bookingIds } },
+            select: {
+              id: true,
+              bookingRef: true,
+              currency: true,
+              createdAt: true,
+              settlementStatus: true,
+              paymentStatus: true,
+              listing: { select: { title: true } },
+            },
+          })
+        : Promise.resolve([]),
+      inquiryIds.length
+        ? prisma.propertyInquiry.findMany({
+            where: { id: { in: inquiryIds } },
+            select: {
+              id: true,
+              purchaseRef: true,
+              currency: true,
+              createdAt: true,
+              settlementStatus: true,
+              paymentStatus: true,
+              listing: { select: { title: true } },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const bookingById = new Map(bookings.map((b) => [b.id, b]));
+    const inquiryById = new Map(inquiries.map((i) => [i.id, i]));
+
+    const originalsByItem = new Map<string, number>();
+    const serviceFeesByItem = new Map<string, number>();
+    const itemKind = new Map<string, 'booking' | 'inquiry'>();
+
+    for (const t of txs) {
+      const id = t.propertyBookingId || t.propertyInquiryId;
+      if (!id) continue;
+      const booking = t.propertyBookingId ? bookingById.get(t.propertyBookingId) : null;
+      const inquiry = t.propertyInquiryId ? inquiryById.get(t.propertyInquiryId) : null;
+      const row = booking || inquiry;
+      if (!row) continue;
+      if (row.paymentStatus !== 'PAID') continue;
+      if ((row.settlementStatus as any) === 'SETTLED') continue;
+
+      itemKind.set(id, booking ? 'booking' : 'inquiry');
+      const amt = parseFloat(t.amount.toString());
+      if (t.transactionType === 'SERVICE_FEE') {
+        serviceFeesByItem.set(id, (serviceFeesByItem.get(id) || 0) + amt);
+      } else if (t.transactionType === 'ORIGINAL') {
+        originalsByItem.set(id, (originalsByItem.get(id) || 0) + amt);
+      }
+    }
+
+    const earningsByCurrency = new Map<string, { amount: number; bookings: any[] }>();
+    for (const id of originalsByItem.keys()) {
+      const kind = itemKind.get(id);
+      const booking = bookingById.get(id);
+      const inquiry = inquiryById.get(id);
+      const row = booking || inquiry;
+      if (!row) continue;
+      const currency = row.currency || 'GMD';
+      const gross = originalsByItem.get(id) || 0;
+      const svc = serviceFeesByItem.get(id) || 0;
+      const net = Math.max(0, gross - svc);
+      if (net <= 0) continue;
+
+      if (!earningsByCurrency.has(currency)) {
+        earningsByCurrency.set(currency, { amount: 0, bookings: [] });
+      }
+      const bucket = earningsByCurrency.get(currency)!;
+      bucket.amount += net;
+      bucket.bookings.push({
+        id,
+        bookingRef: booking?.bookingRef || inquiry?.purchaseRef,
+        title: row.listing?.title,
+        earnings: net,
+        createdAt: row.createdAt,
+        kind: kind || 'booking',
+      });
+    }
+
+    const earnings = Array.from(earningsByCurrency.entries()).map(([currency, data]) => ({
       currency,
-      amount: Math.round(amount * 100) / 100,
+      amount: Math.round(data.amount * 100) / 100,
       currencySymbol: getCurrencySymbol(currency),
+      bookingsCount: data.bookings.length,
+      bookings: data.bookings,
     }));
-    res.json({ earnings, count: earnings.length });
+
+    res.json({
+      earnings,
+      count: earnings.length,
+      totalBookings: earnings.reduce((sum, e) => sum + e.bookingsCount, 0),
+    });
   } catch (error) {
+    logger.error('Error getting real estate earnings:', error);
     res.status(500).json({ message: 'Failed to get real estate earnings' });
   }
 };
@@ -656,9 +1008,9 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
     }
 
     // Validate channel
-    if (!['ECOMMERCE', 'RIDES', 'RENTALS'].includes(channel)) {
+    if (!['ECOMMERCE', 'RIDES', 'RENTALS', 'REAL_ESTATE', 'HOME_SERVICES'].includes(channel)) {
       return res.status(400).json({
-        message: 'Invalid channel. Must be ECOMMERCE, RIDES or RENTALS'
+        message: 'Invalid channel. Must be ECOMMERCE, RIDES, RENTALS, REAL_ESTATE or HOME_SERVICES'
       });
     }
 
@@ -694,8 +1046,14 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
       settlementData = await calculateEcommerceSettlementData(req.user.id, currency, amount, salesRepId);
     } else if (channel === 'RIDES') {
       settlementData = await calculateRidesSettlementData(req.user.id, currency, amount);
-    } else {
+    } else if (channel === 'RENTALS') {
       settlementData = await calculateRentalsSettlementData(req.user.id, currency, amount);
+    } else if (channel === 'REAL_ESTATE') {
+      settlementData = await calculateRealEstateSettlementData(req.user.id, currency, amount);
+    } else if (channel === 'HOME_SERVICES') {
+      settlementData = await calculateHomeServicesSettlementData(req.user.id, currency, amount);
+    } else {
+      return res.status(400).json({ message: `Settlement channel ${channel} is not supported yet` });
     }
     
     if (!settlementData.isValid) {
@@ -722,9 +1080,13 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
         includedOrderIds: channel === 'ECOMMERCE' ? settlementData.includedOrderIds : null,
         includedRideIds: channel === 'RIDES' ? settlementData.includedRideIds : null,
         includedRentalIds: channel === 'RENTALS' ? settlementData.includedRentalIds : null,
+        includedPropertyBookingIds: channel === 'REAL_ESTATE' ? settlementData.includedPropertyBookingIds : null,
+        includedServiceBookingIds: channel === 'HOME_SERVICES' ? settlementData.includedServiceBookingIds : null,
         totalOrdersCount: channel === 'ECOMMERCE' ? settlementData.totalOrdersCount : 0,
         totalRidesCount: channel === 'RIDES' ? settlementData.totalRidesCount : 0,
         totalRentalsCount: channel === 'RENTALS' ? settlementData.totalRentalsCount : 0,
+        totalPropertyBookingsCount: channel === 'REAL_ESTATE' ? settlementData.totalPropertyBookingsCount : 0,
+        totalServiceBookingsCount: channel === 'HOME_SERVICES' ? settlementData.totalServiceBookingsCount : 0,
         // For rentals, include rental ids in metadata
         serviceFeesDeducted: settlementData.serviceFeesDeducted || 0,
         netAmountBeforeFees: settlementData.grossAmount || 0,
@@ -738,7 +1100,9 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
             netAmount: settlementData.netAmount,
             ordersIncluded: channel === 'ECOMMERCE' ? settlementData.includedOrderIds : null,
             ridesIncluded: channel === 'RIDES' ? settlementData.includedRideIds : null,
-            rentalsIncluded: channel === 'RENTALS' ? settlementData.includedRentalIds : null
+            rentalsIncluded: channel === 'RENTALS' ? settlementData.includedRentalIds : null,
+            propertyBookingsIncluded: channel === 'REAL_ESTATE' ? settlementData.includedPropertyBookingIds : null,
+            serviceBookingsIncluded: channel === 'HOME_SERVICES' ? settlementData.includedServiceBookingIds : null,
           }
         }
       },
@@ -755,6 +1119,10 @@ export const createSettlementRequest = async (req: AuthRequest, res: Response) =
       await updateRidesToSettled(settlementData.includedRideIds);
     } else if (channel === 'RENTALS' && settlementData.includedRentalIds && settlementData.includedRentalIds.length > 0) {
       await updateRentalsToSettled(settlementData.includedRentalIds);
+    } else if (channel === 'REAL_ESTATE' && settlementData.includedPropertyBookingIds?.length > 0) {
+      await updatePropertyBookingsToSettled(settlementData.includedPropertyBookingIds);
+    } else if (channel === 'HOME_SERVICES' && settlementData.includedServiceBookingIds?.length > 0) {
+      await updateServiceBookingsToSettled(settlementData.includedServiceBookingIds);
     }
 
     logger.info('Settlement request created successfully:', { 
@@ -807,7 +1175,7 @@ export const getSettlementHistory = async (req: AuthRequest, res: Response) => {
     const whereClause: any = { userId: req.user.id };
     
     // Add channel filter
-    if (channel && ['ECOMMERCE', 'RIDES'].includes(channel)) {
+    if (channel && ['ECOMMERCE', 'RIDES', 'RENTALS', 'REAL_ESTATE', 'HOME_SERVICES'].includes(channel)) {
       whereClause.channel = channel;
     }
 
@@ -918,70 +1286,11 @@ export const createBankAccount = async (req: AuthRequest, res: Response) => {
       currency
     });
 
-    // Get seller's KYC record
-    let sellerKyc = await prisma.sellerKyc.findUnique({
-      where: { userId: req.user.id },
-      include: {
-        bankAccounts: {
-          where: { status: 'ACTIVE' }
-        }
-      }
-    });
-
-    // For riders/drivers, allow adding payout methods without seller KYC by deriving from rider application info
+    const { sellerKyc, error: payoutError } = await ensurePayoutProfile(req.user.id, 'bankAccounts');
     if (!sellerKyc) {
-      const user = await prisma.user.findUnique({
-        where: { id: req.user.id },
-        select: {
-          firstName: true,
-          lastName: true
-        }
+      return res.status(payoutError?.includes('Unable to prepare') ? 500 : 400).json({
+        message: payoutError || 'Unable to prepare payout profile for this user',
       });
-      // Check driver profile or approved rider application
-      const driver = await prisma.driver.findUnique({ where: { userId: req.user.id } });
-      const riderApp = await prisma.riderApplication.findFirst({
-        where: { userId: req.user.id, status: 'APPROVED' },
-        orderBy: { updatedAt: 'desc' }
-      });
-      if (driver || riderApp) {
-        // Try to enrich address from user's default delivery address
-        const defaultAddress = await prisma.deliveryAddress.findFirst({
-          where: { userId: req.user.id, isDefault: true }
-        });
-        // Create a lightweight KYC profile for payout method linkage
-        await prisma.sellerKyc.create({
-          data: {
-            userId: req.user.id,
-            businessName: `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || 'Individual',
-            businessType: 'INDIVIDUAL',
-            address: defaultAddress?.address || riderApp?.address || 'N/A',
-            city: defaultAddress?.city || riderApp?.city || 'N/A',
-            state: defaultAddress?.state || '',
-            postalCode: defaultAddress?.postalCode || '',
-            documentType: 'DRIVERS_LICENSE',
-            documentNumber: riderApp?.licenseNumber || 'N/A',
-            documentUrl: (riderApp as any)?.documents?.[0]?.documentUrl || 'N/A',
-            status: 'APPROVED',
-            country: defaultAddress?.country ? [defaultAddress.country] : ['GM']
-          }
-        });
-        // Re-fetch with included relations to satisfy types
-        sellerKyc = await prisma.sellerKyc.findUnique({
-          where: { userId: req.user.id },
-          include: {
-            bankAccounts: { where: { status: 'ACTIVE' } }
-          }
-        });
-        if (!sellerKyc) {
-          return res.status(500).json({
-            message: 'Unable to prepare payout profile for this user'
-          });
-        }
-      } else {
-        return res.status(400).json({
-          message: 'Rider application not found or not approved.'
-        });
-      }
     }
 
     // Check if account number already exists for this seller
@@ -1097,64 +1406,11 @@ export const createWallet = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    // Get seller's KYC record
-    let sellerKyc = await prisma.sellerKyc.findUnique({
-      where: { userId: req.user.id },
-      include: {
-        wallets: {
-          where: { status: 'ACTIVE' }
-        }
-      }
-    });
-
-    // For riders/drivers, allow adding payout methods without seller KYC by deriving from rider application info
+    const { sellerKyc, error: payoutError } = await ensurePayoutProfile(req.user.id, 'wallets');
     if (!sellerKyc) {
-      const baseUser = await prisma.user.findUnique({
-        where: { id: req.user.id },
-        select: { firstName: true, lastName: true, phoneNumber: true }
+      return res.status(payoutError?.includes('Unable to prepare') ? 500 : 400).json({
+        message: payoutError || 'Unable to prepare payout profile for this user',
       });
-      const driver = await prisma.driver.findUnique({ where: { userId: req.user.id } });
-      const riderApp = await prisma.riderApplication.findFirst({
-        where: { userId: req.user.id, status: 'APPROVED' },
-        orderBy: { updatedAt: 'desc' }
-      });
-      if (driver || riderApp) {
-        const defaultAddress = await prisma.deliveryAddress.findFirst({
-          where: { userId: req.user.id, isDefault: true }
-        });
-        await prisma.sellerKyc.create({
-          data: {
-            userId: req.user.id,
-            businessName: `${baseUser?.firstName ?? ''} ${baseUser?.lastName ?? ''}`.trim() || 'Individual',
-            businessType: 'INDIVIDUAL',
-            address: defaultAddress?.address || riderApp?.address || 'N/A',
-            city: defaultAddress?.city || riderApp?.city || 'N/A',
-            state: defaultAddress?.state || '',
-            postalCode: defaultAddress?.postalCode || '',
-            documentType: 'DRIVERS_LICENSE',
-            documentNumber: riderApp?.licenseNumber || 'N/A',
-            documentUrl: (riderApp as any)?.documents?.[0]?.documentUrl || 'N/A',
-            status: 'APPROVED',
-            country: defaultAddress?.country ? [defaultAddress.country] : ['GM']
-          }
-        });
-        // Re-fetch with included relations to satisfy types
-        sellerKyc = await prisma.sellerKyc.findUnique({
-          where: { userId: req.user.id },
-          include: {
-            wallets: { where: { status: 'ACTIVE' } }
-          }
-        });
-        if (!sellerKyc) {
-          return res.status(500).json({
-            message: 'Unable to prepare payout profile for this user'
-          });
-        }
-      } else {
-        return res.status(400).json({
-          message: 'Rider application not found or not approved.'
-        });
-      }
     }
 
     // Check if wallet address already exists for this seller
@@ -1249,6 +1505,28 @@ export const getSettlementDetails = async (req: AuthRequest, res: Response) => {
 
     let includedOrders: Array<{ id: string; orderNumber: string; createdAt: Date; totalAmount: number; currencyCode: string }> = [];
     let includedRides: Array<{ id: string; rideId: string; createdAt: Date; driverEarnings: number; totalFare: number; currency: string }> = [];
+    let includedPropertyBookings: Array<{
+      id: string;
+      bookingRef: string;
+      createdAt: Date;
+      totalPrice: number;
+      currency: string;
+      title?: string;
+    }> = [];
+    let includedServiceBookings: Array<{
+      id: string;
+      bookingRef: string;
+      createdAt: Date;
+      totalPrice: number;
+      currency: string;
+      title?: string;
+    }> = [];
+    let includedRentals: Array<{
+      id: string;
+      createdAt: Date;
+      totalAmount: number;
+      currency: string;
+    }> = [];
     
     if (settlement.channel === 'ECOMMERCE' && settlement.includedOrderIds && Array.isArray(settlement.includedOrderIds)) {
       const orderIds = settlement.includedOrderIds as string[];
@@ -1309,6 +1587,77 @@ export const getSettlementDetails = async (req: AuthRequest, res: Response) => {
           currency: ride.rideRequest?.currency || 'GMD'
         }));
       }
+    } else if (settlement.channel === 'REAL_ESTATE' && settlement.includedPropertyBookingIds && Array.isArray(settlement.includedPropertyBookingIds)) {
+      const bookingIds = settlement.includedPropertyBookingIds as string[];
+      if (bookingIds.length > 0) {
+        const bookings = await prisma.propertyBooking.findMany({
+          where: { id: { in: bookingIds } },
+          select: {
+            id: true,
+            bookingRef: true,
+            createdAt: true,
+            totalPrice: true,
+            currency: true,
+            listing: { select: { title: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        includedPropertyBookings = bookings.map((b) => ({
+          id: b.id,
+          bookingRef: b.bookingRef,
+          createdAt: b.createdAt,
+          totalPrice: parseFloat(b.totalPrice.toString()),
+          currency: b.currency || 'GMD',
+          title: b.listing?.title,
+        }));
+      }
+    } else if (settlement.channel === 'HOME_SERVICES' && settlement.includedServiceBookingIds && Array.isArray(settlement.includedServiceBookingIds)) {
+      const bookingIds = settlement.includedServiceBookingIds as string[];
+      if (bookingIds.length > 0) {
+        const bookings = await prisma.serviceBooking.findMany({
+          where: { id: { in: bookingIds } },
+          select: {
+            id: true,
+            bookingRef: true,
+            createdAt: true,
+            agreedPrice: true,
+            currency: true,
+            category: { select: { name: true } },
+            offering: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        includedServiceBookings = bookings.map((b) => ({
+          id: b.id,
+          bookingRef: b.bookingRef,
+          createdAt: b.createdAt,
+          totalPrice: parseFloat((b.agreedPrice ?? 0).toString()),
+          currency: b.currency || 'GMD',
+          title: b.offering?.name || b.category?.name,
+        }));
+      }
+    } else if (settlement.channel === 'RENTALS' && settlement.includedRentalIds && Array.isArray(settlement.includedRentalIds)) {
+      const rentalIds = settlement.includedRentalIds as string[];
+      if (rentalIds.length > 0) {
+        const rentals = await prisma.rentalRequest.findMany({
+          where: { id: { in: rentalIds } },
+          select: {
+            id: true,
+            requestId: true,
+            createdAt: true,
+            agreedPrice: true,
+            proposedPrice: true,
+            currency: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+        includedRentals = rentals.map((r) => ({
+          id: r.id,
+          createdAt: r.createdAt,
+          totalAmount: parseFloat((r.agreedPrice ?? r.proposedPrice ?? 0).toString()),
+          currency: r.currency || 'GMD',
+        }));
+      }
     }
 
     logger.info('Settlement details fetched successfully:', { 
@@ -1316,13 +1665,19 @@ export const getSettlementDetails = async (req: AuthRequest, res: Response) => {
       settlementId,
       channel: settlement.channel,
       includedOrdersCount: includedOrders.length,
-      includedRidesCount: includedRides.length
+      includedRidesCount: includedRides.length,
+      includedPropertyBookingsCount: includedPropertyBookings.length,
+      includedServiceBookingsCount: includedServiceBookings.length,
+      includedRentalsCount: includedRentals.length,
     });
 
     res.json({
       settlement,
       includedOrders,
-      includedRides
+      includedRides,
+      includedPropertyBookings,
+      includedServiceBookings,
+      includedRentals,
     });
   } catch (error) {
     logger.error('Error getting settlement details:', error);
@@ -1716,6 +2071,312 @@ async function updateRentalsToSettled(rentalIds: string[]) {
     throw error;
   }
 }
+
+async function calculateRealEstateSettlementData(userId: string, currency: string, requestedAmount: number) {
+  try {
+    logger.info('Starting real estate settlement calculation:', { userId, currency, requestedAmount });
+
+    const txs = await prisma.externalTransaction.findMany({
+      where: {
+        sellerId: userId,
+        appService: 'REAL_ESTATE',
+        status: 'SUCCESS',
+        currencyCode: currency,
+        OR: [
+          { propertyBookingId: { not: null } },
+          { propertyInquiryId: { not: null } },
+        ],
+      },
+      select: {
+        propertyBookingId: true,
+        propertyInquiryId: true,
+        amount: true,
+        transactionType: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (txs.length === 0) {
+      return { isValid: false, error: 'No available property earnings for settlement in this currency' };
+    }
+
+    const bookingIds = Array.from(new Set(txs.map((t) => t.propertyBookingId!).filter(Boolean)));
+    const inquiryIds = Array.from(new Set(txs.map((t) => t.propertyInquiryId!).filter(Boolean)));
+
+    const [bookings, inquiries] = await Promise.all([
+      bookingIds.length
+        ? prisma.propertyBooking.findMany({
+            where: { id: { in: bookingIds }, paymentStatus: 'PAID', settlementStatus: 'PENDING' },
+            select: { id: true, bookingRef: true, createdAt: true },
+          })
+        : Promise.resolve([]),
+      inquiryIds.length
+        ? prisma.propertyInquiry.findMany({
+            where: { id: { in: inquiryIds }, paymentStatus: 'PAID', settlementStatus: 'PENDING' },
+            select: { id: true, purchaseRef: true, createdAt: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    if (bookings.length === 0 && inquiries.length === 0) {
+      return { isValid: false, error: 'No available property earnings for settlement in this currency' };
+    }
+
+    const originalById = new Map<string, number>();
+    const serviceFeeById = new Map<string, number>();
+    const eligibleIds = new Set([...bookings.map((b) => b.id), ...inquiries.map((i) => i.id)]);
+
+    for (const t of txs) {
+      const id = t.propertyBookingId || t.propertyInquiryId;
+      if (!id || !eligibleIds.has(id)) continue;
+      const amt = parseFloat(t.amount.toString());
+      if (t.transactionType === 'ORIGINAL') {
+        originalById.set(id, (originalById.get(id) || 0) + amt);
+      } else if (t.transactionType === 'SERVICE_FEE') {
+        serviceFeeById.set(id, (serviceFeeById.get(id) || 0) + amt);
+      }
+    }
+
+    const details: any[] = [];
+    for (const b of bookings) {
+      const gross = originalById.get(b.id) || 0;
+      const svc = serviceFeeById.get(b.id) || 0;
+      const net = Math.max(0, gross - svc);
+      if (net > 0) {
+        details.push({
+          bookingId: b.id,
+          bookingRef: b.bookingRef,
+          earnings: net,
+          createdAt: b.createdAt,
+          serviceFees: svc,
+        });
+      }
+    }
+    for (const i of inquiries) {
+      const gross = originalById.get(i.id) || 0;
+      const svc = serviceFeeById.get(i.id) || 0;
+      const net = Math.max(0, gross - svc);
+      if (net > 0) {
+        details.push({
+          bookingId: i.id,
+          bookingRef: i.purchaseRef,
+          earnings: net,
+          createdAt: i.createdAt,
+          serviceFees: svc,
+        });
+      }
+    }
+
+    if (details.length === 0) {
+      return { isValid: false, error: 'No available property earnings for settlement in this currency' };
+    }
+
+    const totalAvailable = details.reduce((sum, d) => sum + d.earnings, 0);
+    const roundedAvailableAmount = Math.round(totalAvailable * 100) / 100;
+    const roundedRequestedAmount = Math.round(requestedAmount * 100) / 100;
+
+    if (roundedRequestedAmount > roundedAvailableAmount) {
+      return {
+        isValid: false,
+        error: `Insufficient available earnings. Available: ${roundedAvailableAmount.toFixed(2)}, Requested: ${roundedRequestedAmount.toFixed(2)}`,
+      };
+    }
+
+    let included = details;
+    if (Math.abs(roundedRequestedAmount - roundedAvailableAmount) >= 0.01) {
+      let remaining = roundedRequestedAmount;
+      included = [];
+      for (const d of details) {
+        if (d.earnings <= remaining) {
+          included.push(d);
+          remaining -= d.earnings;
+          if (remaining <= 0.01) break;
+        } else {
+          break;
+        }
+      }
+      if (included.length === 0) {
+        return { isValid: false, error: 'No suitable items found for the requested settlement amount' };
+      }
+    }
+
+    const finalNet = Math.round(included.reduce((s, d) => s + d.earnings, 0) * 100) / 100;
+    const includedServiceFees = included.reduce((s, d) => s + d.serviceFees, 0);
+
+    return {
+      isValid: true,
+      includedPropertyBookingIds: included.map((d) => d.bookingId),
+      totalPropertyBookingsCount: included.length,
+      grossAmount: included.reduce((s, d) => s + d.earnings + d.serviceFees, 0),
+      serviceFeesDeducted: includedServiceFees,
+      netAmount: finalNet,
+      bookingDetails: included,
+    };
+  } catch (error) {
+    logger.error('Error calculating real estate settlement data:', error);
+    return { isValid: false, error: 'Failed to calculate settlement data' };
+  }
+}
+
+async function updatePropertyBookingsToSettled(bookingIds: string[]) {
+  try {
+    const [bookingsResult, inquiriesResult] = await Promise.all([
+      prisma.propertyBooking.updateMany({
+        where: { id: { in: bookingIds }, settlementStatus: 'PENDING' },
+        data: { settlementStatus: 'SETTLED', updatedAt: new Date() },
+      }),
+      prisma.propertyInquiry.updateMany({
+        where: { id: { in: bookingIds }, settlementStatus: 'PENDING' },
+        data: { settlementStatus: 'SETTLED', updatedAt: new Date() },
+      }),
+    ]);
+    logger.info('Property stays/sales updated to SETTLED status:', {
+      bookingIds,
+      bookingsUpdated: bookingsResult.count,
+      inquiriesUpdated: inquiriesResult.count,
+    });
+    return bookingsResult.count + inquiriesResult.count;
+  } catch (error) {
+    logger.error('Error updating property items to SETTLED status:', error);
+    throw error;
+  }
+}
+
+async function calculateHomeServicesSettlementData(userId: string, currency: string, requestedAmount: number) {
+  try {
+    logger.info('Starting home services settlement calculation:', { userId, currency, requestedAmount });
+
+    const txs = await prisma.externalTransaction.findMany({
+      where: {
+        sellerId: userId,
+        appService: 'HOME_SERVICES',
+        status: 'SUCCESS',
+        currencyCode: currency,
+        serviceBookingId: { not: null },
+      },
+      select: {
+        serviceBookingId: true,
+        amount: true,
+        transactionType: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (txs.length === 0) {
+      return { isValid: false, error: 'No available service bookings for settlement in this currency' };
+    }
+
+    const bookingIds = Array.from(new Set(txs.map((t) => t.serviceBookingId!).filter(Boolean)));
+    const bookings = await prisma.serviceBooking.findMany({
+      where: {
+        id: { in: bookingIds },
+        paymentStatus: 'PAID',
+        settlementStatus: 'PENDING',
+      },
+      select: { id: true, bookingRef: true, createdAt: true },
+    });
+
+    if (bookings.length === 0) {
+      return { isValid: false, error: 'No available service bookings for settlement in this currency' };
+    }
+
+    const originalById = new Map<string, number>();
+    const serviceFeeById = new Map<string, number>();
+    for (const t of txs) {
+      const bid = t.serviceBookingId!;
+      if (!bookings.find((b) => b.id === bid)) continue;
+      const amt = parseFloat(t.amount.toString());
+      if (t.transactionType === 'ORIGINAL') {
+        originalById.set(bid, (originalById.get(bid) || 0) + amt);
+      } else if (t.transactionType === 'SERVICE_FEE') {
+        serviceFeeById.set(bid, (serviceFeeById.get(bid) || 0) + amt);
+      }
+    }
+
+    const details: any[] = [];
+    for (const b of bookings) {
+      const gross = originalById.get(b.id) || 0;
+      const svc = serviceFeeById.get(b.id) || 0;
+      const net = Math.max(0, gross - svc);
+      if (net > 0) {
+        details.push({
+          bookingId: b.id,
+          bookingRef: b.bookingRef,
+          earnings: net,
+          createdAt: b.createdAt,
+          serviceFees: svc,
+        });
+      }
+    }
+
+    if (details.length === 0) {
+      return { isValid: false, error: 'No available service bookings for settlement in this currency' };
+    }
+
+    const totalAvailable = details.reduce((sum, d) => sum + d.earnings, 0);
+    const roundedAvailableAmount = Math.round(totalAvailable * 100) / 100;
+    const roundedRequestedAmount = Math.round(requestedAmount * 100) / 100;
+
+    if (roundedRequestedAmount > roundedAvailableAmount) {
+      return {
+        isValid: false,
+        error: `Insufficient available earnings. Available: ${roundedAvailableAmount.toFixed(2)}, Requested: ${roundedRequestedAmount.toFixed(2)}`,
+      };
+    }
+
+    let included = details;
+    if (Math.abs(roundedRequestedAmount - roundedAvailableAmount) >= 0.01) {
+      let remaining = roundedRequestedAmount;
+      included = [];
+      for (const d of details) {
+        if (d.earnings <= remaining) {
+          included.push(d);
+          remaining -= d.earnings;
+          if (remaining <= 0.01) break;
+        } else {
+          break;
+        }
+      }
+    }
+
+    const finalNet = Math.round(included.reduce((s, d) => s + d.earnings, 0) * 100) / 100;
+    const includedServiceFees = included.reduce((s, d) => s + d.serviceFees, 0);
+
+    return {
+      isValid: true,
+      includedServiceBookingIds: included.map((d) => d.bookingId),
+      totalServiceBookingsCount: included.length,
+      grossAmount: included.reduce((s, d) => s + d.earnings + d.serviceFees, 0),
+      serviceFeesDeducted: includedServiceFees,
+      netAmount: finalNet,
+      bookingDetails: included,
+    };
+  } catch (error) {
+    logger.error('Error calculating home services settlement data:', error);
+    return { isValid: false, error: 'Failed to calculate settlement data' };
+  }
+}
+
+async function updateServiceBookingsToSettled(bookingIds: string[]) {
+  try {
+    const result = await prisma.serviceBooking.updateMany({
+      where: {
+        id: { in: bookingIds },
+        settlementStatus: 'PENDING',
+      },
+      data: {
+        settlementStatus: 'SETTLED',
+        updatedAt: new Date(),
+      },
+    });
+    logger.info('Service bookings updated to SETTLED status:', { bookingIds, updatedCount: result.count });
+    return result.count;
+  } catch (error) {
+    logger.error('Error updating service bookings to SETTLED status:', error);
+    throw error;
+  }
+}
+
 // Helper function to calculate rides settlement data
 async function calculateRidesSettlementData(userId: string, currency: string, requestedAmount: number) {
   try {

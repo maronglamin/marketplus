@@ -710,16 +710,28 @@ export function Home() {
       onPress: () => navigation.navigate('HomeServices', { screen: 'HomeServicesHub' }),
     },
     {
-      id: 'properties',
+      id: 'real-estate',
+      image: require('../../assets/real-estate.jpeg'),
+      badgeIcon: 'business-outline' as const,
+      badgeText: 'Real Estate',
+      badgeColor: 'rgba(5, 150, 105, 0.9)',
+      title: 'Real Estate',
+      subtitle: 'Homes and land for sale',
+      actionText: 'Browse Properties',
+      actionColor: '#059669',
+      onPress: () => navigation.navigate('RealEstate', { screen: 'RealEstateHub', params: { section: 'realestate' } }),
+    },
+    {
+      id: 'stay',
       image: require('../../assets/hotel-and-apartment-booking.jpeg'),
       badgeIcon: 'bed-outline' as const,
-      badgeText: 'Properties',
+      badgeText: 'Stay',
       badgeColor: 'rgba(124, 58, 237, 0.9)',
-      title: 'Stays & Realty',
-      subtitle: 'Hotels, apartments, homes & land',
-      actionText: 'Explore Properties',
+      title: 'Stay & Accommodation',
+      subtitle: 'Hotels, apartments, lodges & trips',
+      actionText: 'Explore Stays',
       actionColor: '#7C3AED',
-      onPress: () => navigation.navigate('RealEstate', { screen: 'RealEstateHub' }),
+      onPress: () => navigation.navigate('RealEstate', { screen: 'RealEstateHub', params: { section: 'stay' } }),
     },
   ];
 
@@ -1472,8 +1484,8 @@ export function Home() {
               ) : (
                 <View style={styles.emptyDestinationsContainer}>
                   <Ionicons name="bed-outline" size={32} color="#9CA3AF" />
-                  <Text style={styles.emptyDestinationsTitle}>Explore stays & realty</Text>
-                  <Text style={styles.emptyDestinationsSubtitle}>Hotels, apartments, homes & land listings</Text>
+                  <Text style={styles.emptyDestinationsTitle}>Explore stays & real estate</Text>
+                  <Text style={styles.emptyDestinationsSubtitle}>Hotels, apartments, lodges, homes & land</Text>
                   <TouchableOpacity style={[styles.bookFirstRideButton, { backgroundColor: '#7C3AED' }]} onPress={() => navigation.navigate('RealEstate', { screen: 'RealEstateHub' })}>
                     <Text style={styles.bookFirstRideButtonText}>Browse Properties</Text>
                   </TouchableOpacity>

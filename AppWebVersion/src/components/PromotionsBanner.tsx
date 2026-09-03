@@ -1,162 +1,223 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
-  ShieldCheck,
-  Clock,
-  Percent,
+  Zap,
   Gift,
+  Bed,
+  Wrench,
+  ArrowRight,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+const AUTO_SLIDE_MS = 5500;
+const RESUME_DELAY_MS = 10000;
+const CARDS_PER_PAGE = 2;
+
+type Promotion = {
+  id: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  gradient: [string, string];
+  accentColor: string;
+  buttonText: string;
+  link: string;
+  icon: React.ReactNode;
+};
+
+const promotions: Promotion[] = [
+  {
+    id: 'flash-sale',
+    title: 'Flash Sale',
+    subtitle: 'Electronics Deals',
+    description: 'Up to 30% off selected items',
+    gradient: ['#EA580C', '#C2410C'],
+    accentColor: '#EA580C',
+    buttonText: 'Shop Now',
+    link: '/products/popular',
+    icon: <Zap className="w-20 h-20" />,
+  },
+  {
+    id: 'stay-special',
+    title: 'Stay Special',
+    subtitle: 'Book Your Next Getaway',
+    description: 'Hotels, apartments & leisure trips',
+    gradient: ['#0D9488', '#115E59'],
+    accentColor: '#0D9488',
+    buttonText: 'Browse Stays',
+    link: '/real-estate?section=stay',
+    icon: <Bed className="w-20 h-20" />,
+  },
+  {
+    id: 'home-services',
+    title: 'Home Help',
+    subtitle: 'Trusted Pros Nearby',
+    description: 'Book trades, cleaning & coaching',
+    gradient: ['#0284C7', '#0369A1'],
+    accentColor: '#0284C7',
+    buttonText: 'Find Pros',
+    link: '/home-services',
+    icon: <Wrench className="w-20 h-20" />,
+  },
+  {
+    id: 'weekend-offers',
+    title: 'Weekend Offers',
+    subtitle: 'Festival Discounts',
+    description: 'Special deals all weekend long',
+    gradient: ['#4F46E5', '#4338CA'],
+    accentColor: '#4F46E5',
+    buttonText: 'View Deals',
+    link: '/products',
+    icon: <Gift className="w-20 h-20" />,
+  },
+];
+
+const pageCount = Math.ceil(promotions.length / CARDS_PER_PAGE);
+
 export function PromotionsBanner() {
-  const [currentSlide, setCurrentSlide] = useState(0);
+  const [page, setPage] = useState(0);
+  const pausedRef = useRef(false);
+  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const promotions = [
-    {
-      id: 1,
-      title: 'Flash Sale',
-      subtitle: 'Electronics Sale!',
-      description: 'Up to 30% off selected items',
-      gradient: ['#3B82F6', '#1D4ED8'],
-      buttonText: 'Shop Now',
-      link: '/products?filter=flash-sale',
-      icon: <Percent className="w-6 h-6" />,
-      timeLeft: '2h 15m left',
-    },
-    {
-      id: 2,
-      title: 'Weekend Special',
-      subtitle: 'Fashion Discount',
-      description: 'Buy one, get one 50% off',
-      gradient: ['#F97316', '#EA580C'],
-      buttonText: 'Shop Now',
-      link: '/products?filter=fashion-sale',
-      icon: <Gift className="w-6 h-6" />,
-      timeLeft: '1d 8h left',
-    },
-    {
-      id: 3,
-      title: 'Holiday Special',
-      subtitle: 'Festival Discounts',
-      description: 'Special offers all weekend',
-      gradient: ['#8B5CF6', '#7C3AED'],
-      buttonText: 'View Deals',
-      link: '/products?filter=holiday-sale',
-      icon: <Clock className="w-6 h-6" />,
-      timeLeft: '3d 12h left',
-    },
-    {
-      id: 4,
-      title: 'New User',
-      subtitle: 'Welcome Bonus',
-      description: 'Get 20% off your first order',
-      gradient: ['#10B981', '#059669'],
-      buttonText: 'Claim Now',
-      link: '/products?filter=new-user',
-      icon: <Gift className="w-6 h-6" />,
-      timeLeft: 'Always available',
-    },
-  ];
+  const pauseAutoSlide = useCallback(() => {
+    pausedRef.current = true;
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => {
+      pausedRef.current = false;
+    }, RESUME_DELAY_MS);
+  }, []);
 
-  const nextSlide = () => {
-    setCurrentSlide((prev) => (prev + 1) % promotions.length);
+  const goToPage = (next: number) => {
+    setPage(((next % pageCount) + pageCount) % pageCount);
   };
 
-  const prevSlide = () => {
-    setCurrentSlide((prev) => (prev - 1 + promotions.length) % promotions.length);
+  const nextPage = useCallback(() => {
+    setPage((prev) => (prev + 1) % pageCount);
+  }, []);
+
+  const prevPage = () => {
+    pauseAutoSlide();
+    goToPage(page - 1);
   };
 
-  const goToSlide = (index: number) => {
-    setCurrentSlide(index);
-  };
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (pausedRef.current) return;
+      nextPage();
+    }, AUTO_SLIDE_MS);
+    return () => {
+      clearInterval(timer);
+      if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    };
+  }, [nextPage]);
 
   return (
     <div className="py-6 bg-white rounded-xl shadow-sm mb-4">
-      <div className="px-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-semibold text-gray-800">Special Offers</h3>
-          <div className="flex items-center space-x-2">
-            <button 
-              onClick={prevSlide}
-              className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg transition-colors"
+      <div className="px-4 sm:px-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg sm:text-xl font-medium text-gray-800">Special Offers</h3>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={prevPage}
+              aria-label="Previous offers"
+              className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
             >
-              <ChevronLeft className="w-5 h-5 text-gray-400" />
+              <ChevronLeft className="w-5 h-5 text-gray-500" />
             </button>
-            <button 
-              onClick={nextSlide}
-              className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-lg transition-colors"
+            <button
+              type="button"
+              onClick={() => {
+                pauseAutoSlide();
+                nextPage();
+              }}
+              aria-label="Next offers"
+              className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
             >
               <ChevronRight className="w-5 h-5 text-gray-600" />
             </button>
           </div>
         </div>
 
-        {/* Main Promotion Card */}
-        <div className="relative mb-4">
-          <div className="overflow-hidden rounded-xl">
-            <div 
-              className="flex transition-transform duration-300 ease-in-out"
-              style={{ transform: `translateX(-${currentSlide * 100}%)` }}
-            >
-              {promotions.map((promo) => (
+        <div
+          className="overflow-hidden"
+          onMouseEnter={pauseAutoSlide}
+          onTouchStart={pauseAutoSlide}
+        >
+          <div
+            className="flex transition-transform duration-500 ease-out"
+            style={{ transform: `translateX(-${page * 100}%)` }}
+          >
+            {Array.from({ length: pageCount }).map((_, pageIndex) => {
+              const pagePromos = promotions.slice(
+                pageIndex * CARDS_PER_PAGE,
+                pageIndex * CARDS_PER_PAGE + CARDS_PER_PAGE,
+              );
+              return (
                 <div
-                  key={promo.id}
-                  className="w-full flex-shrink-0 h-40 rounded-xl p-6 flex flex-col justify-between"
-                  style={{
-                    background: `linear-gradient(135deg, ${promo.gradient[0]}, ${promo.gradient[1]})`,
-                  }}
+                  key={`page-${pageIndex}`}
+                  className="w-full shrink-0 grid grid-cols-2 gap-3"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="text-white">
-                      <div className="flex items-center mb-2">
+                  {pagePromos.map((promo) => (
+                    <div
+                      key={promo.id}
+                      className="relative h-[168px] rounded-2xl p-4 sm:p-5 flex flex-col justify-between overflow-hidden shadow-sm"
+                      style={{
+                        background: `linear-gradient(145deg, ${promo.gradient[0]}, ${promo.gradient[1]})`,
+                      }}
+                    >
+                      <div
+                        className="pointer-events-none absolute -right-1 -top-1 text-white/10"
+                        aria-hidden
+                      >
                         {promo.icon}
-                        <span className="text-sm font-medium ml-2">{promo.title}</span>
                       </div>
-                      <h4 className="text-xl font-bold mb-1">{promo.subtitle}</h4>
-                      <p className="text-sm opacity-90 mb-2">{promo.description}</p>
-                      <div className="flex items-center text-xs opacity-75">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {promo.timeLeft}
+
+                      <div className="relative z-10 pr-6">
+                        <span className="inline-block px-2 py-0.5 rounded-full bg-white/20 text-[10px] sm:text-[11px] font-semibold tracking-wide uppercase text-white mb-2">
+                          {promo.title}
+                        </span>
+                        <h4 className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
+                          {promo.subtitle}
+                        </h4>
+                        <p className="mt-1 text-xs sm:text-sm text-white/85 leading-snug line-clamp-2">
+                          {promo.description}
+                        </p>
                       </div>
+
+                      <Link
+                        to={promo.link}
+                        onClick={pauseAutoSlide}
+                        className="relative z-10 self-start inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-white text-xs sm:text-sm font-semibold shadow-sm hover:bg-gray-50 transition-colors"
+                        style={{ color: promo.accentColor }}
+                      >
+                        {promo.buttonText}
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
                     </div>
-                    <div className="text-right">
-                      <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-2">
-                        <span className="text-2xl font-bold text-white">30%</span>
-                      </div>
-                    </div>
-                  </div>
-                  <Link
-                    to={promo.link}
-                    className="self-start px-4 py-2 text-sm font-medium bg-white text-gray-800 rounded-full hover:bg-gray-50 transition-colors"
-                  >
-                    {promo.buttonText}
-                  </Link>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Slide Indicators */}
-        <div className="flex justify-center space-x-2 mb-6">
-          {promotions.map((_, index) => (
+        <div className="flex justify-center gap-2 mt-4">
+          {Array.from({ length: pageCount }).map((_, index) => (
             <button
-              key={index}
-              onClick={() => goToSlide(index)}
-              className={`w-2 h-2 rounded-full transition-colors ${
-                index === currentSlide ? 'bg-blue-600' : 'bg-gray-300'
+              key={`dot-${index}`}
+              type="button"
+              onClick={() => {
+                pauseAutoSlide();
+                goToPage(index);
+              }}
+              aria-label={`Go to offers page ${index + 1}`}
+              className={`h-2 rounded-full transition-all ${
+                index === page ? 'w-5 bg-gray-700' : 'w-2 bg-gray-300 hover:bg-gray-400'
               }`}
             />
           ))}
-        </div>
-
-        {/* Security Badge */}
-        <div className="flex items-center justify-center p-3 bg-gray-50 rounded-lg border border-gray-100">
-          <ShieldCheck className="w-5 h-5 mr-3 text-blue-600" />
-          <span className="text-sm text-gray-600 font-medium">
-            Secure Payments & Verified Sellers
-          </span>
         </div>
       </div>
     </div>

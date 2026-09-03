@@ -60,8 +60,27 @@ export class WavePaymentController {
       let isRide = false;
       let isServiceBooking = false;
       let isPropertyBooking = false;
+      let isPropertyInquiry = false;
+      let isSubscriptionPayment = false;
+      let subscriptionVertical: 'HOME_SERVICES' | 'REAL_ESTATE' | null = null;
 
       if (orderId) {
+        const subscriptionPayment = await prisma.providerSubscriptionPayment.findUnique({
+          where: { id: orderId },
+          include: { subscription: true },
+        });
+        if (subscriptionPayment) {
+          isSubscriptionPayment = true;
+          actualOrderId = subscriptionPayment.id;
+          sellerId = subscriptionPayment.subscription.userId;
+          subscriptionVertical = subscriptionPayment.subscription.vertical;
+          if (subscriptionPayment.subscription.userId !== userId) {
+            res.status(403).json({ success: false, message: 'Not authorized to pay for this subscription' });
+            return;
+          }
+        }
+
+        if (!isSubscriptionPayment) {
         const serviceBooking = await prisma.serviceBooking.findUnique({
           where: { id: orderId },
           include: { provider: { include: { user: { select: { id: true } } } } },
@@ -101,6 +120,34 @@ export class WavePaymentController {
         }
 
         if (!isServiceBooking && !isPropertyBooking) {
+          const propertyInquiry = await prisma.propertyInquiry.findUnique({
+            where: { id: orderId },
+            include: {
+              listing: {
+                include: {
+                  agent: {
+                    include: { user: { select: { id: true } } },
+                  },
+                },
+              },
+            },
+          });
+          if (propertyInquiry) {
+            isPropertyInquiry = true;
+            actualOrderId = propertyInquiry.id;
+            sellerId = propertyInquiry.listing.agent.user.id;
+            if (propertyInquiry.customerId !== userId) {
+              res.status(403).json({ success: false, message: 'Not authorized to pay for this property purchase' });
+              return;
+            }
+            if (propertyInquiry.listing.status !== 'ACTIVE') {
+              res.status(400).json({ success: false, message: 'This property is no longer available' });
+              return;
+            }
+          }
+        }
+
+        if (!isServiceBooking && !isPropertyBooking && !isPropertyInquiry) {
         const rental = await prisma.rentalRequest.findUnique({
           where: { id: orderId },
           include: { driver: { include: { user: { select: { id: true } } } } },
@@ -147,14 +194,16 @@ export class WavePaymentController {
           }
         }
         }
+        }
       }
 
       // Generate app-level transaction id
       const appTransactionId = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
       // Calculate service fee configuration for Wave (falls back to 0 if not configured)
-      const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } =
-        await UCPService.calculateServiceFee('wave_wallet', originalAmount, currencyCode);
+      const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } = isSubscriptionPayment
+        ? { serviceFeeAmount: 0, serviceFeePercentage: 0, config: null as any }
+        : await UCPService.calculateServiceFee('wave_wallet', originalAmount, currencyCode);
 
       // Build callback/return URLs from a configured public HTTPS app base
       // Never fall back to WAVE_API_BASE_URL (that's the upstream, not our app)
@@ -198,9 +247,11 @@ export class WavePaymentController {
           appTransactionId,
           gatewayTransactionId: session.transaction_id || session.id,
           gatewayProvider: 'wave_gambia',
-          appService: isServiceBooking
+          appService: isSubscriptionPayment
+            ? (subscriptionVertical || 'HOME_SERVICES')
+            : isServiceBooking
             ? 'HOME_SERVICES'
-            : isPropertyBooking
+            : (isPropertyBooking || isPropertyInquiry)
               ? 'REAL_ESTATE'
               : isRental
                 ? 'RENTAL'
@@ -213,6 +264,7 @@ export class WavePaymentController {
           paidThroughGateway: true,
           customerId: userId,
           sellerId,
+          transactionType: isSubscriptionPayment ? 'SUBSCRIPTION' : 'ORIGINAL',
           gatewayResponse: {
             waveSessionId: session.id,
             waveLaunchUrl: session.wave_launch_url,
@@ -228,8 +280,10 @@ export class WavePaymentController {
           },
         };
 
-        if (isServiceBooking) transactionData.serviceBookingId = actualOrderId;
+        if (isSubscriptionPayment) transactionData.providerSubscriptionPaymentId = actualOrderId;
+        else if (isServiceBooking) transactionData.serviceBookingId = actualOrderId;
         else if (isPropertyBooking) transactionData.propertyBookingId = actualOrderId;
+        else if (isPropertyInquiry) transactionData.propertyInquiryId = actualOrderId;
         else if (isRental) transactionData.rentalRequestId = actualOrderId;
         else if (isRide) transactionData.rideRequestId = actualOrderId;
         else transactionData.orderId = actualOrderId;
@@ -244,7 +298,7 @@ export class WavePaymentController {
             gatewayProvider: 'wave_gambia',
             appService: isServiceBooking
             ? 'HOME_SERVICES'
-            : isPropertyBooking
+            : (isPropertyBooking || isPropertyInquiry)
               ? 'REAL_ESTATE'
               : isRental
                 ? 'RENTAL'
@@ -266,6 +320,7 @@ export class WavePaymentController {
           };
           if (isServiceBooking) serviceFeeData.serviceBookingId = actualOrderId;
           else if (isPropertyBooking) serviceFeeData.propertyBookingId = actualOrderId;
+          else if (isPropertyInquiry) serviceFeeData.propertyInquiryId = actualOrderId;
           else if (isRental) serviceFeeData.rentalRequestId = actualOrderId;
           else if (isRide) serviceFeeData.rideRequestId = actualOrderId;
           else serviceFeeData.orderId = actualOrderId;

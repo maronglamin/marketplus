@@ -1,6 +1,26 @@
 import { api } from './api';
 
-export type PropertyListingType = 'HOTEL' | 'APARTMENT_RENTAL' | 'HOME_SALE' | 'LAND_SALE';
+export type PropertyListingType =
+  | 'HOTEL'
+  | 'APARTMENT_RENTAL'
+  | 'GUEST_HOUSE'
+  | 'BOAT_TRIP'
+  | 'HOME_SALE'
+  | 'LAND_SALE';
+
+export const STAY_LISTING_TYPES: PropertyListingType[] = [
+  'HOTEL',
+  'APARTMENT_RENTAL',
+  'GUEST_HOUSE',
+  'BOAT_TRIP',
+];
+
+export const isStayListingType = (type: string) =>
+  STAY_LISTING_TYPES.includes(type as PropertyListingType);
+
+export const isSaleListingType = (type: string) =>
+  type === 'HOME_SALE' || type === 'LAND_SALE';
+
 export type PropertyTourType = 'MATTERPORT' | 'YOUTUBE' | 'EXTERNAL_URL' | 'IMAGE_GALLERY';
 export type PropertyImageCategory = 'EXTERIOR' | 'ROOM' | 'BATHROOM' | 'OTHER';
 
@@ -152,6 +172,7 @@ export interface PropertyBooking {
   currency: string;
   status: string;
   paymentStatus: string;
+  notes?: string;
   listing: PropertyListing;
   roomType?: PropertyRoomType;
   customer?: { firstName: string; lastName: string; phoneNumber?: string };
@@ -160,9 +181,14 @@ export interface PropertyBooking {
 
 export interface PropertyInquiry {
   id: string;
+  purchaseRef?: string;
   message: string;
   preferredDate?: string;
+  salePrice?: number;
+  currency?: string;
   status: string;
+  paymentStatus?: string;
+  settlementStatus?: string;
   listing: PropertyListing;
   customer?: { firstName: string; lastName: string; phoneNumber?: string };
   createdAt: string;
@@ -319,6 +345,16 @@ export const realEstateApi = {
     return res.data?.data ?? [];
   },
 
+  getInquiry: async (id: string): Promise<PropertyInquiry> => {
+    const res = await api.get(`/api/property-bookings/inquiries/${id}`);
+    return res.data?.data;
+  },
+
+  updateInquiryStatus: async (id: string, status: string) => {
+    const res = await api.patch(`/api/property-bookings/inquiries/${id}/status`, { status });
+    return res.data?.data;
+  },
+
   getBooking: async (id: string): Promise<PropertyBooking> => {
     const res = await api.get(`/api/property-bookings/${id}`);
     return res.data?.data;
@@ -326,6 +362,14 @@ export const realEstateApi = {
 
   processPayment: async (id: string, paymentMethodId: string, paymentIntentId?: string) => {
     const res = await api.post(`/api/property-bookings/${id}/payment`, { paymentMethodId, paymentIntentId });
+    return res.data;
+  },
+
+  processInquiryPayment: async (id: string, paymentMethodId: string, paymentIntentId?: string) => {
+    const res = await api.post(`/api/property-bookings/inquiries/${id}/payment`, {
+      paymentMethodId,
+      paymentIntentId,
+    });
     return res.data;
   },
 };

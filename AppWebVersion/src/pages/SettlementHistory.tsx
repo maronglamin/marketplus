@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Clock, CheckCircle, XCircle, AlertCircle, CreditCard, Wallet, Calendar, ArrowRight } from 'lucide-react';
-import { settlementService, type SettlementRequest } from '../api/settlementService';
+import { settlementService, type SettlementRequest, type SettlementChannel } from '../api/settlementService';
 
 export function SettlementHistory() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const channel = (searchParams.get('channel') as SettlementChannel | null) || undefined;
   const [settlements, setSettlements] = useState<SettlementRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -12,15 +14,19 @@ export function SettlementHistory() {
   const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
+    setPage(1);
+  }, [channel]);
+
+  useEffect(() => {
     loadSettlements();
-  }, [page]);
+  }, [page, channel]);
 
   const loadSettlements = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const response = await settlementService.getSettlementHistory(page, 20);
+      const response = await settlementService.getSettlementHistory(page, 20, channel);
       
       if (page === 1) {
         setSettlements(response.settlements);
@@ -220,7 +226,11 @@ export function SettlementHistory() {
               <h1 className="text-2xl font-bold text-gray-900">Settlement History</h1>
             </div>
             <button
-              onClick={() => navigate('/settlement-request')}
+              onClick={() => {
+                if (channel === 'REAL_ESTATE') navigate('/real-estate/settlement-request');
+                else if (channel === 'HOME_SERVICES') navigate('/home-services/settlement-request');
+                else navigate('/settlement-request');
+              }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
               New Request
@@ -305,7 +315,11 @@ export function SettlementHistory() {
             <h3 className="text-lg font-medium text-gray-900 mb-2">No settlements found</h3>
             <p className="text-gray-500 mb-4">You haven't made any settlement requests yet</p>
             <button
-              onClick={() => navigate('/settlement-request')}
+              onClick={() => {
+                if (channel === 'REAL_ESTATE') navigate('/real-estate/settlement-request');
+                else if (channel === 'HOME_SERVICES') navigate('/home-services/settlement-request');
+                else navigate('/settlement-request');
+              }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
               Request Settlement

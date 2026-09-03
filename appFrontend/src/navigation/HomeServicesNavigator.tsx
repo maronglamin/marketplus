@@ -10,6 +10,7 @@ import { ServiceProviderBookingDetail } from '../screens/home-services/ServicePr
 import { ServiceBookingChat } from '../screens/home-services/ServiceBookingChat';
 import { BecomeServiceProvider } from '../screens/home-services/BecomeServiceProvider';
 import { ServiceProviderDashboard } from '../screens/home-services/ServiceProviderDashboard';
+import { SubscriptionPayScreen } from '../screens/shared/SubscriptionPayScreen';
 
 export type HomeServicesStackParamList = {
   HomeServicesHub: undefined;
@@ -29,6 +30,7 @@ export type HomeServicesStackParamList = {
   ServiceBookingChat: { bookingId: string };
   BecomeServiceProvider: undefined;
   ServiceProviderDashboard: undefined;
+  ProviderSubscriptionPay: { vertical?: 'HOME_SERVICES' | 'REAL_ESTATE' };
 };
 
 const Stack = createNativeStackNavigator<HomeServicesStackParamList>();
@@ -54,6 +56,7 @@ export function HomeServicesNavigator() {
       <Stack.Screen name="ServiceBookingChat" component={ServiceBookingChat} />
       <Stack.Screen name="BecomeServiceProvider" component={BecomeServiceProvider} />
       <Stack.Screen name="ServiceProviderDashboard" component={ServiceProviderDashboard} />
+      <Stack.Screen name="ProviderSubscriptionPay" component={SubscriptionPayScreen} initialParams={{ vertical: 'HOME_SERVICES' }} />
     </Stack.Navigator>
   );
 }

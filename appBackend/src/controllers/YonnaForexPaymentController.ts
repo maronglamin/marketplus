@@ -81,10 +81,28 @@ export class YonnaForexPaymentController {
       let isRide = false;
       let isServiceBooking = false;
       let isPropertyBooking = false;
+      let isPropertyInquiry = false;
+      let isSubscriptionPayment = false;
+      let subscriptionVertical: 'HOME_SERVICES' | 'REAL_ESTATE' | null = null;
       
       if (orderId) {
+        const subscriptionPayment = await prisma.providerSubscriptionPayment.findUnique({
+          where: { id: orderId },
+          include: { subscription: true },
+        });
+        if (subscriptionPayment) {
+          isSubscriptionPayment = true;
+          sellerId = subscriptionPayment.subscription.userId;
+          actualOrderId = subscriptionPayment.id;
+          subscriptionVertical = subscriptionPayment.subscription.vertical;
+          if (subscriptionPayment.subscription.userId !== userId) {
+            res.status(403).json({ success: false, message: 'Not authorized' });
+            return;
+          }
+        }
+
         // Service booking
-        const serviceBooking = await prisma.serviceBooking.findUnique({
+        const serviceBooking = isSubscriptionPayment ? null : await prisma.serviceBooking.findUnique({
           where: { id: orderId },
           include: { provider: { include: { user: { select: { id: true } } } } },
         });
@@ -123,8 +141,37 @@ export class YonnaForexPaymentController {
           }
         }
 
-        let rental = null;
+        // Property sale inquiry (home/land)
         if (!isServiceBooking && !isPropertyBooking) {
+          const propertyInquiry = await prisma.propertyInquiry.findUnique({
+            where: { id: orderId },
+            include: {
+              listing: {
+                include: {
+                  agent: {
+                    include: { user: { select: { id: true } } },
+                  },
+                },
+              },
+            },
+          });
+          if (propertyInquiry) {
+            isPropertyInquiry = true;
+            sellerId = propertyInquiry.listing.agent.user.id;
+            actualOrderId = propertyInquiry.id;
+            if (propertyInquiry.customerId !== userId) {
+              res.status(403).json({ success: false, message: 'Not authorized' });
+              return;
+            }
+            if (propertyInquiry.listing.status !== 'ACTIVE') {
+              res.status(400).json({ success: false, message: 'This property is no longer available' });
+              return;
+            }
+          }
+        }
+
+        let rental = null;
+        if (!isServiceBooking && !isPropertyBooking && !isPropertyInquiry) {
           rental = await prisma.rentalRequest.findUnique({
             where: { id: orderId },
             include: {
@@ -149,7 +196,7 @@ export class YonnaForexPaymentController {
             });
             return;
           }
-        } else if (!isServiceBooking && !isPropertyBooking) {
+        } else if (!isServiceBooking && !isPropertyBooking && !isPropertyInquiry) {
           // Try to find as ride request
           let rideRequest = await prisma.rideRequest.findUnique({
             where: { requestId: orderId },
@@ -208,7 +255,7 @@ export class YonnaForexPaymentController {
                 });
                 return;
               }
-            } else if (!isServiceBooking && !isPropertyBooking) {
+            } else if (!isServiceBooking && !isPropertyBooking && !isSubscriptionPayment) {
               res.status(404).json({
                 success: false,
                 message: 'Order, rental, ride, service or property booking not found'
@@ -242,7 +289,9 @@ export class YonnaForexPaymentController {
       const currencyCode = currency.toUpperCase();
 
       // Calculate service fee using UCP configuration
-      const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } = await UCPService.calculateServiceFee('yonna_wallet', originalAmount, currencyCode);
+      const { serviceFeeAmount, serviceFeePercentage, config: serviceFeeConfig } = isSubscriptionPayment
+        ? { serviceFeeAmount: 0, serviceFeePercentage: 0, config: null as any }
+        : await UCPService.calculateServiceFee('yonna_wallet', originalAmount, currencyCode);
 
       // Generate app-level transaction ID for internal tracking
       const appTransactionId = `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -256,7 +305,8 @@ export class YonnaForexPaymentController {
         countryCode: '+220', // Default country code for Yonna Forex
         appTransactionId: appTransactionId,
         description: orderId ? 
-          (isServiceBooking ? `Payment for Service Booking #${orderId} via Yonna Forex Wallet` :
+          (isSubscriptionPayment ? `Subscription payment via Yonna Forex Wallet` :
+           isServiceBooking ? `Payment for Service Booking #${orderId} via Yonna Forex Wallet` :
            isPropertyBooking ? `Payment for Property Booking #${orderId} via Yonna Forex Wallet` :
            isRental ? `Payment for Rental #${orderId} via Yonna Forex Wallet` : 
            isRide ? `Payment for Ride #${orderId} via Yonna Forex Wallet` :
@@ -274,13 +324,16 @@ export class YonnaForexPaymentController {
             appTransactionId: appTransactionId,
             gatewayTransactionId: finalTransactionId,
             gatewayProvider: 'yonna_forex',
-            appService: isServiceBooking ? 'HOME_SERVICES' : isPropertyBooking ? 'REAL_ESTATE' : isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
+            appService: isSubscriptionPayment
+              ? (subscriptionVertical || 'HOME_SERVICES')
+              : isServiceBooking ? 'HOME_SERVICES' : (isPropertyBooking || isPropertyInquiry) ? 'REAL_ESTATE' : isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
             amount: originalAmount,
             currencyCode: currencyCode,
             status: 'PENDING',
             paidThroughGateway: true,
             customerId: userId,
             sellerId: sellerId,
+            transactionType: isSubscriptionPayment ? 'SUBSCRIPTION' : 'ORIGINAL',
             gatewayResponse: {
               yonnaTransactionId: finalTransactionId,
               phoneNumber: phoneNumber,
@@ -292,10 +345,14 @@ export class YonnaForexPaymentController {
           };
 
           // Add order, rental, or ride reference
-          if (isServiceBooking) {
+          if (isSubscriptionPayment) {
+            transactionData.providerSubscriptionPaymentId = actualOrderId;
+          } else if (isServiceBooking) {
             transactionData.serviceBookingId = actualOrderId;
           } else if (isPropertyBooking) {
             transactionData.propertyBookingId = actualOrderId;
+          } else if (isPropertyInquiry) {
+            transactionData.propertyInquiryId = actualOrderId;
           } else if (isRental) {
             transactionData.rentalRequestId = actualOrderId;
           } else if (isRide) {
@@ -315,7 +372,7 @@ export class YonnaForexPaymentController {
               appTransactionId: serviceFeeTransactionId,
               gatewayTransactionId: `${finalTransactionId}`,
               gatewayProvider: 'yonna_forex',
-              appService: isServiceBooking ? 'HOME_SERVICES' : isPropertyBooking ? 'REAL_ESTATE' : isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
+              appService: isServiceBooking ? 'HOME_SERVICES' : (isPropertyBooking || isPropertyInquiry) ? 'REAL_ESTATE' : isRental ? 'RENTAL' : isRide ? 'RIDE' : 'ECOMMERCE',
               amount: serviceFeeAmount,
               currencyCode: currencyCode,
               status: 'PENDING',
@@ -335,6 +392,8 @@ export class YonnaForexPaymentController {
               serviceFeeData.serviceBookingId = actualOrderId;
             } else if (isPropertyBooking) {
               serviceFeeData.propertyBookingId = actualOrderId;
+            } else if (isPropertyInquiry) {
+              serviceFeeData.propertyInquiryId = actualOrderId;
             } else if (isRental) {
               serviceFeeData.rentalRequestId = actualOrderId;
             } else if (isRide) {

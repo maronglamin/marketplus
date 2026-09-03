@@ -11,11 +11,14 @@ import { BecomePropertyAgent } from '../screens/real-estate/BecomePropertyAgent'
 import { ManageListings } from '../screens/real-estate/ManageListings';
 import { ListProperty } from '../screens/real-estate/ListProperty';
 import { ListingSetup } from '../screens/real-estate/ListingSetup';
+import { AgentReservationDetail } from '../screens/real-estate/AgentReservationDetail';
+import { AgentInquiryDetail } from '../screens/real-estate/AgentInquiryDetail';
+import { SubscriptionPayScreen } from '../screens/shared/SubscriptionPayScreen';
 
 export type RealEstateStackParamList = {
-  RealEstateHub: undefined;
+  RealEstateHub: { section?: 'stay' | 'realestate' | 'all' } | undefined;
   PropertyListingBrowse: {
-    listingType: 'HOTEL' | 'APARTMENT_RENTAL' | 'HOME_SALE' | 'LAND_SALE';
+    listingType: 'HOTEL' | 'APARTMENT_RENTAL' | 'GUEST_HOUSE' | 'BOAT_TRIP' | 'HOME_SALE' | 'LAND_SALE';
     title: string;
     checkIn?: string;
     checkOut?: string;
@@ -36,10 +39,13 @@ export type RealEstateStackParamList = {
   };
   PropertyInquiryForm: { listingId: string };
   MyPropertyBookings: undefined;
-  BecomePropertyAgent: undefined;
+  BecomePropertyAgent: { section?: 'stay' | 'realestate' | 'all' } | undefined;
   ManageListings: undefined;
   ListProperty: undefined;
   ListingSetup: { listingId: string; listingTitle: string };
+  AgentReservationDetail: { bookingId: string };
+  AgentInquiryDetail: { inquiryId: string };
+  AgentSubscriptionPay: { vertical?: 'HOME_SERVICES' | 'REAL_ESTATE' };
 };
 
 const Stack = createNativeStackNavigator<RealEstateStackParamList>();
@@ -66,6 +72,9 @@ export function RealEstateNavigator() {
       <Stack.Screen name="ManageListings" component={ManageListings} />
       <Stack.Screen name="ListProperty" component={ListProperty} />
       <Stack.Screen name="ListingSetup" component={ListingSetup} />
+      <Stack.Screen name="AgentReservationDetail" component={AgentReservationDetail} />
+      <Stack.Screen name="AgentInquiryDetail" component={AgentInquiryDetail} />
+      <Stack.Screen name="AgentSubscriptionPay" component={SubscriptionPayScreen} initialParams={{ vertical: 'REAL_ESTATE' }} />
     </Stack.Navigator>
   );
 }

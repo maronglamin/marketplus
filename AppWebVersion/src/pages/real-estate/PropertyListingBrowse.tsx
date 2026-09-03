@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { MapPin, Building2 } from 'lucide-react';
 import { PageHeader } from '../../components/PageHeader';
 import { getImageUrl } from '../../config/api';
-import { realEstateApi, type PropertyListing, type PropertyListingType } from '../../api/realEstateApi';
+import { realEstateApi, type PropertyListing, type PropertyListingType, isStayListingType } from '../../api/realEstateApi';
 import { formatPrice } from '../../utils/formatPrice';
 
 export function PropertyListingBrowse() {
@@ -18,7 +18,7 @@ export function PropertyListingBrowse() {
   const [listings, setListings] = useState<PropertyListing[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isStaySearch = (listingType === 'HOTEL' || listingType === 'APARTMENT_RENTAL') && checkIn && checkOut;
+  const isStaySearch = !!listingType && isStayListingType(listingType) && !!checkIn && !!checkOut;
 
   const loadListings = useCallback(async () => {
     if (!listingType) return;

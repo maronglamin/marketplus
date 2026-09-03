@@ -75,6 +75,8 @@ import { RepProductReport } from '../screens/reps-reports/RepProductReport';
 import { ShoppingCart } from '../screens/ShoppingCart';
 import { RentalEarnings } from '../screens/RentalEarnings';
 import { RentalSettlementRequest } from '../screens/transactions/RentalSettlementRequest';
+import { RealEstateSettlementRequest } from '../screens/real-estate/RealEstateSettlementRequest';
+import { HomeServiceSettlementRequest } from '../screens/home-services/HomeServiceSettlementRequest';
 import { HomeServicesNavigator, type HomeServicesStackParamList } from './HomeServicesNavigator';
 import { RealEstateNavigator, type RealEstateStackParamList } from './RealEstateNavigator';
 import type { NavigatorScreenParams } from '@react-navigation/native';
@@ -193,7 +195,7 @@ export type AppStackParamList = {
   TransactionHistory: { currency: string; currencySymbol: string };
   TransactionDetail: { transactionId: string; currency: string; currencySymbol: string };
   SettlementRequest: undefined;
-  SettlementHistory: undefined;
+  SettlementHistory: { channel?: 'ECOMMERCE' | 'RIDES' | 'RENTALS' | 'REAL_ESTATE' | 'HOME_SERVICES' } | undefined;
   SettlementDetail: { settlementId: string; currency: string; currencySymbol: string };
   RideSettlementRequest: undefined;
   BecomeRider: { 
@@ -205,6 +207,8 @@ export type AppStackParamList = {
   DriverEarnings: undefined;
   RentalEarnings: undefined;
   RentalSettlementRequest: { defaultCurrency?: string } | undefined;
+  RealEstateSettlementRequest: { defaultCurrency?: string } | undefined;
+  HomeServiceSettlementRequest: { defaultCurrency?: string } | undefined;
   DriverSettings: undefined;
   DriverProfile: undefined;
   JourneyMapView: {
@@ -347,6 +351,8 @@ export function AppNavigator() {
         <Stack.Screen name="DriverEarnings" component={DriverEarnings} options={{ gestureEnabled: true }} />
         <Stack.Screen name="RentalEarnings" component={RentalEarnings} options={{ gestureEnabled: true }} />
         <Stack.Screen name="RentalSettlementRequest" component={RentalSettlementRequest} />
+        <Stack.Screen name="RealEstateSettlementRequest" component={RealEstateSettlementRequest} />
+        <Stack.Screen name="HomeServiceSettlementRequest" component={HomeServiceSettlementRequest} />
         <Stack.Screen name="DriverSettings" component={DriverSettings} options={{ gestureEnabled: true }} />
         <Stack.Screen name="DriverProfile" component={DriverProfile} options={{ gestureEnabled: true }} />
         <Stack.Screen name="JourneyMapView" component={JourneyMapView} options={{ gestureEnabled: true }} />

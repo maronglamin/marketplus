@@ -19,11 +19,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import type { HomeServicesStackParamList } from '../../navigation/HomeServicesNavigator';
-import { goToSectionRoot } from '../../navigation/sectionNavigation';
+import { goToSectionRoot, navigateToRootScreen } from '../../navigation/sectionNavigation';
 import { homeServicesApi, type ServiceBooking, type ServiceProvider } from '../../services/homeServicesApi';
+import { settlementService, type AvailableHomeServiceEarnings } from '../../services/settlementService';
 import { uploadService } from '../../services/uploadService';
 import { getImageUrl } from '../../config/env';
 import { useApprovalRedirect } from '../../hooks/useApprovalRedirect';
+import { providerSubscriptionApi, type SubscriptionSnapshot } from '../../services/providerSubscriptionApi';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -62,6 +64,17 @@ export function ServiceProviderDashboard() {
   const [portfolioImages, setPortfolioImages] = useState<string[]>([]);
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [portfolioUris, setPortfolioUris] = useState<string[]>([]);
+  const [availableEarnings, setAvailableEarnings] = useState<AvailableHomeServiceEarnings[]>([]);
+  const [subscription, setSubscription] = useState<SubscriptionSnapshot | null>(null);
+
+  const loadEarnings = useCallback(async () => {
+    try {
+      const earnings = await settlementService.getAvailableHomeServiceEarnings();
+      setAvailableEarnings(earnings ?? []);
+    } catch {
+      setAvailableEarnings([]);
+    }
+  }, []);
 
   const loadData = useCallback(async (isRefresh = false) => {
     try {
@@ -74,6 +87,7 @@ export function ServiceProviderDashboard() {
         setNotApproved(true);
         setProvider(null);
         setBookings([]);
+        setAvailableEarnings([]);
         return;
       }
 
@@ -89,13 +103,19 @@ export function ServiceProviderDashboard() {
       setBookings(data);
       const offerings = await homeServicesApi.getMyOfferings();
       setOfferingsCount(offerings.filter((o) => o.isActive).length);
+      await loadEarnings();
+      try {
+        setSubscription(await providerSubscriptionApi.getMine('HOME_SERVICES'));
+      } catch {
+        setSubscription(null);
+      }
     } catch {
       setBookings([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [loadEarnings]);
 
   useFocusEffect(
     useCallback(() => {
@@ -318,6 +338,28 @@ export function ServiceProviderDashboard() {
           <Text style={styles.setupBannerText}>Complete setup: add at least one service and set your availability.</Text>
         </View>
       )}
+      {subscription?.settings?.isRequired && subscription.subscription && subscription.subscription.status !== 'ACTIVE' && (
+        <TouchableOpacity
+          style={[
+            styles.setupBanner,
+            subscription.subscription.status === 'SUSPENDED' && { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+          ]}
+          onPress={() => navigation.navigate('ProviderSubscriptionPay', { vertical: 'HOME_SERVICES' })}
+        >
+          <Ionicons
+            name={subscription.subscription.status === 'SUSPENDED' ? 'alert-circle-outline' : 'card-outline'}
+            size={20}
+            color={subscription.subscription.status === 'SUSPENDED' ? '#B91C1C' : '#D97706'}
+          />
+          <Text style={[styles.setupBannerText, subscription.subscription.status === 'SUSPENDED' && { color: '#991B1B' }]}>
+            {subscription.subscription.status === 'GRACE'
+              ? `Pay by ${new Date(subscription.subscription.gracePeriodEndsAt).toLocaleDateString()} to stay listed.`
+              : subscription.subscription.status === 'PAST_DUE'
+                ? 'Renew now to avoid suspension.'
+                : 'Pay to restore your listing.'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {activeTab === 'overview' ? (
         <ScrollView
@@ -366,6 +408,58 @@ export function ServiceProviderDashboard() {
             <TouchableOpacity style={styles.actionButton} onPress={() => goToSectionRoot(navigation, 'HomeServicesHub')}>
               <Ionicons name="search-outline" size={22} color={ACCENT} />
               <Text style={styles.actionButtonText}>Browse Services</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.earningsCard}>
+            <View style={styles.earningsHeader}>
+              <View style={styles.earningsTitleRow}>
+                <Ionicons name="wallet-outline" size={20} color={ACCENT} />
+                <Text style={styles.earningsTitle}>Available for settlement</Text>
+              </View>
+              {availableEarnings.length > 0 ? (
+                availableEarnings.map((earning) => (
+                  <View key={earning.currency} style={styles.earningsRow}>
+                    <Text style={styles.earningsAmount}>
+                      {earning.currencySymbol || earning.currency}
+                      {Number(earning.amount).toLocaleString()}
+                    </Text>
+                    <Text style={styles.earningsMeta}>
+                      {earning.bookingsCount} paid booking{earning.bookingsCount === 1 ? '' : 's'} · {earning.currency}
+                    </Text>
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.earningsEmpty}>
+                  Paid service bookings will appear here when ready to settle.
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.settlementButton,
+                availableEarnings.length === 0 && styles.settlementButtonDisabled,
+              ]}
+              disabled={availableEarnings.length === 0}
+              activeOpacity={0.85}
+              onPress={() =>
+                navigateToRootScreen(navigation, 'HomeServiceSettlementRequest', {
+                  defaultCurrency: availableEarnings[0]?.currency,
+                })
+              }
+            >
+              <Ionicons name="cash-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.settlementButtonText}>Request Settlement</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.historyLink}
+              activeOpacity={0.7}
+              onPress={() =>
+                navigateToRootScreen(navigation, 'SettlementHistory', { channel: 'HOME_SERVICES' })
+              }
+            >
+              <Text style={styles.historyLinkText}>View settlement history</Text>
+              <Ionicons name="chevron-forward" size={16} color={ACCENT} />
             </TouchableOpacity>
           </View>
 
@@ -561,6 +655,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F9FF',
   },
   actionButtonText: { fontSize: 14, fontWeight: '600', color: ACCENT },
+  earningsCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    backgroundColor: '#F0F9FF',
+    maxWidth: Math.min(900, screenWidth - 32),
+    alignSelf: 'center',
+    width: '100%',
+  },
+  earningsHeader: { marginBottom: 12 },
+  earningsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  earningsTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  earningsRow: { marginBottom: 8 },
+  earningsAmount: { fontSize: 22, fontWeight: '700', color: ACCENT },
+  earningsMeta: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  earningsEmpty: { fontSize: 13, color: '#6B7280', lineHeight: 18 },
+  settlementButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: ACCENT,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  settlementButtonDisabled: { opacity: 0.45 },
+  settlementButtonText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
+  historyLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+  },
+  historyLinkText: { fontSize: 13, fontWeight: '600', color: ACCENT },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',

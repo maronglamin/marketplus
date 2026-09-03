@@ -17,7 +17,9 @@ ext {
   minSdkVersion = Integer.parseInt(findProperty('android.minSdkVersion') ?: '24')
   compileSdkVersion = Integer.parseInt(findProperty('android.compileSdkVersion') ?: '35')
   targetSdkVersion = Integer.parseInt(findProperty('android.targetSdkVersion') ?: '35')
-  ndkVersion = findProperty('android.ndkVersion') ?: '26.1.10909125'
+  // NDK r27+ is required for 16 KB page-size alignment (Play Store requirement).
+  // ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES in expo-modules-core / reanimated / screens is a no-op on r26.
+  ndkVersion = findProperty('android.ndkVersion') ?: '27.1.12297006'
   kotlinVersion = findProperty('android.kotlinVersion') ?: '2.0.21'
 }
 

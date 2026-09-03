@@ -11,16 +11,19 @@ import {
   RefreshControl,
   ScrollView,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import type { RealEstateStackParamList } from '../../navigation/RealEstateNavigator';
-import { goToSectionRoot } from '../../navigation/sectionNavigation';
-import { realEstateApi, type PropertyListing, type PropertyBooking, type PropertyInquiry } from '../../services/realEstateApi';
+import { goToSectionRoot, navigateToRootScreen } from '../../navigation/sectionNavigation';
+import { realEstateApi, type PropertyListing, type PropertyBooking, type PropertyInquiry, isStayListingType } from '../../services/realEstateApi';
+import { settlementService, type AvailableRealEstateEarnings } from '../../services/settlementService';
 import { getImageUrl } from '../../config/env';
 import { useApprovalRedirect } from '../../hooks/useApprovalRedirect';
+import { providerSubscriptionApi, type SubscriptionSnapshot } from '../../services/providerSubscriptionApi';
 
 const ACCENT = '#7C3AED';
 const { width: screenWidth } = Dimensions.get('window');
@@ -53,6 +56,8 @@ export function ManageListings() {
   const [isApprovedAgent, setIsApprovedAgent] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
   const [agentName, setAgentName] = useState('');
+  const [availableEarnings, setAvailableEarnings] = useState<AvailableRealEstateEarnings[]>([]);
+  const [subscription, setSubscription] = useState<SubscriptionSnapshot | null>(null);
 
   const checkAgentStatus = useCallback(async () => {
     try {
@@ -68,10 +73,20 @@ export function ManageListings() {
     }
   }, []);
 
+  const loadEarnings = useCallback(async () => {
+    try {
+      const earnings = await settlementService.getAvailableRealEstateEarnings();
+      setAvailableEarnings(earnings ?? []);
+    } catch {
+      setAvailableEarnings([]);
+    }
+  }, []);
+
   const loadListings = useCallback(async (isRefresh = false) => {
     const approved = await checkAgentStatus();
     if (!approved) {
       setListings([]);
+      setAvailableEarnings([]);
       setLoading(false);
       setRefreshing(false);
       return;
@@ -90,13 +105,19 @@ export function ManageListings() {
         setBookings([]);
         setInquiries([]);
       }
+      await loadEarnings();
+      try {
+        setSubscription(await providerSubscriptionApi.getMine('REAL_ESTATE'));
+      } catch {
+        setSubscription(null);
+      }
     } catch {
       setListings([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [checkAgentStatus]);
+  }, [checkAgentStatus, loadEarnings]);
 
   useFocusEffect(
     useCallback(() => {
@@ -126,9 +147,17 @@ export function ManageListings() {
     total: listings.length,
     active: listings.filter((l) => l.status === 'ACTIVE').length,
     pending: listings.filter((l) => l.status === 'PENDING_REVIEW' || l.status === 'PENDING_SETUP').length,
-    stay: listings.filter((l) => l.listingType === 'HOTEL' || l.listingType === 'APARTMENT_RENTAL').length,
+    stay: listings.filter((l) => isStayListingType(l.listingType)).length,
     bookings: bookings.length,
   }), [listings, bookings]);
+
+  const goToListProperty = () => {
+    if (subscription?.settings?.isRequired && !subscription.canOperate) {
+      navigation.navigate('AgentSubscriptionPay', { vertical: 'REAL_ESTATE' });
+      return;
+    }
+    navigation.navigate('ListProperty');
+  };
 
   const handlePublish = async (listingId: string, title: string) => {
     try {
@@ -145,7 +174,7 @@ export function ManageListings() {
     const statusColor = STATUS_COLORS[item.status] || '#6B7280';
     const needsSetup = item.status === 'PENDING_SETUP';
     const needsPublish = item.status === 'PENDING_REVIEW';
-    const isStay = item.listingType === 'HOTEL' || item.listingType === 'APARTMENT_RENTAL';
+    const isStay = isStayListingType(item.listingType);
     const statusLabel = needsSetup ? 'Needs setup' : needsPublish ? 'Ready to publish' : item.status;
 
     return (
@@ -246,9 +275,7 @@ export function ManageListings() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <Text style={styles.title}>Property Agent Dashboard</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => goToSectionRoot(navigation, 'RealEstateHub')}>
-          <Ionicons name="home-outline" size={22} color="#111827" />
-        </TouchableOpacity>
+        <View style={styles.headerSpacer} />
       </View>
 
       <View style={styles.tabBar}>
@@ -280,6 +307,26 @@ export function ManageListings() {
           </View>
         </View>
 
+        {subscription?.settings?.isRequired && subscription.subscription && subscription.subscription.status !== 'ACTIVE' && (
+          <TouchableOpacity
+            style={styles.subBanner}
+            onPress={() => navigation.navigate('AgentSubscriptionPay', { vertical: 'REAL_ESTATE' })}
+          >
+            <Ionicons
+              name={subscription.subscription.status === 'SUSPENDED' ? 'alert-circle-outline' : 'card-outline'}
+              size={20}
+              color={subscription.subscription.status === 'SUSPENDED' ? '#B91C1C' : '#D97706'}
+            />
+            <Text style={styles.subBannerText}>
+              {subscription.subscription.status === 'GRACE'
+                ? `Pay by ${new Date(subscription.subscription.gracePeriodEndsAt).toLocaleDateString()} to stay listed.`
+                : subscription.subscription.status === 'PAST_DUE'
+                  ? 'Renew now to avoid suspension.'
+                  : 'Pay to restore your listing.'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {activeTab === 'overview' && (
           <>
         <View style={styles.statsGrid}>
@@ -302,13 +349,65 @@ export function ManageListings() {
         </View>
 
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('ListProperty')}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => goToListProperty()}>
             <Ionicons name="add-circle-outline" size={22} color={ACCENT} />
             <Text style={styles.actionButtonText}>List Property</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={() => setActiveTab('bookings')}>
             <Ionicons name="calendar-outline" size={22} color={ACCENT} />
             <Text style={styles.actionButtonText}>View Bookings</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.earningsCard}>
+          <View style={styles.earningsHeader}>
+            <View style={styles.earningsTitleRow}>
+              <Ionicons name="wallet-outline" size={20} color={ACCENT} />
+              <Text style={styles.earningsTitle}>Available for settlement</Text>
+            </View>
+            {availableEarnings.length > 0 ? (
+              availableEarnings.map((earning) => (
+                <View key={earning.currency} style={styles.earningsRow}>
+                  <Text style={styles.earningsAmount}>
+                    {earning.currencySymbol || earning.currency}
+                    {Number(earning.amount).toLocaleString()}
+                  </Text>
+                  <Text style={styles.earningsMeta}>
+                    {earning.bookingsCount} paid booking{earning.bookingsCount === 1 ? '' : 's'} · {earning.currency}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.earningsEmpty}>
+                Paid stay bookings will appear here when ready to settle.
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.settlementButton,
+              availableEarnings.length === 0 && styles.settlementButtonDisabled,
+            ]}
+            disabled={availableEarnings.length === 0}
+            activeOpacity={0.85}
+            onPress={() =>
+              navigateToRootScreen(navigation, 'RealEstateSettlementRequest', {
+                defaultCurrency: availableEarnings[0]?.currency,
+              })
+            }
+          >
+            <Ionicons name="cash-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.settlementButtonText}>Request Settlement</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.historyLink}
+            activeOpacity={0.7}
+            onPress={() =>
+              navigateToRootScreen(navigation, 'SettlementHistory', { channel: 'REAL_ESTATE' })
+            }
+          >
+            <Text style={styles.historyLinkText}>View settlement history</Text>
+            <Ionicons name="chevron-forward" size={16} color={ACCENT} />
           </TouchableOpacity>
         </View>
           </>
@@ -318,7 +417,7 @@ export function ManageListings() {
           <>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Your Listings</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('ListProperty')}>
+          <TouchableOpacity onPress={() => goToListProperty()}>
             <Ionicons name="add-circle" size={24} color={ACCENT} />
           </TouchableOpacity>
         </View>
@@ -328,7 +427,7 @@ export function ManageListings() {
             <Ionicons name="home-outline" size={48} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>No listings yet</Text>
             <Text style={styles.emptySubtitle}>List your first property. For hotels, add room types from your dashboard after creating the listing.</Text>
-            <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('ListProperty')}>
+            <TouchableOpacity style={styles.primaryButton} onPress={() => goToListProperty()}>
               <Text style={styles.primaryButtonText}>List Property</Text>
             </TouchableOpacity>
           </View>
@@ -355,14 +454,24 @@ export function ManageListings() {
           </View>
         ) : (
           bookings.map((b) => (
-            <View key={b.id} style={styles.bookingCard}>
-              <Text style={styles.bookingTitle}>{b.listing?.title ?? 'Stay'}</Text>
-              <Text style={styles.bookingMeta}>{b.bookingRef} · {b.status}</Text>
-              <Text style={styles.bookingMeta}>
-                {new Date(b.checkIn).toLocaleDateString()} – {new Date(b.checkOut).toLocaleDateString()}
-              </Text>
-              <Text style={styles.bookingPrice}>{formatPrice(b.totalPrice, b.currency)}</Text>
-            </View>
+            <TouchableOpacity
+              key={b.id}
+              style={styles.bookingCard}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('AgentReservationDetail', { bookingId: b.id })}
+            >
+              <View style={styles.bookingCardHeader}>
+                <View style={styles.bookingCardText}>
+                  <Text style={styles.bookingTitle}>{b.listing?.title ?? 'Stay'}</Text>
+                  <Text style={styles.bookingMeta}>{b.bookingRef} · {b.status}{b.paymentStatus ? ` · ${b.paymentStatus}` : ''}</Text>
+                  <Text style={styles.bookingMeta}>
+                    {new Date(b.checkIn).toLocaleDateString()} – {new Date(b.checkOut).toLocaleDateString()}
+                  </Text>
+                  <Text style={styles.bookingPrice}>{formatPrice(b.totalPrice, b.currency)}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+              </View>
+            </TouchableOpacity>
           ))
         )}
 
@@ -374,11 +483,21 @@ export function ManageListings() {
           <Text style={styles.emptySubtitle}>No sales inquiries yet.</Text>
         ) : (
           inquiries.map((inq) => (
-            <View key={inq.id} style={styles.bookingCard}>
-              <Text style={styles.bookingTitle}>{inq.listing?.title ?? 'Property'}</Text>
-              <Text style={styles.bookingMeta} numberOfLines={2}>{inq.message}</Text>
-              <Text style={styles.bookingMeta}>{inq.status}</Text>
-            </View>
+            <TouchableOpacity
+              key={inq.id}
+              style={styles.bookingCard}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('AgentInquiryDetail', { inquiryId: inq.id })}
+            >
+              <View style={styles.bookingCardHeader}>
+                <View style={styles.bookingCardText}>
+                  <Text style={styles.bookingTitle}>{inq.listing?.title ?? 'Property'}</Text>
+                  <Text style={styles.bookingMeta} numberOfLines={2}>{inq.message}</Text>
+                  <Text style={styles.bookingMeta}>{inq.status}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+              </View>
+            </TouchableOpacity>
           ))
         )}
           </>
@@ -421,6 +540,19 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 36 },
   title: { fontSize: 18, fontWeight: '600', color: '#111827', flex: 1, textAlign: 'center' },
   content: { flex: 1 },
+  subBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  subBannerText: { flex: 1, fontSize: 13, color: '#92400E' },
   heroCard: {
     margin: 16,
     padding: 20,
@@ -482,6 +614,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F3FF',
   },
   actionButtonText: { fontSize: 14, fontWeight: '600', color: ACCENT },
+  earningsCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    backgroundColor: '#F5F3FF',
+    maxWidth: Math.min(900, screenWidth - 32),
+    alignSelf: 'center',
+    width: '100%',
+  },
+  earningsHeader: { marginBottom: 12 },
+  earningsTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  earningsTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
+  earningsRow: { marginBottom: 8 },
+  earningsAmount: { fontSize: 22, fontWeight: '700', color: ACCENT },
+  earningsMeta: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  earningsEmpty: { fontSize: 13, color: '#6B7280', lineHeight: 18 },
+  settlementButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: ACCENT,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  settlementButtonDisabled: { opacity: 0.45 },
+  settlementButtonText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
+  historyLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+  },
+  historyLinkText: { fontSize: 13, fontWeight: '600', color: ACCENT },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -542,6 +713,8 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, fontWeight: '500', color: '#6B7280' },
   tabTextActive: { color: ACCENT, fontWeight: '600' },
   bookingCard: { marginHorizontal: 16, marginBottom: 10, padding: 14, backgroundColor: '#F9FAFB', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB' },
+  bookingCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bookingCardText: { flex: 1 },
   bookingTitle: { fontSize: 15, fontWeight: '600', color: '#1F2937' },
   bookingMeta: { fontSize: 13, color: '#6B7280', marginTop: 4 },
   bookingPrice: { fontSize: 15, fontWeight: '700', color: ACCENT, marginTop: 6 },

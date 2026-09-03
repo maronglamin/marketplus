@@ -25,11 +25,13 @@ export function MyPropertyBookings() {
   const [inquiries, setInquiries] = useState<PropertyInquiry[]>([]);
   const [loading, setLoading] = useState(true);
   const [payingBooking, setPayingBooking] = useState<PropertyBooking | null>(null);
+  const [payingInquiry, setPayingInquiry] = useState<PropertyInquiry | null>(null);
   const [showPaymentSelector, setShowPaymentSelector] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string | null>(null);
   const [showStripe, setShowStripe] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [paymentProgressMessage, setPaymentProgressMessage] = useState('Processing payment...');
 
   const loadData = useCallback(async () => {
     try {
@@ -52,11 +54,35 @@ export function MyPropertyBookings() {
     loadData();
   }, [loadData]);
 
+  const activePaymentTarget = payingBooking || payingInquiry;
+  const paymentAmount = payingInquiry
+    ? Number(payingInquiry.salePrice ?? payingInquiry.listing?.price ?? 0)
+    : payingBooking?.totalPrice ?? 0;
+  const paymentCurrency =
+    payingInquiry?.currency ||
+    payingInquiry?.listing?.currency ||
+    payingBooking?.currency ||
+    'GMD';
+
   const completePayment = async (gatewayId: string, paymentIntentId?: string) => {
+    if (payingInquiry) {
+      const result = await realEstateApi.processInquiryPayment(payingInquiry.id, gatewayId, paymentIntentId);
+      const launchUrl = result?.data?.waveLaunchUrl || result?.waveLaunchUrl;
+      if (launchUrl) {
+        setPaymentProgressMessage('Opening Wave…');
+        window.open(launchUrl, '_blank');
+        return;
+      }
+      setPayingInquiry(null);
+      loadData();
+      return;
+    }
+
     if (!payingBooking) return;
     const result = await realEstateApi.processPayment(payingBooking.id, gatewayId, paymentIntentId);
     const launchUrl = result?.data?.waveLaunchUrl || result?.waveLaunchUrl;
     if (launchUrl) {
+      setPaymentProgressMessage('Opening Wave…');
       window.open(launchUrl, '_blank');
       return;
     }
@@ -64,12 +90,14 @@ export function MyPropertyBookings() {
     loadData();
   };
 
-  const handlePayPress = async (booking: PropertyBooking) => {
-    setPayingBooking(booking);
+  const openPaymentSelector = async (booking?: PropertyBooking, inquiry?: PropertyInquiry) => {
+    setPayingBooking(booking || null);
+    setPayingInquiry(inquiry || null);
     const methods = await loadSavedPaymentMethods();
     if (methods.length === 0) {
       alert('No payment methods found.');
       setPayingBooking(null);
+      setPayingInquiry(null);
       return;
     }
     setPaymentMethods(methods);
@@ -78,24 +106,56 @@ export function MyPropertyBookings() {
   };
 
   const handlePaymentMethodSelect = async (method: PaymentMethod) => {
-    if (!payingBooking) return;
+    if (!payingBooking && !payingInquiry) return;
     const providerName = (method.provider || method.metadata?.providerName || '').toString().toLowerCase();
     const isYonna = providerName.includes('yonna');
     const isWave = providerName.includes('wave');
+    const isTestPayment =
+      method.id === 'test-payment' ||
+      method.metadata?.simulated === true ||
+      providerName.includes('test payment');
 
     if (method.type === 'CREDIT_CARD' || method.type === 'DEBIT_CARD') {
+      setShowPaymentSelector(false);
       setShowStripe(true);
-    } else {
-      try {
-        setProcessing(true);
-        const gatewayId = isYonna ? 'yonna-forex' : isWave ? 'wave-gambia' : resolveGatewayPaymentMethodId(method);
-        await completePayment(gatewayId);
-      } catch (err: any) {
-        alert(err?.response?.data?.message || 'Payment failed.');
-      } finally {
-        setProcessing(false);
-      }
+      return;
     }
+
+    try {
+      setProcessing(true);
+      const wasSalePurchase = !!payingInquiry;
+      if (isTestPayment) {
+        setPaymentProgressMessage('Simulating payment…');
+        await completePayment('test-payment');
+        setShowPaymentSelector(false);
+        setPayingBooking(null);
+        setPayingInquiry(null);
+        alert(
+          wasSalePurchase
+            ? 'Test payment complete. Property marked as sold.'
+            : 'Test payment complete. Booking marked as paid — you can now test settlement.',
+        );
+        loadData();
+        return;
+      }
+
+      setPaymentProgressMessage(isWave ? 'Connecting to Wave…' : 'Processing payment…');
+      const gatewayId = isYonna ? 'yonna-forex' : isWave ? 'wave-gambia' : resolveGatewayPaymentMethodId(method);
+      await completePayment(gatewayId);
+      setShowPaymentSelector(false);
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Payment failed.');
+    } finally {
+      setProcessing(false);
+      setPaymentProgressMessage('Processing payment...');
+    }
+  };
+
+  const clearPaymentTarget = () => {
+    if (processing) return;
+    setShowPaymentSelector(false);
+    setPayingBooking(null);
+    setPayingInquiry(null);
   };
 
   return (
@@ -142,7 +202,7 @@ export function MyPropertyBookings() {
                 {booking.status === 'PENDING' && booking.paymentStatus !== 'PAID' && (
                   <button
                     type="button"
-                    onClick={() => handlePayPress(booking)}
+                    onClick={() => openPaymentSelector(booking)}
                     className="mt-3 w-full py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700"
                   >
                     Pay Now
@@ -157,38 +217,118 @@ export function MyPropertyBookings() {
           {inquiries.length === 0 ? (
             <p className="text-center text-gray-500 py-12">No inquiries yet</p>
           ) : (
-            inquiries.map((inquiry) => (
-              <div key={inquiry.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200">
-                <p className="font-semibold text-gray-900">{inquiry.listing?.title}</p>
-                <p className="text-sm text-gray-600 mt-2">{inquiry.message}</p>
-                <p className="text-xs text-gray-400 mt-2">{format(new Date(inquiry.createdAt), 'MMM d, yyyy')}</p>
-                <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">{inquiry.status}</span>
-              </div>
-            ))
+            inquiries.map((inquiry) => {
+              const salePrice = Number(inquiry.salePrice ?? inquiry.listing?.price ?? 0);
+              const currency = inquiry.currency || inquiry.listing?.currency || 'GMD';
+              const displayStatus =
+                inquiry.paymentStatus === 'PAID' || inquiry.status === 'PURCHASED'
+                  ? 'PURCHASED'
+                  : inquiry.status;
+              const canPay =
+                inquiry.status === 'OFFERED' &&
+                inquiry.paymentStatus !== 'PAID' &&
+                inquiry.listing?.status !== 'SOLD' &&
+                salePrice > 0;
+
+              return (
+                <div key={inquiry.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-gray-900">{inquiry.listing?.title}</p>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 font-medium shrink-0">
+                      {displayStatus}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">{inquiry.message}</p>
+                  {salePrice > 0 ? (
+                    <p className="text-sm font-semibold text-violet-600 mt-2">
+                      {formatPrice(salePrice, currency)}
+                    </p>
+                  ) : null}
+                  <p className="text-xs text-gray-400 mt-2">{format(new Date(inquiry.createdAt), 'MMM d, yyyy')}</p>
+                  {canPay && (
+                    <button
+                      type="button"
+                      onClick={() => openPaymentSelector(undefined, inquiry)}
+                      className="mt-3 w-full py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700"
+                    >
+                      Pay to Purchase
+                    </button>
+                  )}
+                  {inquiry.status === 'OFFERED' && inquiry.paymentStatus !== 'PAID' && inquiry.listing?.status !== 'SOLD' && (
+                    <p className="text-xs text-violet-600 mt-2">The agent invited you to complete this purchase.</p>
+                  )}
+                  {inquiry.status !== 'OFFERED' &&
+                    inquiry.paymentStatus !== 'PAID' &&
+                    inquiry.status !== 'PURCHASED' &&
+                    inquiry.listing?.status !== 'SOLD' && (
+                      <p className="text-xs text-gray-500 mt-2">Waiting for the agent to offer purchase.</p>
+                    )}
+                  {(inquiry.paymentStatus === 'PAID' || inquiry.status === 'PURCHASED' || inquiry.listing?.status === 'SOLD') &&
+                    inquiry.paymentStatus !== 'PAID' &&
+                    inquiry.status !== 'PURCHASED' && (
+                      <p className="text-xs text-gray-500 mt-2">This property has been sold.</p>
+                    )}
+                </div>
+              );
+            })
           )}
         </div>
       )}
 
-      {showPaymentSelector && payingBooking && (
+      {showPaymentSelector && activePaymentTarget && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => { setShowPaymentSelector(false); setPayingBooking(null); }} />
-          <div className="relative z-10 w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl">
+          <div className="absolute inset-0 bg-black/40" onClick={clearPaymentTarget} />
+          <div className="relative z-10 w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden">
             <div className="p-4 border-b font-semibold">Select Payment Method</div>
             <div className="p-4 bg-violet-50 text-violet-800 text-sm font-medium">
-              Amount: {formatPrice(payingBooking.totalPrice, payingBooking.currency)}
+              Amount: {formatPrice(paymentAmount, paymentCurrency)}
             </div>
-            <div className="p-4 space-y-2 max-h-60 overflow-y-auto">
-              {paymentMethods.map((method) => (
-                <button
-                  key={method.id}
-                  type="button"
-                  onClick={() => setSelectedPaymentMethodId(method.id)}
-                  className={`w-full p-3 rounded-lg border text-left ${selectedPaymentMethodId === method.id ? 'border-violet-500 bg-violet-50' : 'border-gray-200'}`}
-                >
-                  <p className="text-sm font-medium">{method.accountName || method.provider}</p>
-                  <p className="text-xs text-gray-500">{method.type.replace(/_/g, ' ')}</p>
-                </button>
-              ))}
+            <div className={`p-4 space-y-2 max-h-60 overflow-y-auto ${processing ? 'pointer-events-none opacity-60' : ''}`}>
+              {paymentMethods.map((method) => {
+                const providerName =
+                  method.metadata?.providerName || method.provider || 'Payment Method';
+                const accountLabel =
+                  method.metadata?.phoneNumber || method.accountId || method.accountName || '';
+                const providerLower = providerName.toString().toLowerCase();
+                const isWave = providerLower.includes('wave');
+                const isYonna = providerLower.includes('yonna') || providerLower.includes('aps');
+                const isTest = method.id === 'test-payment' || method.metadata?.simulated;
+
+                return (
+                  <button
+                    key={method.id}
+                    type="button"
+                    onClick={() => setSelectedPaymentMethodId(method.id)}
+                    className={`w-full p-3 rounded-lg border text-left flex items-center gap-3 ${
+                      selectedPaymentMethodId === method.id
+                        ? 'border-violet-500 bg-violet-50'
+                        : isTest
+                          ? 'border-amber-300 bg-amber-50'
+                          : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
+                      {isTest ? (
+                        <span className="text-xs font-bold text-amber-600">TEST</span>
+                      ) : isWave ? (
+                        <img src="/assets/wave.jpg" alt="Wave" className="w-7 h-7 object-cover rounded" />
+                      ) : isYonna ? (
+                        <img src="/assets/yonna_wallet.svg" alt="Yonna" className="w-7 h-7" />
+                      ) : (
+                        <span className="text-xs font-semibold text-violet-600">
+                          {providerName.slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{providerName}</p>
+                      {accountLabel ? (
+                        <p className="text-xs text-gray-500 truncate">{accountLabel}</p>
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             <div className="p-4 border-t">
               <button
@@ -197,32 +337,52 @@ export function MyPropertyBookings() {
                 onClick={async () => {
                   const method = paymentMethods.find((m) => m.id === selectedPaymentMethodId);
                   if (!method) return;
-                  setShowPaymentSelector(false);
                   await handlePaymentMethodSelect(method);
                 }}
-                className="w-full py-3 bg-violet-600 text-white font-semibold rounded-xl disabled:opacity-60"
+                className="w-full py-3 bg-violet-600 text-white font-semibold rounded-xl disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                Process Payment
+                {processing ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Please wait…
+                  </>
+                ) : (
+                  'Process Payment'
+                )}
               </button>
             </div>
+
+            {processing && (
+              <div className="absolute inset-0 bg-white/90 flex items-center justify-center p-6">
+                <div className="text-center max-w-xs">
+                  <div className="mx-auto w-10 h-10 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="mt-4 text-base font-semibold text-gray-900">{paymentProgressMessage}</p>
+                  <p className="mt-2 text-sm text-gray-500">
+                    This can take a few seconds. Please don’t close this window.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {payingBooking && user?.id && (
+      {activePaymentTarget && user?.id ? (
         <StripePaymentModal
           isOpen={showStripe}
           onClose={() => setShowStripe(false)}
-          amount={payingBooking.totalPrice}
-          currency={payingBooking.currency}
-          orderId={payingBooking.id}
+          amount={paymentAmount}
+          currency={paymentCurrency}
+          orderId={(payingBooking?.id || payingInquiry?.id)!}
           customerId={user.id}
           onPaymentSuccess={async (data) => {
             await completePayment('stripe', data?.paymentIntentId || data?.id);
             setShowStripe(false);
+            setPayingBooking(null);
+            setPayingInquiry(null);
           }}
         />
-      )}
+      ) : null}
     </div>
   );
 }

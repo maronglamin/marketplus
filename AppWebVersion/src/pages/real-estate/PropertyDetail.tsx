@@ -12,10 +12,8 @@ import { defaultCheckInDate, defaultCheckOutDate } from '../../utils/stayDates';
 import { getImageUrl } from '../../config/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLoginPrompt } from '../../components/LoginPromptModal';
-import { realEstateApi, type GuestSelection, type PropertyListing, type PropertyRoomType, type StaySummary } from '../../api/realEstateApi';
+import { realEstateApi, type GuestSelection, type PropertyListing, type PropertyRoomType, type StaySummary, isStayListingType } from '../../api/realEstateApi';
 import { formatPrice } from '../../utils/formatPrice';
-
-const isStayType = (type: string) => type === 'HOTEL' || type === 'APARTMENT_RENTAL';
 
 export function PropertyDetail() {
   const { listingId } = useParams<{ listingId: string }>();
@@ -42,7 +40,7 @@ export function PropertyDetail() {
       .finally(() => setLoading(false));
   }, [listingId]);
 
-  const isStay = listing ? isStayType(listing.listingType) : false;
+  const isStay = listing ? isStayListingType(listing.listingType) : false;
 
   useEffect(() => {
     if (!listing || !isStay || !listingId || checkOut <= checkIn) {

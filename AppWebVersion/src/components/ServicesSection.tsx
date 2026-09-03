@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Wrench, Building2, ChevronRight, MapPin } from 'lucide-react';
+import { Wrench, Building2, Bed, ChevronRight, MapPin } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { homeServicesApi, type ServiceBooking } from '../api/homeServicesApi';
 import { realEstateApi, type PropertyListing } from '../api/realEstateApi';
@@ -40,7 +40,7 @@ export function ServicesSection() {
   return (
     <div className="space-y-4 mb-4">
       {/* Service hub cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link
           to="/home-services"
           className="relative overflow-hidden rounded-xl shadow-sm group h-36 bg-gradient-to-br from-sky-500 to-sky-600"
@@ -56,15 +56,29 @@ export function ServicesSection() {
         </Link>
 
         <Link
-          to="/real-estate"
+          to="/real-estate?section=stay"
           className="relative overflow-hidden rounded-xl shadow-sm group h-36 bg-gradient-to-br from-violet-600 to-violet-700"
+        >
+          <div className="absolute inset-0 bg-black/10 group-hover:bg-black/5 transition-colors" />
+          <div className="relative p-5 flex flex-col justify-between h-full text-white">
+            <Bed className="w-8 h-8 opacity-90" />
+            <div>
+              <h3 className="text-lg font-semibold">Stay & Accommodation</h3>
+              <p className="text-sm text-violet-100">Hotels, rentals, lodges & trips</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          to="/real-estate?section=realestate"
+          className="relative overflow-hidden rounded-xl shadow-sm group h-36 bg-gradient-to-br from-emerald-600 to-emerald-700"
         >
           <div className="absolute inset-0 bg-black/10 group-hover:bg-black/5 transition-colors" />
           <div className="relative p-5 flex flex-col justify-between h-full text-white">
             <Building2 className="w-8 h-8 opacity-90" />
             <div>
-              <h3 className="text-lg font-semibold">Stays & Realty</h3>
-              <p className="text-sm text-violet-100">Hotels, rentals, homes & land</p>
+              <h3 className="text-lg font-semibold">Real Estate</h3>
+              <p className="text-sm text-emerald-100">Homes & land for sale</p>
             </div>
           </div>
         </Link>

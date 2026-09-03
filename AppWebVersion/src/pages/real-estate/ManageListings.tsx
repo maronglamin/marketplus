@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Building2, Calendar, Home } from 'lucide-react';
+import { Plus, Building2, Calendar, Home, Wallet } from 'lucide-react';
 import { PageHeader } from '../../components/PageHeader';
 import { getImageUrl } from '../../config/api';
 import { realEstateApi, type PropertyBooking, type PropertyInquiry, type PropertyListing } from '../../api/realEstateApi';
+import { settlementService, type AvailableRealEstateEarnings } from '../../api/settlementService';
 import { formatPrice } from '../../utils/formatPrice';
 import { useApprovalRedirect } from '../../hooks/useApprovalRedirect';
+import { providerSubscriptionApi, type SubscriptionSnapshot } from '../../api/providerSubscriptionApi';
 
 type Tab = 'overview' | 'listings' | 'bookings';
 
@@ -24,10 +26,12 @@ export function ManageListings() {
   const [listings, setListings] = useState<PropertyListing[]>([]);
   const [bookings, setBookings] = useState<PropertyBooking[]>([]);
   const [inquiries, setInquiries] = useState<PropertyInquiry[]>([]);
+  const [availableEarnings, setAvailableEarnings] = useState<AvailableRealEstateEarnings[]>([]);
   const [loading, setLoading] = useState(true);
   const [isApprovedAgent, setIsApprovedAgent] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
   const [agentName, setAgentName] = useState('');
+  const [subscription, setSubscription] = useState<SubscriptionSnapshot | null>(null);
 
   const checkAgentStatus = useCallback(async () => {
     try {
@@ -62,6 +66,17 @@ export function ManageListings() {
         setBookings([]);
         setInquiries([]);
       }
+      try {
+        const earnings = await settlementService.getAvailableRealEstateEarnings();
+        setAvailableEarnings(earnings ?? []);
+      } catch {
+        setAvailableEarnings([]);
+      }
+      try {
+        setSubscription(await providerSubscriptionApi.getMine('REAL_ESTATE'));
+      } catch {
+        setSubscription(null);
+      }
     } catch {
       setListings([]);
     } finally {
@@ -95,6 +110,14 @@ export function ManageListings() {
     pending: listings.filter((l) => l.status === 'PENDING_REVIEW' || l.status === 'PENDING_SETUP').length,
     bookings: bookings.length,
   }), [listings, bookings]);
+
+  const goToListProperty = () => {
+    if (subscription?.settings?.isRequired && !subscription.canOperate) {
+      navigate('/real-estate/subscription');
+      return;
+    }
+    navigate('/real-estate/list-property');
+  };
 
   const renderListingCard = (item: PropertyListing) => {
     const imageUrl = item.images[0]?.url ? getImageUrl(item.images[0].url) : null;
@@ -200,6 +223,24 @@ export function ManageListings() {
           <p className="text-sm text-violet-100 mt-1">Manage listings, rooms, and reservations</p>
         </div>
 
+        {subscription?.settings?.isRequired && subscription.subscription && subscription.subscription.status !== 'ACTIVE' && (
+          <button
+            type="button"
+            onClick={() => navigate('/real-estate/subscription')}
+            className={`w-full p-3 rounded-lg border text-sm text-left ${
+              subscription.subscription.status === 'SUSPENDED'
+                ? 'bg-red-50 border-red-200 text-red-800'
+                : 'bg-amber-50 border-amber-200 text-amber-800'
+            }`}
+          >
+            {subscription.subscription.status === 'GRACE'
+              ? `Pay by ${new Date(subscription.subscription.gracePeriodEndsAt).toLocaleDateString()} to stay listed.`
+              : subscription.subscription.status === 'PAST_DUE'
+                ? 'Renew now to avoid suspension.'
+                : 'Pay to restore your listing.'}
+          </button>
+        )}
+
         {activeTab === 'overview' && (
           <>
             <div className="grid grid-cols-2 gap-3">
@@ -208,8 +249,43 @@ export function ManageListings() {
               <StatCard label="Needs Setup" value={stats.pending} />
               <StatCard label="Reservations" value={stats.bookings} />
             </div>
+
+            <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Wallet className="w-4 h-4 text-violet-700" />
+                <h3 className="font-semibold text-gray-900">Available for settlement</h3>
+              </div>
+              {availableEarnings.length === 0 ? (
+                <p className="text-sm text-gray-600">No settleable earnings yet. Paid stays and sold inquiries will appear here.</p>
+              ) : (
+                <div className="space-y-2 mb-3">
+                  {availableEarnings.map((earning) => (
+                    <div key={earning.currency}>
+                      <p className="text-xl font-bold text-violet-700">{formatPrice(earning.amount, earning.currency)}</p>
+                      <p className="text-sm text-gray-500">{earning.bookingsCount} item(s) ready</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                disabled={availableEarnings.length === 0}
+                onClick={() => navigate('/real-estate/settlement-request')}
+                className="w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-semibold disabled:opacity-45"
+              >
+                Request Settlement
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/settlement-history?channel=REAL_ESTATE')}
+                className="w-full mt-2 text-sm text-violet-700 font-medium"
+              >
+                View settlement history
+              </button>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => navigate('/real-estate/list-property')} className="flex items-center justify-center gap-2 py-3 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 text-sm font-semibold">
+              <button type="button" onClick={() => goToListProperty()} className="flex items-center justify-center gap-2 py-3 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 text-sm font-semibold">
                 <Plus className="w-4 h-4" /> List Property
               </button>
               <button type="button" onClick={() => setActiveTab('bookings')} className="flex items-center justify-center gap-2 py-3 rounded-xl border border-violet-200 bg-violet-50 text-violet-700 text-sm font-semibold">
@@ -232,16 +308,16 @@ export function ManageListings() {
           <>
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Your Listings</h3>
-              <Link to="/real-estate/list-property" className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg">
+              <button type="button" onClick={goToListProperty} className="p-2 text-violet-600 hover:bg-violet-50 rounded-lg">
                 <Plus className="w-5 h-5" />
-              </Link>
+              </button>
             </div>
             {listings.length === 0 ? (
               <div className="text-center py-12 px-4">
                 <Home className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="font-semibold text-gray-700">No listings yet</p>
                 <p className="text-sm text-gray-500 mt-1">For hotels, add room types from your dashboard after creating the listing.</p>
-                <button type="button" onClick={() => navigate('/real-estate/list-property')} className="mt-4 px-4 py-2 bg-violet-600 text-white text-sm rounded-lg">
+                <button type="button" onClick={() => goToListProperty()} className="mt-4 px-4 py-2 bg-violet-600 text-white text-sm rounded-lg">
                   List Property
                 </button>
               </div>
@@ -262,14 +338,24 @@ export function ManageListings() {
             ) : (
               <div className="space-y-2">
                 {bookings.map((b) => (
-                  <div key={b.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200">
-                    <p className="font-semibold text-gray-900">{b.listing?.title ?? 'Stay'}</p>
-                    <p className="text-sm text-gray-500">{b.bookingRef} · {b.status}</p>
-                    <p className="text-sm text-gray-500">
-                      {new Date(b.checkIn).toLocaleDateString()} – {new Date(b.checkOut).toLocaleDateString()}
-                    </p>
-                    <p className="text-sm font-bold text-violet-600 mt-1">{formatPrice(b.totalPrice, b.currency)}</p>
-                  </div>
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => navigate(`/real-estate/reservations/${b.id}`)}
+                    className="w-full text-left p-4 rounded-xl bg-gray-50 border border-gray-200 hover:border-violet-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-900">{b.listing?.title ?? 'Stay'}</p>
+                        <p className="text-sm text-gray-500">{b.bookingRef} · {b.status}</p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(b.checkIn).toLocaleDateString()} – {new Date(b.checkOut).toLocaleDateString()}
+                        </p>
+                        <p className="text-sm font-bold text-violet-600 mt-1">{formatPrice(b.totalPrice, b.currency)}</p>
+                      </div>
+                      <span className="text-gray-400 text-lg leading-none">›</span>
+                    </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -283,11 +369,21 @@ export function ManageListings() {
             ) : (
               <div className="space-y-2">
                 {inquiries.map((inq) => (
-                  <div key={inq.id} className="p-4 rounded-xl bg-gray-50 border border-gray-200">
-                    <p className="font-semibold text-gray-900">{inq.listing?.title ?? 'Property'}</p>
-                    <p className="text-sm text-gray-500 line-clamp-2">{inq.message}</p>
-                    <p className="text-xs text-gray-400 mt-1">{inq.status}</p>
-                  </div>
+                  <button
+                    key={inq.id}
+                    type="button"
+                    onClick={() => navigate(`/real-estate/inquiries/${inq.id}`)}
+                    className="w-full text-left p-4 rounded-xl bg-gray-50 border border-gray-200 hover:border-violet-300 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-gray-900">{inq.listing?.title ?? 'Property'}</p>
+                        <p className="text-sm text-gray-500 line-clamp-2">{inq.message}</p>
+                        <p className="text-xs text-gray-400 mt-1">{inq.status}</p>
+                      </div>
+                      <span className="text-gray-400 text-lg leading-none">›</span>
+                    </div>
+                  </button>
                 ))}
               </div>
             )}

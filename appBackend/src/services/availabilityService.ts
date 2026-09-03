@@ -1,4 +1,5 @@
 import { PrismaClient, ServiceBookingStatus } from '@prisma/client';
+import { publicListingAgentWhere } from './providerSubscriptionService';
 
 const prisma = new PrismaClient();
 
@@ -383,7 +384,7 @@ export async function validatePropertyBooking(
   const nights = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
   const listing = await prisma.propertyListing.findUnique({ where: { id: listingId } });
   if (!listing) return { ok: false, message: 'Listing not found' };
-  if (!['HOTEL', 'APARTMENT_RENTAL'].includes(listing.listingType)) {
+  if (!['HOTEL', 'APARTMENT_RENTAL', 'GUEST_HOUSE', 'BOAT_TRIP'].includes(listing.listingType)) {
     return { ok: false, message: 'This listing does not support stay bookings' };
   }
   if (listing.status !== 'ACTIVE') {
@@ -441,6 +442,7 @@ export async function searchListingsWithAvailability(params: {
   const listings = await prisma.propertyListing.findMany({
     where: {
       status: 'ACTIVE',
+      agent: await publicListingAgentWhere(),
       ...(listingType ? { listingType: listingType as any } : {}),
       ...(city ? { city: { contains: city, mode: 'insensitive' } } : {}),
     },
