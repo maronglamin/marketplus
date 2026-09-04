@@ -4,10 +4,7 @@
     "react-native-google-places-autocomplete": "^2.5.7",
     "react-native-reanimated": "^3.8.0",
     "react-native-safe-area-context": "^5.4.0",
-    "react-native-svg": "^15.11.2",
-    "expo": "~53.0.24",
-    "react": "19.0.0",
-    "react-native": "0.79.6"
+    "react-native-svg": "^15.11.2"
   },
   "devDependencies": {
     "metro": "^0.82.4",

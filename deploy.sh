@@ -89,6 +89,104 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || return 1
 }
 
+mem_mb() {
+  awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 2048
+}
+
+swap_mb() {
+  awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0
+}
+
+# Leave headroom for the OS; CRA/npm will OOM if we claim 4GB on a 1GB droplet.
+node_heap_mb() {
+  local ram heap
+  ram="$(mem_mb)"
+  heap=$((ram - 384))
+  if (( heap < 384 )); then heap=384; fi
+  if (( heap > 2048 )); then heap=2048; fi
+  echo "$heap"
+}
+
+# Small VPS (1GB) cannot run npm ci / webpack without swap. The "Killed" line is the OOM killer.
+ensure_swap() {
+  [[ -r /proc/meminfo ]] || return 0
+  local ram swap
+  ram="$(mem_mb)"
+  swap="$(swap_mb)"
+  log "Memory: ${ram}MB RAM, ${swap}MB swap"
+  if (( ram + swap >= 2048 )); then
+    return 0
+  fi
+
+  local need=$((2048 - ram))
+  if (( need < 1024 )); then need=1024; fi
+  if (( need > 4096 )); then need=4096; fi
+
+  if [[ "$(id -u)" -ne 0 ]]; then
+    warn "Low memory (${ram}MB) and not root — cannot add swap. npm may be OOM-killed."
+    return 0
+  fi
+
+  log "Creating ${need}MB swap at /swapfile (required for npm on this droplet)"
+  if $DRY_RUN; then
+    return 0
+  fi
+
+  if [[ -f /swapfile ]]; then
+    swapon /swapfile 2>/dev/null || true
+    swap="$(swap_mb)"
+    if (( ram + swap >= 2048 )); then
+      ok "Existing /swapfile is active (${swap}MB)"
+      return 0
+    fi
+    swapoff /swapfile 2>/dev/null || true
+    rm -f /swapfile
+  fi
+
+  if ! fallocate -l "${need}M" /swapfile 2>/dev/null; then
+    dd if=/dev/zero of=/swapfile bs=1M count="$need" status=none
+  fi
+  chmod 600 /swapfile
+  mkswap /swapfile >/dev/null
+  swapon /swapfile
+  if ! grep -q '^/swapfile ' /etc/fstab 2>/dev/null; then
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  fi
+  ok "Swap ready ($(swap_mb)MB)"
+}
+
+npm_install_in() {
+  local dir="$1"
+  local heap rc
+  heap="$(node_heap_mb)"
+  log "Installing npm packages in ${dir} (Node heap ${heap}MB, 1 socket)"
+  set +e
+  as_app "cd $(printf '%q' "$dir") && \
+    export NODE_OPTIONS=--max-old-space-size=${heap} \
+      npm_config_audit=false \
+      npm_config_fund=false \
+      npm_config_maxsockets=1 && \
+    rm -rf node_modules && \
+    if [ -f package-lock.json ]; then
+      npm ci --no-audit --no-fund --maxsockets=1
+      rc=\$?
+      if [ \$rc -eq 137 ] || [ \$rc -eq 143 ]; then exit \$rc; fi
+      if [ \$rc -ne 0 ]; then
+        npm install --no-audit --no-fund --maxsockets=1
+      fi
+    else
+      npm install --no-audit --no-fund --maxsockets=1
+    fi"
+  rc=$?
+  set -e
+  if [[ $rc -eq 137 || $rc -eq 143 ]]; then
+    die "npm was killed by the kernel (out of memory) in $dir.
+Check: free -h   and   dmesg | tail
+Re-run: sudo ./deploy.sh --setup   (this now creates swap on small VPS)"
+  fi
+  [[ $rc -eq 0 ]] || die "npm install failed in $dir (exit $rc)"
+}
+
 as_app() {
   local cmd="$1"
   if $DRY_RUN; then
@@ -215,6 +313,7 @@ install_packages() {
   run "mkdir -p /var/www/letsencrypt $WEB_ROOT $UPLOADS_ROOT $PUBLIC_ROOT"
   run "systemctl enable nginx"
   run "systemctl start nginx"
+  ensure_swap
   ok "Host packages installed"
 }
 
@@ -315,13 +414,12 @@ issue_certs() {
 # ---------------------------------------------------------------------------
 install_js_deps() {
   $SKIP_DEPS && { log "Skipping npm install"; return 0; }
+  ensure_swap
   if ! $WEB_ONLY; then
-    log "Installing API dependencies"
-    as_app "cd $(printf '%q' "$REPO_ROOT/appBackend") && (npm ci || npm install)"
+    npm_install_in "$REPO_ROOT/appBackend"
   fi
   if ! $API_ONLY; then
-    log "Installing web dependencies"
-    as_app "cd $(printf '%q' "$REPO_ROOT/AppWebVersion") && (npm ci || npm install)"
+    npm_install_in "$REPO_ROOT/AppWebVersion"
   fi
 }
 
@@ -355,12 +453,22 @@ build_web() {
   local api_url="${REACT_APP_API_URL:-https://${WEB_DOMAIN}/api}"
   local image_host="${REACT_APP_IMAGE_HOST:-https://${WEB_DOMAIN}}"
 
-  log "Building web app (API=$api_url)"
+  local heap
+  heap="$(node_heap_mb)"
+  log "Building web app (API=$api_url, heap=${heap}MB, no sourcemaps)"
+  set +e
   as_app "cd $(printf '%q' "$REPO_ROOT/AppWebVersion") && \
-    NODE_OPTIONS=--max-old-space-size=4096 \
+    NODE_OPTIONS=--max-old-space-size=${heap} \
+    GENERATE_SOURCEMAP=false \
     REACT_APP_API_URL=$(printf '%q' "$api_url") \
     REACT_APP_IMAGE_HOST=$(printf '%q' "$image_host") \
     npm run build"
+  local rc=$?
+  set -e
+  if [[ $rc -eq 137 || $rc -eq 143 ]]; then
+    die "Web build was killed (out of memory). Check free -h; re-run sudo ./deploy.sh --setup to create swap."
+  fi
+  [[ $rc -eq 0 ]] || die "Web build failed (exit $rc)"
 
   [[ -f "$REPO_ROOT/AppWebVersion/build/index.html" ]] || $DRY_RUN || die "Web build did not produce build/index.html"
 
