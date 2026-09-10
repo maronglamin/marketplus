@@ -1,45 +1,35 @@
 import { PrismaClient } from '@prisma/client';
-import { sendOTP, sendPIN, sendCombinedVerification } from '../services/sms';
+import { sendOTP } from '../services/sms';
+import { sendOtpEmail } from '../services/email';
 import crypto from 'crypto';
 import { z } from 'zod';
 
 const prisma = new PrismaClient();
 
-// Rate limiting configuration
 const MAX_ATTEMPTS = 5;
-const ATTEMPT_WINDOW = 30 * 60 * 1000; // 30 minutes
-// Expiry configuration
-const VERIFICATION_OTP_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30 days
-const PIN_RESET_OTP_EXPIRY = 15 * 60 * 1000; // 15 minutes
-const MAX_OTP_PER_PHONE = 5; // Maximum number of active OTPs per phone number
+const ATTEMPT_WINDOW = 30 * 60 * 1000;
+const VERIFICATION_OTP_EXPIRY = 10 * 60 * 1000;
+const MAX_OTP_PER_IDENTIFIER = 5;
 
-// Validate environment variables
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
 
 const env = envSchema.parse(process.env);
 
+export type OtpChannel = 'EMAIL' | 'PHONE';
+
 export const generateOTP = (): string => {
-  // Generate 6 random bytes and convert to a 6-digit number
   const buffer = crypto.randomBytes(3);
   const code = buffer.readUIntBE(0, 3) % 1000000;
   return code.toString().padStart(6, '0');
 };
 
-export const generatePIN = (): string => {
-  // Generate 2 random bytes and convert to a 4-digit number
-  const buffer = crypto.randomBytes(2);
-  const code = buffer.readUIntBE(0, 2) % 10000;
-  return code.toString().padStart(4, '0');
-};
-
 export const createOTP = async (
-  phoneNumber: string,
+  identifier: string,
   type: 'VERIFICATION' | 'PIN_RESET',
   options?: {
-    sendCombined?: boolean;
-    includeVerificationCode?: string;
+    channel?: OtpChannel;
     skipSending?: boolean;
     userId?: string;
     deviceId?: string;
@@ -47,12 +37,14 @@ export const createOTP = async (
     context?: string;
   }
 ): Promise<string> => {
-  console.log(`Creating ${type} for ${phoneNumber}`);
-  
-  // Check for rate limiting
+  const channel: OtpChannel = options?.channel || (identifier.includes('@') ? 'EMAIL' : 'PHONE');
+  const phoneNumber = channel === 'PHONE' ? identifier : '';
+  console.log(`Creating ${type} for ${channel}:${identifier}`);
+
   const recentOTPs = await prisma.oTP.findMany({
     where: {
-      phoneNumber,
+      identifier,
+      channel,
       type,
       createdAt: {
         gt: new Date(Date.now() - ATTEMPT_WINDOW),
@@ -60,14 +52,14 @@ export const createOTP = async (
     },
   });
 
-  if (recentOTPs.length >= MAX_OTP_PER_PHONE) {
+  if (recentOTPs.length >= MAX_OTP_PER_IDENTIFIER) {
     throw new Error('Too many active OTPs. Please wait before requesting a new one.');
   }
 
-  // Check for existing unused OTPs
   const existingOTP = await prisma.oTP.findFirst({
     where: {
-      phoneNumber,
+      identifier,
+      channel,
       type,
       isUsed: false,
       expiresAt: {
@@ -77,28 +69,21 @@ export const createOTP = async (
   });
 
   if (existingOTP) {
-    console.log(`Existing unused ${type} found for ${phoneNumber}`);
-    // Return the original code if available, otherwise return the hashed code
+    console.log(`Existing unused ${type} found for ${identifier}`);
     return existingOTP.originalCode || existingOTP.code;
   }
 
-  const code = type === 'VERIFICATION' ? generateOTP() : generatePIN();
-  const expiresAt = new Date(
-    Date.now() + (type === 'VERIFICATION' ? VERIFICATION_OTP_EXPIRY : PIN_RESET_OTP_EXPIRY)
-  );
+  const code = generateOTP();
+  const expiresAt = new Date(Date.now() + VERIFICATION_OTP_EXPIRY);
+  const hashedCode = crypto.createHash('sha256').update(code).digest('hex');
 
-  // Hash the OTP before storing
-  const hashedCode = crypto
-    .createHash('sha256')
-    .update(code)
-    .digest('hex');
-
-  console.log(`Storing ${type} in database:`, { phoneNumber, type, expiresAt });
   await prisma.oTP.create({
     data: {
       phoneNumber,
+      identifier,
+      channel,
       code: hashedCode,
-      originalCode: code, // Store the original code
+      originalCode: code,
       type,
       expiresAt,
       attempts: 0,
@@ -107,29 +92,11 @@ export const createOTP = async (
 
   try {
     if (options?.skipSending) {
-      console.log('Skipping SMS send as per options');
-    } else if (type === 'VERIFICATION') {
-      const shouldSendCombined = options?.sendCombined && options?.includeVerificationCode;
-      if (shouldSendCombined) {
-        console.log(`Sending combined OTP + verification to ${phoneNumber}`);
-        await sendCombinedVerification(phoneNumber, code, options!.includeVerificationCode!, {
-          userId: options?.userId,
-          deviceId: options?.deviceId,
-          deviceInfo: options?.deviceInfo,
-          context: options?.context,
-        });
-      } else {
-        console.log(`Sending OTP to ${phoneNumber}`);
-        await sendOTP(phoneNumber, code, {
-          userId: options?.userId,
-          deviceId: options?.deviceId,
-          deviceInfo: options?.deviceInfo,
-          context: options?.context,
-        });
-      }
+      console.log('Skipping OTP send as per options');
+    } else if (channel === 'EMAIL') {
+      await sendOtpEmail(identifier, code);
     } else {
-      console.log(`Sending PIN to ${phoneNumber}`);
-      await sendPIN(phoneNumber, code, {
+      await sendOTP(identifier, code, {
         userId: options?.userId,
         deviceId: options?.deviceId,
         deviceInfo: options?.deviceInfo,
@@ -137,10 +104,11 @@ export const createOTP = async (
       });
     }
   } catch (error) {
-    console.error('Error sending SMS:', error);
-    // In development, log the code
+    console.error('Error sending OTP:', error);
     if (env.NODE_ENV === 'development') {
-      console.log(`[DEV] ${type} for ${phoneNumber}: ${code}`);
+      console.log(`[DEV] ${type} for ${identifier}: ${code}`);
+    } else {
+      throw error;
     }
   }
 
@@ -148,16 +116,18 @@ export const createOTP = async (
 };
 
 export const verifyOTP = async (
-  phoneNumber: string,
+  identifier: string,
   code: string,
-  type: 'VERIFICATION' | 'PIN_RESET'
+  type: 'VERIFICATION' | 'PIN_RESET',
+  channel?: OtpChannel
 ): Promise<boolean> => {
-  console.log(`Verifying ${type} for ${phoneNumber}`);
+  const resolvedChannel: OtpChannel = channel || (identifier.includes('@') ? 'EMAIL' : 'PHONE');
+  console.log(`Verifying ${type} for ${resolvedChannel}:${identifier}`);
 
-  // Check for recent attempts
   const recentAttempts = await prisma.oTP.findMany({
     where: {
-      phoneNumber,
+      identifier,
+      channel: resolvedChannel,
       type,
       createdAt: {
         gt: new Date(Date.now() - ATTEMPT_WINDOW),
@@ -168,18 +138,16 @@ export const verifyOTP = async (
     },
   });
 
-  // Count failed attempts in the window
   const failedAttempts = recentAttempts.reduce((count, otp) => count + (otp.attempts || 0), 0);
-  
+
   if (failedAttempts >= MAX_ATTEMPTS) {
-    console.log(`Too many failed attempts for ${phoneNumber}`);
     throw new Error('Too many failed attempts. Please wait 30 minutes before trying again.');
   }
 
-  // Find the most recent unused OTP
   const otp = await prisma.oTP.findFirst({
     where: {
-      phoneNumber,
+      identifier,
+      channel: resolvedChannel,
       type,
       isUsed: false,
       expiresAt: {
@@ -192,8 +160,6 @@ export const verifyOTP = async (
   });
 
   if (!otp) {
-    console.log(`No valid ${type} found for ${phoneNumber}`);
-    // Increment attempts for the most recent OTP
     if (recentAttempts.length > 0) {
       await prisma.oTP.update({
         where: { id: recentAttempts[0].id },
@@ -203,27 +169,16 @@ export const verifyOTP = async (
     return false;
   }
 
-  // First try to compare with original code if available
   if (otp.originalCode && otp.originalCode === code) {
-    console.log(`Valid ${type} found for ${phoneNumber} (original code match)`);
     await prisma.oTP.update({
       where: { id: otp.id },
-      data: { 
-        isUsed: true,
-        attempts: 0,
-      },
+      data: { isUsed: true, attempts: 0 },
     });
     return true;
   }
 
-  // If no original code match, hash the provided code and compare
-  const hashedCode = crypto
-    .createHash('sha256')
-    .update(code)
-    .digest('hex');
-
+  const hashedCode = crypto.createHash('sha256').update(code).digest('hex');
   if (otp.code !== hashedCode) {
-    console.log(`Invalid ${type} for ${phoneNumber}`);
     await prisma.oTP.update({
       where: { id: otp.id },
       data: { attempts: (otp.attempts || 0) + 1 },
@@ -231,13 +186,9 @@ export const verifyOTP = async (
     return false;
   }
 
-  console.log(`Valid ${type} found for ${phoneNumber} (hashed code match)`);
   await prisma.oTP.update({
     where: { id: otp.id },
-    data: { 
-      isUsed: true,
-      attempts: 0,
-    },
+    data: { isUsed: true, attempts: 0 },
   });
   return true;
-}; 
+};

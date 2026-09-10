@@ -16,9 +16,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { 
   Target,
   ArrowLeft,
+  Key,
+  Smartphone,
 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { useAppLock } from '../../contexts/AppLockContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { updateDeviceLock } from '../../api/auth';
+import { getBiometricLabel } from '../../lib/biometrics';
 
 type PermissionsNavigationProp = NativeStackNavigationProp<any, 'Permissions'>;
 
@@ -26,9 +32,21 @@ const Permissions = () => {
   const navigation = useNavigation<PermissionsNavigationProp>();
   
   // State for toggle switches
-  // const [twoFactorEnabled, setTwoFactorEnabled] = useState(false); // commented: not implemented yet
-  // const [biometricEnabled, setBiometricEnabled] = useState(false); // commented: not implemented yet
+  const { user, refreshUser } = useAuth();
+  const {
+    biometricEnabled,
+    setBiometricEnabled,
+    biometricsAvailable,
+    biometricMethod,
+    appLockEnabled,
+    setAppLockEnabled,
+  } = useAppLock();
+  const [deviceLockEnabled, setDeviceLockEnabled] = useState(Boolean(user?.deviceLockEnabled));
   const [locationSharing, setLocationSharing] = useState(false);
+
+  useEffect(() => {
+    setDeviceLockEnabled(Boolean(user?.deviceLockEnabled));
+  }, [user?.deviceLockEnabled]);
 
   // Keys for AsyncStorage
   const LOCATION_PREF_KEY = 'locationSharingEnabled';
@@ -199,33 +217,67 @@ const Permissions = () => {
     </TouchableOpacity>
   );
 
+  const handleDeviceLockToggle = async (value: boolean) => {
+    try {
+      await updateDeviceLock(value);
+      setDeviceLockEnabled(value);
+      await refreshUser();
+      Alert.alert(
+        value ? 'Device lock on' : 'Device lock off',
+        value
+          ? 'This SNAP account will only work on this phone or tablet.'
+          : 'You can sign in to this account from another device.'
+      );
+    } catch (error: any) {
+      Alert.alert('Unable to update device lock', error?.message || 'Please try again.');
+    }
+  };
+
   const categories = [
-    // {
-    //   id: 'security',
-    //   title: 'Security & Authentication',
-    //   items: [
-    //     {
-    //       id: 'two-factor',
-    //       title: 'Two-Factor Authentication',
-    //       icon: <ShieldCheck size={20} color="#059669" />,
-    //       onPress: () => {},
-    //       isToggle: true,
-    //       toggleValue: twoFactorEnabled,
-    //       onToggleChange: handleTwoFactorToggle,
-    //       subtitle: 'Add an extra layer of security',
-    //     },
-    //     {
-    //       id: 'biometric',
-    //       title: 'Biometric Login',
-    //       icon: <Key size={20} color="#7C3AED" />,
-    //       onPress: () => {},
-    //       isToggle: true,
-    //       toggleValue: biometricEnabled,
-    //       onToggleChange: handleBiometricToggle,
-    //       subtitle: 'Use fingerprint or face ID',
-    //     },
-    //   ],
-    // },
+    {
+      id: 'security',
+      title: 'Security & Authentication',
+      items: [
+        {
+          id: 'app-lock',
+          title: 'App lock',
+          icon: <Key size={20} color="#2563EB" />,
+          onPress: () => {},
+          isToggle: true,
+          toggleValue: appLockEnabled,
+          onToggleChange: (value: boolean) => { void setAppLockEnabled(value); },
+          subtitle: 'Lock SNAP when you leave the app',
+        },
+        {
+          id: 'biometric',
+          title: 'Biometric Login',
+          icon: <Key size={20} color="#7C3AED" />,
+          onPress: () => {},
+          isToggle: true,
+          toggleValue: biometricEnabled && biometricsAvailable,
+          onToggleChange: (value: boolean) => {
+            if (!biometricsAvailable) {
+              Alert.alert('Not available', 'Set up Face ID or fingerprint on this device first.');
+              return;
+            }
+            void setBiometricEnabled(value);
+          },
+          subtitle: biometricsAvailable
+            ? `Use ${getBiometricLabel(biometricMethod)} to unlock`
+            : 'Use fingerprint or face ID',
+        },
+        {
+          id: 'device-lock',
+          title: 'Lock to this device',
+          icon: <Smartphone size={20} color="#059669" />,
+          onPress: () => {},
+          isToggle: true,
+          toggleValue: deviceLockEnabled,
+          onToggleChange: handleDeviceLockToggle,
+          subtitle: 'This account only works on this phone',
+        },
+      ],
+    },
     {
       id: 'privacy',
       title: 'Location',

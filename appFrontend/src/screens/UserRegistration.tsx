@@ -22,8 +22,9 @@ type RootStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   PinVerification: { phoneNumber: string };
-  UserRegistration: { phoneNumber: string };
+  UserRegistration: { phoneNumber?: string; email?: string };
   LoginPin: undefined;
+  NewPin: { currentPin: string; isFirstTime?: boolean };
   Home: undefined;
 };
 
@@ -42,7 +43,7 @@ export function UserRegistration() {
   }>({});
   const navigation = useNavigation<UserRegistrationNavigationProp>();
   const route = useRoute<UserRegistrationRouteProp>();
-  const { phoneNumber } = route.params;
+  const { phoneNumber, email } = (route.params || {}) as { phoneNumber?: string; email?: string };
 
   const validateForm = () => {
     const newErrors: typeof errors = {};
@@ -78,7 +79,8 @@ export function UserRegistration() {
         phoneNumber,
         firstName.trim(),
         lastName.trim(),
-        middleName.trim() || undefined
+        middleName.trim() || undefined,
+        email
       );
 
       console.log('Registration successful:', {
@@ -86,7 +88,14 @@ export function UserRegistration() {
         user: response.user
       });
 
-      // Navigate to LoginPin screen
+      if ((response as any)?.requiresPinSetup || !(response as any)?.user?.hasPin) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'NewPin', params: { currentPin: '', isFirstTime: true } }],
+        });
+        return;
+      }
+
       navigation.reset({
         index: 0,
         routes: [{ name: 'LoginPin' }],

@@ -1,9 +1,30 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+import * as Device from 'expo-device';
+
+function resolveApiBaseUrl(): string {
+  const raw = (process.env.EXPO_PUBLIC_API_URL || 'https://api.cloudnexus.biz').replace(/\/$/, '');
+  if (!__DEV__ || Device.isDevice) {
+    return raw;
+  }
+
+  try {
+    const url = new URL(raw);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '10.0.2.2') {
+      return raw;
+    }
+    // Simulators cannot reach a stale LAN IP. Talk to the host machine instead.
+    url.hostname = Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1';
+    return url.origin;
+  } catch {
+    return raw;
+  }
+}
 
 // Centralized environment configuration
 export const ENV_CONFIG = {
   // API Configuration
-  API_BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'https://api.cloudnexus.biz',
+  API_BASE_URL: resolveApiBaseUrl(),
   API_TIMEOUT: 30000,
   
   // Local IP for development (used for diagnostics only)

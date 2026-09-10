@@ -6,6 +6,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { AppLockProvider } from './src/contexts/AppLockContext';
+import { AppLockGate } from './src/components/AppLockGate';
 import { TokenNotificationProvider } from './src/contexts/TokenNotificationContext';
 import { useTokenNotification } from './src/contexts/TokenNotificationContext';
 import * as ExpoNotifications from 'expo-notifications';
@@ -313,6 +315,8 @@ export default function App() {
         <BottomSheetModalProvider>
           <SafeAreaProvider>
             <AuthProvider>
+              <AppLockProvider>
+              <AppLockGate>
               <TokenNotificationProvider>
                 <NotificationHandler />
                 <NavigationContainer>
@@ -333,6 +337,8 @@ export default function App() {
                   </RootStack.Navigator>
                 </NavigationContainer>
               </TokenNotificationProvider>
+              </AppLockGate>
+              </AppLockProvider>
             </AuthProvider>
           </SafeAreaProvider>
         </BottomSheetModalProvider>

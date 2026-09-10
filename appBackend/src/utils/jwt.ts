@@ -56,7 +56,7 @@ export const generateToken = async (userId: string, deviceId: string): Promise<s
 };
 
 // Generate simple token for web app (no device tracking)
-export const generateWebToken = (userId: string, phoneNumber: string): string => {
+export const generateWebToken = (userId: string, phoneNumber?: string | null): string => {
   try {
     const token = jwt.sign(
       { 

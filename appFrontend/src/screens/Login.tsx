@@ -19,11 +19,12 @@ import {
   AppState,
   AppStateStatus,
 } from 'react-native'
-import { ArrowLeft, Globe, X, Search, MapPin, Flag, Route, Camera as CameraIcon, ShieldCheck, Upload } from 'lucide-react-native'
+import { ArrowLeft, Globe, X, Search, MapPin, Flag, Route, Camera as CameraIcon, ShieldCheck, Upload, Mail } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet'
-import { initiateLogin, initializeDeviceInfo, clearAllData } from '../api/auth'
+import { initiateLogin, initializeDeviceInfo } from '../api/auth'
+import { getLastAuthMethod, type AuthMethod } from '../lib/authPreferences'
 import getApi from '../api/config'
 import type { AuthStackParamList } from '../navigation/AuthNavigator'
 import countryData from '../utils/countryData'; // You will need to create this file with country code/name/flag
@@ -45,6 +46,9 @@ export function Login() {
   const countrySheetRef = useRef<BottomSheetModal>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false)
+  const [authMethod, setAuthMethod] = useState<AuthMethod>('email')
+  const [emailInput, setEmailInput] = useState('')
+  const [methodSwitchConfirmed, setMethodSwitchConfirmed] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [detectingCountry, setDetectingCountry] = useState(false)
   const [autoDetectedCountry, setAutoDetectedCountry] = useState(false)
@@ -63,10 +67,10 @@ export function Login() {
   useEffect(() => {
     const initialize = async () => {
       try {
-        // Clear all data first
-        await clearAllData();
-        
-        // Initialize API and device info in parallel
+        const lastMethod = await getLastAuthMethod()
+        if (lastMethod) {
+          setAuthMethod(lastMethod)
+        }
         await Promise.all([
           getApi(),
           initializeDeviceInfo()
@@ -341,6 +345,79 @@ export function Login() {
     // Don't set phone input to country code - let user type their number separately
   }
 
+  const confirmMethodSwitch = (next: AuthMethod, proceed: () => void) => {
+    if (methodSwitchConfirmed) {
+      proceed()
+      return
+    }
+    void getLastAuthMethod().then((previous) => {
+      if (previous && previous !== next) {
+        const previousLabel = previous === 'email' ? 'email' : 'phone'
+        const nextLabel = next === 'email' ? 'email' : 'phone'
+        Alert.alert(
+          'Switch sign-in method?',
+          `You previously chose ${previousLabel} sign-in. Continue with ${nextLabel}? Your account will stay the same.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Continue',
+              onPress: () => {
+                setMethodSwitchConfirmed(true)
+                setAuthMethod(next)
+                proceed()
+              },
+            },
+          ]
+        )
+        return
+      }
+      setAuthMethod(next)
+      proceed()
+    })
+  }
+
+  const handleEmailLogin = async () => {
+    const email = emailInput.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      Alert.alert('Error', 'Please enter a valid email address')
+      return
+    }
+
+    try {
+      setLoading(true)
+      const response = await initiateLogin({ method: 'email', email })
+      if (!response.isRegistered) {
+        navigation.navigate('PinVerification', {
+          method: 'email',
+          email,
+          isNewUser: true,
+          flow: 'registration',
+        })
+      } else if (!response.isDeviceVerified) {
+        navigation.navigate('PinVerification', {
+          method: 'email',
+          email,
+          isNewUser: false,
+          flow: 'device_verification',
+        })
+      } else if (response.requiresPinSetup) {
+        navigation.navigate('PinVerification', {
+          method: 'email',
+          email,
+          isNewUser: false,
+          flow: 'pin_setup',
+        })
+      } else {
+        navigation.navigate('LoginPin')
+      }
+    } catch (error: any) {
+      const title = /blocked|unauthorized|device/i.test(error?.message || '') ? 'Unable to sign in' : 'Login Failed'
+      Alert.alert(title, error?.message || 'Please try again')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleLogin = async () => {
     if (!phoneInput) {
       Alert.alert('Error', 'Please enter your phone number');
@@ -388,16 +465,17 @@ export function Login() {
       if (!response.isRegistered) {
         // New user - Send OTP and go to verification
         navigation.navigate('PinVerification', { 
+          method: 'phone',
           phoneNumber: fullNumber,
           isNewUser: true,
-          flow: 'registration' // Indicates this is for new user registration
+          flow: 'registration'
         });
       } else if (!response.isDeviceVerified) {
-        // Existing user with new device - Send OTP for device verification
         navigation.navigate('PinVerification', { 
+          method: 'phone',
           phoneNumber: fullNumber,
           isNewUser: false,
-          flow: 'device_verification' // Indicates this is for device verification
+          flow: 'device_verification'
         });
       } else {
         // Existing user with verified device - Go directly to PIN login
@@ -455,7 +533,9 @@ export function Login() {
           
           <Text style={styles.title}>Welcome Back!</Text>
           <Text style={styles.subtitle}>
-            Enter your phone number to continue
+            {authMethod === 'email'
+              ? "Enter your email and we'll send a 6-digit code. No password needed."
+              : 'Enter your phone number to continue'}
           </Text>
 
           {/* {!!apiBaseUrl && (
@@ -464,6 +544,29 @@ export function Login() {
             </Text>
           )} */}
 
+          {authMethod === 'email' ? (
+            <View style={styles.inputContainer}>
+              <View style={styles.inputIconLeft}>
+                <Mail size={22} color="#2563EB" />
+              </View>
+              <TextInput
+                style={styles.input}
+                value={emailInput}
+                onChangeText={setEmailInput}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                placeholder="you@example.com"
+                editable={!loading}
+              />
+              {!!emailInput && (
+                <TouchableOpacity onPress={() => setEmailInput('')} style={styles.inputIconRight}>
+                  <X size={20} color="#6B7280" />
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
                       <View style={styles.inputContainer}>
               <TouchableOpacity onPress={() => countrySheetRef.current?.present()} style={styles.inputIconLeft}>
                 {detectingCountry ? (
@@ -499,7 +602,19 @@ export function Login() {
                 </TouchableOpacity>
               )}
             </View>
-          {detectingCountry && (
+          )}
+          <TouchableOpacity
+            onPress={() => {
+              const next = authMethod === 'email' ? 'phone' : 'email'
+              confirmMethodSwitch(next, () => setAuthMethod(next))
+            }}
+            style={{ marginTop: 16, alignItems: 'center' }}
+          >
+            <Text style={{ color: '#2563EB', fontSize: 15, fontWeight: '600' }}>
+              {authMethod === 'email' ? 'Use phone number instead' : 'Use email instead'}
+            </Text>
+          </TouchableOpacity>
+          {authMethod === 'phone' && detectingCountry && (
             <Text style={styles.detectingText}>
               📍 Detecting your location...
             </Text>
@@ -620,9 +735,9 @@ export function Login() {
 
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.button, styles.buttonWide, !phoneInput && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={!phoneInput || loading}
+            style={[styles.button, styles.buttonWide, (authMethod === 'email' ? !emailInput : !phoneInput) && styles.buttonDisabled]}
+            onPress={authMethod === 'email' ? handleEmailLogin : handleLogin}
+            disabled={(authMethod === 'email' ? !emailInput : !phoneInput) || loading}
           >
             <Text style={styles.buttonText}>
               {loading ? 'Verifying...' : 'Continue'}

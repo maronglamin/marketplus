@@ -1,11 +1,18 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, User } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { createOTP, verifyOTP } from '../utils/otp';
+import { createOTP, verifyOTP, OtpChannel } from '../utils/otp';
 import { generateToken, generateWebToken } from '../utils/jwt';
 import twilio from 'twilio';
 import { driverService } from '../services/driverService';
 import { randomUUID } from 'crypto';
+import { isValidEmail, normalizeEmail } from '../services/email';
+import { mergeUsers, resolveUserForIdentifier } from '../services/accountMerge';
+import {
+  assertDeviceLoginAllowed,
+  DeviceLoginError,
+  recordDeviceLogin,
+} from '../services/deviceLimits';
 
 const prisma = new PrismaClient();
 
@@ -38,8 +45,23 @@ interface AuthRequest extends Request {
   };
 }
 
-// Helper function to create/update device
-const upsertDevice = async (userId: string, deviceInfo: any) => {
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const isRegisteredUser = (user: { firstName?: string | null; lastName?: string | null }) =>
+  Boolean(user.firstName && user.lastName && user.firstName.trim() !== '' && user.lastName.trim() !== '');
+
+const publicUser = (user: User) => ({
+  id: user.id,
+  firstName: user.firstName,
+  lastName: user.lastName,
+  email: user.email,
+  phoneNumber: user.phoneNumber,
+  preferredAuthMethod: user.preferredAuthMethod,
+  deviceLockEnabled: user.deviceLockEnabled,
+  hasPin: Boolean(user.pin),
+});
+
+const upsertDevice = async (userId: string, deviceInfo: any, extras?: { phoneNumber?: string | null; isVerified?: boolean }) => {
   return prisma.device.upsert({
     where: {
       userId_deviceId: {
@@ -53,444 +75,293 @@ const upsertDevice = async (userId: string, deviceInfo: any) => {
       brand: deviceInfo.brand || 'unknown',
       modelName: deviceInfo.modelName || 'unknown',
       osVersion: deviceInfo.osVersion || 'unknown',
-      phoneNumber: deviceInfo.phoneNumber,
+      phoneNumber: extras?.phoneNumber ?? deviceInfo.phoneNumber ?? undefined,
+      fingerprint: deviceInfo.fingerprint || undefined,
+      hardwareId: deviceInfo.hardwareId || undefined,
       lastLoginAt: new Date(),
+      ...(typeof extras?.isVerified === 'boolean' ? { isVerified: extras.isVerified } : {}),
     },
     create: {
       id: randomUUID(),
       deviceId: deviceInfo.deviceId,
-      deviceName: deviceInfo.deviceName,
-      deviceType: deviceInfo.deviceType,
+      deviceName: deviceInfo.deviceName || 'unknown',
+      deviceType: deviceInfo.deviceType || 'unknown',
       brand: deviceInfo.brand || 'unknown',
       modelName: deviceInfo.modelName || 'unknown',
       osVersion: deviceInfo.osVersion || 'unknown',
-      phoneNumber: deviceInfo.phoneNumber,
+      phoneNumber: extras?.phoneNumber ?? deviceInfo.phoneNumber ?? null,
+      fingerprint: deviceInfo.fingerprint || null,
+      hardwareId: deviceInfo.hardwareId || null,
       userId,
-      isVerified: false,
+      isVerified: extras?.isVerified ?? false,
       updatedAt: new Date(),
     },
   });
 };
 
+const resolveAuthMethod = (reqBody: any): { method: 'email' | 'phone'; email?: string; phoneNumber?: string; channel: OtpChannel } => {
+  const rawMethod = typeof reqBody.method === 'string' ? reqBody.method.toLowerCase() : '';
+  const email = normalizeEmail(reqBody.email);
+  const phoneNumber = normalizePhone(reqBody.phoneNumber);
+
+  if (rawMethod === 'email' || (!rawMethod && email && EMAIL_RE.test(email))) {
+    return { method: 'email', email, channel: 'EMAIL' };
+  }
+  return { method: 'phone', phoneNumber, channel: 'PHONE' };
+};
+
 export const initiateLogin = async (req: Request, res: Response) => {
   try {
-    const { phoneNumber, deviceInfo } = req.body;
+    const { deviceInfo, lastUserId } = req.body;
+    const { method, email, phoneNumber, channel } = resolveAuthMethod(req.body);
 
-    if (!phoneNumber || !deviceInfo) {
-      console.log('Missing required fields:', { phoneNumber, deviceInfo });
-      return res.status(400).json({ message: 'Phone number and device info are required' });
+    if (!deviceInfo?.deviceId) {
+      return res.status(400).json({ message: 'Device info is required' });
     }
 
-    const normalizedPhone = normalizePhone(phoneNumber);
-    console.log('Initiating login for:', { phoneNumber, deviceInfo });
+    if (method === 'email') {
+      if (!email || !isValidEmail(email)) {
+        return res.status(400).json({ message: 'A valid email address is required' });
+      }
+    } else if (!phoneNumber) {
+      return res.status(400).json({ message: 'Phone number is required' });
+    }
 
-    // Check if any users exist for this phone
-    const usersWithPhone = await prisma.user.findMany({
-      where: { phoneNumber: normalizedPhone },
-      include: { devices: true },
-      orderBy: { createdAt: 'desc' }
+    const identifier = method === 'email' ? email! : phoneNumber!;
+    console.log('Initiating login for:', { method, identifier });
+
+    const resolved = await resolveUserForIdentifier({
+      email: method === 'email' ? email : undefined,
+      phoneNumber: method === 'phone' ? phoneNumber : undefined,
+      lastUserId,
     });
-    // Prefer any non-terminated user; otherwise treat as new user
-    const user = usersWithPhone.find(u => (u.status as any) !== ACCOUNT_STATUS_TERMINATED) || null;
+    let user = resolved.user
+      ? await prisma.user.findUnique({ where: { id: resolved.user.id }, include: { devices: true } })
+      : null;
 
-    // Blocked status check
     if (user && user.status === 'BLOCKED') {
-      console.log('Blocked user attempted login:', { userId: user.id, phoneNumber });
       return res.status(401).json({ message: 'Your account is blocked. Please contact support.' });
     }
 
-    // Terminated users should be treated like new users (OTP + registration) and MUST NOT go to PIN login
     const isTerminated = !!(user && (user.status as any) === ACCOUNT_STATUS_TERMINATED);
-
-    console.log('User lookup result:', user ? {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      hasDevices: user.devices.length
-    } : 'New user');
-
-    let tempPin: string | null = null;
-    let createdUser: { id: string; devices: { id: string }[] } | null = null;
-
-    // Test-only bypass: auto-verify any device for the configured phone
-    if (normalizedPhone === TEST_BYPASS_PHONE) {
-      if (user) {
-        const isRegistered = Boolean(
-          user.firstName &&
-          user.lastName &&
-          user.firstName.trim() !== '' &&
-          user.lastName.trim() !== ''
-        );
-
-        // Mark all existing devices for this user/phone as verified
-        await prisma.device.updateMany({
-          where: {
-            OR: [
-              { userId: user.id },
-              { phoneNumber: normalizedPhone }
-            ]
-          },
-          data: { isVerified: true, lastLoginAt: new Date() }
-        });
-
-        // Upsert current device as verified
-        const device = await prisma.device.upsert({
-          where: {
-            userId_deviceId: {
-              userId: user.id,
-              deviceId: deviceInfo.deviceId,
-            },
-          },
-          update: {
-            deviceName: deviceInfo.deviceName,
-            deviceType: deviceInfo.deviceType,
-            brand: deviceInfo.brand || 'unknown',
-            modelName: deviceInfo.modelName || 'unknown',
-            osVersion: deviceInfo.osVersion || 'unknown',
-            phoneNumber: normalizedPhone,
-            isVerified: true,
-            lastLoginAt: new Date(),
-          },
-          create: {
-            id: randomUUID(),
-            deviceId: deviceInfo.deviceId,
-            deviceName: deviceInfo.deviceName,
-            deviceType: deviceInfo.deviceType,
-            brand: deviceInfo.brand || 'unknown',
-            modelName: deviceInfo.modelName || 'unknown',
-            osVersion: deviceInfo.osVersion || 'unknown',
-            phoneNumber: normalizedPhone,
-            userId: user.id,
-            isVerified: true,
-            updatedAt: new Date(),
-          },
-        });
-        console.log('Test bypass: device auto-verified', { deviceId: device.id });
-
-        return res.status(200).json({
-          message: 'Device verified',
-          requiresPin: true,
-          isNewUser: false,
-          isRegistered,
-          user: {
-            id: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            phoneNumber: user.phoneNumber
-          }
-        });
-      } else {
-        // New user path with bypass: create user, auto-verify device, and send PIN
-        const newPin = await createOTP(normalizedPhone, 'PIN_RESET', { context: 'initiateLogin:bypass_send_pin' });
-        const hashedPin = await bcrypt.hash(newPin, 10);
-
-        const createdUser = await prisma.user.create({
-          data: {
-            id: randomUUID(),
-            phoneNumber: normalizedPhone,
-            firstName: '',
-            lastName: '',
-            pin: hashedPin,
-            updatedAt: new Date(),
-            devices: {
-              create: {
-                id: randomUUID(),
-                deviceId: deviceInfo.deviceId,
-                deviceName: deviceInfo.deviceName,
-                deviceType: deviceInfo.deviceType,
-                brand: deviceInfo.brand || 'unknown',
-                modelName: deviceInfo.modelName || 'unknown',
-                osVersion: deviceInfo.osVersion || 'unknown',
-                phoneNumber: normalizedPhone,
-                isVerified: true,
-                updatedAt: new Date(),
-              },
-            },
-          },
-          include: { devices: true }
-        });
-
-        // Ensure any future/old devices tied by phone are marked verified too
-        await prisma.device.updateMany({
-          where: { phoneNumber: normalizedPhone },
-          data: { isVerified: true }
-        });
-
-        console.log('Test bypass: created user and auto-verified device');
-        return res.status(200).json({
-          message: 'Device verified',
-          requiresPin: true,
-          isNewUser: true,
-          isRegistered: false,
-          user: {
-            id: createdUser.id,
-            firstName: createdUser.firstName,
-            lastName: createdUser.lastName,
-            phoneNumber: createdUser.phoneNumber
-          }
-        });
-      }
+    if (isTerminated) {
+      user = null;
     }
 
     if (user) {
-      // Check if user has completed registration
-      const isRegistered = Boolean(
-        user.firstName && 
-        user.lastName && 
-        user.firstName.trim() !== '' && 
-        user.lastName.trim() !== ''
-      );
+      try {
+        await assertDeviceLoginAllowed(user, deviceInfo);
+      } catch (error) {
+        if (error instanceof DeviceLoginError) {
+          return res.status(403).json({ message: error.message, code: error.code, accountDeviceLocked: error.code === 'DEVICE_LOCK_VIOLATION' });
+        }
+        throw error;
+      }
+    }
 
-      // Check if device is already verified
-      const existingDevice = user.devices.find(d => d.deviceId === deviceInfo.deviceId);
-      console.log('Device verification status:', existingDevice ? 
-        (existingDevice.isVerified ? 'Verified' : 'Not verified') : 
-        'New device');
-      
-      if (existingDevice && existingDevice.isVerified && !isTerminated) {
-        console.log('Device already verified, proceeding to PIN login');
+    const isTestBypass = method === 'phone' && phoneNumber === TEST_BYPASS_PHONE;
+
+    if (isTestBypass) {
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            id: randomUUID(),
+            phoneNumber,
+            firstName: '',
+            lastName: '',
+            preferredAuthMethod: 'PHONE',
+            updatedAt: new Date(),
+          },
+          include: { devices: true },
+        });
+      }
+      const device = await upsertDevice(user.id, deviceInfo, { phoneNumber, isVerified: true });
+      await recordDeviceLogin(user.id, deviceInfo);
+      return res.status(200).json({
+        message: 'Device verified',
+        requiresPin: Boolean(user.pin),
+        requiresPinSetup: !user.pin,
+        isNewUser: !isRegisteredUser(user),
+        isRegistered: isRegisteredUser(user),
+        user: publicUser(user),
+        deviceId: device.id,
+      });
+    }
+
+    if (user) {
+      const existingDevice = user.devices.find((d) => d.deviceId === deviceInfo.deviceId);
+      if (existingDevice?.isVerified && user.pin) {
         return res.status(200).json({
           message: 'Device verified',
           requiresPin: true,
+          requiresPinSetup: false,
           isNewUser: false,
-          isRegistered,
-          user: {
-            id: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            phoneNumber: user.phoneNumber
-          }
+          isRegistered: isRegisteredUser(user),
+          user: publicUser(user),
         });
       }
-
-      // Device exists but not verified - update device info
-      console.log('Updating device info for existing user');
-      await upsertDevice(user.id, { ...deviceInfo, phoneNumber });
-    } else {
-      console.log('Creating new user with device');
-      // Generate temporary PIN for new user (do not send yet)
-      tempPin = await createOTP(phoneNumber, 'PIN_RESET', { skipSending: true, context: 'initiateLogin:new_user:pin' });
-      const hashedPin = await bcrypt.hash(tempPin, 10);
-
-      // Create new user with unverified device
-      createdUser = await prisma.user.create({
+      await upsertDevice(user.id, deviceInfo, { phoneNumber: phoneNumber || user.phoneNumber });
+    } else if (resolved.shouldCreate) {
+      user = await prisma.user.create({
         data: {
           id: randomUUID(),
-          phoneNumber,
-          firstName: '', // Will be updated during registration
-          lastName: '',  // Will be updated during registration
-          pin: hashedPin,
+          email: method === 'email' ? email : null,
+          phoneNumber: method === 'phone' ? phoneNumber : null,
+          firstName: '',
+          lastName: '',
+          preferredAuthMethod: method === 'email' ? 'EMAIL' : 'PHONE',
           updatedAt: new Date(),
-          devices: {
-            create: {
-              id: randomUUID(),
-              deviceId: deviceInfo.deviceId,
-              deviceName: deviceInfo.deviceName,
-              deviceType: deviceInfo.deviceType,
-              brand: deviceInfo.brand,
-              modelName: deviceInfo.modelName,
-              osVersion: deviceInfo.osVersion,
-              phoneNumber,
-              isVerified: false,
-              updatedAt: new Date(),
-            },
-          },
         },
         include: { devices: true },
       });
+      await upsertDevice(user.id, deviceInfo, { phoneNumber: phoneNumber || null });
+    } else if (user) {
+      await upsertDevice(user.id, deviceInfo, { phoneNumber: phoneNumber || user.phoneNumber });
     }
 
-    // Determine if this is a first-time user (needs to set PIN)
-    const isFirstTime = !user;
+    const otpUserId = user?.id;
+    const device = user
+      ? await upsertDevice(user.id, deviceInfo, { phoneNumber: phoneNumber || user.phoneNumber })
+      : null;
 
-    // Generate codes according to the scenario
-    console.log('Generating verification OTP');
+    await createOTP(identifier, 'VERIFICATION', {
+      channel,
+      userId: otpUserId,
+      deviceId: device?.id,
+      deviceInfo,
+      context: `initiateLogin:${method}`,
+    });
 
-    if (isFirstTime) {
-      const newUser = createdUser;
-      
-      if (newUser) {
-        const device = newUser.devices[0];
-        
-        // Generate verification OTP for new user and send combined SMS with PIN
-        await createOTP(phoneNumber, 'VERIFICATION', {
-          userId: newUser.id,
-          deviceId: device.id,
-          deviceInfo,
-          context: 'initiateLogin:new_user:combined',
-          sendCombined: true,
-          includeVerificationCode: tempPin!,
-        });
-        console.log('Sent verification OTP for new user');
-      }
-    } else {
-      // Existing user - get or create device to get the database ID
-      const device = await upsertDevice(user!.id, { ...deviceInfo, phoneNumber: normalizedPhone });
-      
-      // Only send verification OTP
-      await createOTP(normalizedPhone, 'VERIFICATION', { 
-        userId: user!.id, 
-        deviceId: device.id, 
-        deviceInfo, 
-        context: 'initiateLogin:existing_user' 
-      });
-      console.log('Sent verification OTP for existing user');
-    }
-
-    // Note: createOTP handles sending. For first-time users, combined message is already sent above.
-    
     return res.status(200).json({
       message: 'OTP sent successfully',
       requiresPin: false,
-      isNewUser: !user || isTerminated,
-      isRegistered: isTerminated ? false : user ? Boolean(
-        user.firstName && 
-        user.lastName && 
-        user.firstName.trim() !== '' && 
-        user.lastName.trim() !== ''
-      ) : false,
-      user: user ? {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        phoneNumber: user.phoneNumber
-      } : undefined
+      requiresPinSetup: user ? !user.pin : true,
+      isNewUser: !user || !isRegisteredUser(user),
+      isRegistered: user ? isRegisteredUser(user) : false,
+      user: user ? publicUser(user) : undefined,
     });
   } catch (error) {
     console.error('Error in initiateLogin:', error);
+    if (error instanceof Error && error.message.includes('Too many')) {
+      return res.status(429).json({ message: error.message });
+    }
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
 
 export const verifyOTPAndRegister = async (req: Request, res: Response) => {
   try {
-    const { phoneNumber, code, deviceInfo } = req.body;
+    const { code, deviceInfo, lastUserId } = req.body;
+    const { method, email, phoneNumber, channel } = resolveAuthMethod(req.body);
 
-    if (!phoneNumber || !code || !deviceInfo) {
+    if (!code || !deviceInfo?.deviceId) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    const normalizedPhone = normalizePhone(phoneNumber);
-    // Test-only bypass: accept any OTP for the test phone
-    const isValid = normalizedPhone === TEST_BYPASS_PHONE
-      ? true
-      : await verifyOTP(normalizedPhone, code, 'VERIFICATION');
+    const identifier = method === 'email' ? email : phoneNumber;
+    if (!identifier) {
+      return res.status(400).json({ message: method === 'email' ? 'Email is required' : 'Phone number is required' });
+    }
+
+    const isTestBypass = method === 'phone' && phoneNumber === TEST_BYPASS_PHONE;
+    const isValid = isTestBypass ? true : await verifyOTP(identifier, code, 'VERIFICATION', channel);
     if (!isValid) {
       return res.status(400).json({ message: 'Invalid or expired OTP' });
     }
 
-    let user = await prisma.user.findFirst({
-      where: { phoneNumber: normalizedPhone },
-      include: { devices: true },
-      orderBy: { createdAt: 'desc' }
+    const resolved = await resolveUserForIdentifier({
+      email: method === 'email' ? email : undefined,
+      phoneNumber: method === 'phone' ? phoneNumber : undefined,
+      lastUserId,
     });
-    // If multiple users exist and the latest is terminated while an older active exists, prefer the active
-    if ((user?.status as any) === ACCOUNT_STATUS_TERMINATED) {
-      const active = await prisma.user.findFirst({
-        where: { phoneNumber: normalizedPhone, NOT: { status: ACCOUNT_STATUS_TERMINATED } as any },
-        include: { devices: true },
-        orderBy: { createdAt: 'desc' }
+
+    let user = resolved.user;
+    if (resolved.mergeFromId && user) {
+      user = await mergeUsers(user.id, resolved.mergeFromId);
+    }
+
+    if (!user && resolved.shouldCreate) {
+      user = await prisma.user.create({
+        data: {
+          id: randomUUID(),
+          email: method === 'email' ? email : null,
+          phoneNumber: method === 'phone' ? phoneNumber : null,
+          firstName: '',
+          lastName: '',
+          preferredAuthMethod: method === 'email' ? 'EMAIL' : 'PHONE',
+          updatedAt: new Date(),
+        },
       });
-      if (active) user = active;
     }
 
     if (!user) {
-      // New user, return success but don't create user yet
       return res.status(200).json({
         message: 'OTP verified successfully',
         isNewUser: true,
-        requiresRegistration: true
+        requiresRegistration: true,
+        requiresPinSetup: true,
       });
     }
 
-    // Test-only: mark all devices for this user/phone as verified
-    if (normalizedPhone === TEST_BYPASS_PHONE) {
-      await prisma.device.updateMany({
-        where: {
-          OR: [
-            { userId: user.id },
-            { phoneNumber: normalizedPhone }
-          ]
-        },
-        data: { isVerified: true, lastLoginAt: new Date() }
-      });
-    }
-
-    // Existing user, verify device
-    const device = await prisma.device.upsert({
-      where: {
-        userId_deviceId: {
-          userId: user.id,
-          deviceId: deviceInfo.deviceId,
-        },
-      },
-      update: {
-        deviceName: deviceInfo.deviceName,
-        deviceType: deviceInfo.deviceType,
-        brand: deviceInfo.brand || 'unknown',
-        modelName: deviceInfo.modelName || 'unknown',
-        osVersion: deviceInfo.osVersion || 'unknown',
-        phoneNumber: normalizedPhone,
-        isVerified: true,
-        lastLoginAt: new Date(),
-      },
-      create: {
-        id: randomUUID(),
-        deviceId: deviceInfo.deviceId,
-        deviceName: deviceInfo.deviceName,
-        deviceType: deviceInfo.deviceType,
-        brand: deviceInfo.brand || 'unknown',
-        modelName: deviceInfo.modelName || 'unknown',
-        osVersion: deviceInfo.osVersion || 'unknown',
-        phoneNumber: normalizedPhone,
-        userId: user.id,
-        isVerified: true,
-        updatedAt: new Date(),
-      },
-    });
-
-    // Generate token for the verified device
-    const token = await generateToken(user.id, device.id);
-
-    // Always generate a PIN_RESET OTP after verification to force PIN reset
     try {
-      await createOTP(normalizedPhone, 'PIN_RESET', { 
-        userId: user.id,
-        deviceId: device.id, 
-        deviceInfo, 
-        context: 'verifyOTPAndRegister:force_pin_reset' 
-      });
-    } catch (e) {
-      console.error('Error creating PIN_RESET OTP after verification:', e);
+      await assertDeviceLoginAllowed(user, deviceInfo);
+    } catch (error) {
+      if (error instanceof DeviceLoginError) {
+        return res.status(403).json({ message: error.message, code: error.code, accountDeviceLocked: error.code === 'DEVICE_LOCK_VIOLATION' });
+      }
+      throw error;
     }
 
-    // Fetch most recent unused PIN_RESET OTP to get its id
-    const pinResetOTP = await prisma.oTP.findFirst({
-      where: {
-        phoneNumber: normalizedPhone,
-        type: 'PIN_RESET',
-        isUsed: false,
-        expiresAt: { gt: new Date() }
-      },
-      orderBy: { createdAt: 'desc' }
+    const linkData: { email?: string; phoneNumber?: string; preferredAuthMethod?: 'EMAIL' | 'PHONE' } = {
+      preferredAuthMethod: method === 'email' ? 'EMAIL' : 'PHONE',
+    };
+    if (method === 'email' && email && user.email !== email) {
+      linkData.email = email;
+    }
+    if (method === 'phone' && phoneNumber && user.phoneNumber !== phoneNumber) {
+      linkData.phoneNumber = phoneNumber;
+    }
+    if (linkData.email || linkData.phoneNumber) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: linkData,
+      });
+    } else {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { preferredAuthMethod: method === 'email' ? 'EMAIL' : 'PHONE' },
+      });
+    }
+
+    const device = await upsertDevice(user.id, deviceInfo, {
+      phoneNumber: phoneNumber || user.phoneNumber,
+      isVerified: true,
     });
+
+    if (user.deviceLockEnabled && !user.lockedDeviceId) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { lockedDeviceId: device.id },
+      });
+    }
+
+    await recordDeviceLogin(user.id, deviceInfo);
+    const token = await generateToken(user.id, device.id);
 
     return res.status(200).json({
       message: 'OTP verified successfully',
       token,
-      isNewUser: false,
-      requiresPin: true,
-      requiresPinReset: true,
-      pinResetOTPId: pinResetOTP?.id,
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        phoneNumber: user.phoneNumber
-      }
+      isNewUser: !isRegisteredUser(user),
+      requiresRegistration: !isRegisteredUser(user),
+      requiresPin: Boolean(user.pin),
+      requiresPinSetup: !user.pin,
+      user: publicUser(user),
     });
   } catch (error) {
     console.error('Error in verifyOTPAndRegister:', error);
+    if (error instanceof Error && error.message.includes('Too many')) {
+      return res.status(429).json({ message: error.message });
+    }
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -499,6 +370,7 @@ export const registerUser = async (req: Request, res: Response) => {
   try {
     const {
       phoneNumber,
+      email,
       firstName,
       middleName,
       lastName,
@@ -520,17 +392,24 @@ export const registerUser = async (req: Request, res: Response) => {
     };
 
     const normalizedPhone = normalizePhone(phoneNumber);
+    const normalizedEmail = normalizeEmail(email);
 
     console.log('Registration request received:', {
       phoneNumber: normalizedPhone,
+      email: normalizedEmail,
       firstName,
       lastName,
       middleName
     });
 
-    // Check if user already exists (prefer the most recent record for this phone)
     const existingUser = await prisma.user.findFirst({
-      where: { phoneNumber: normalizedPhone },
+      where: {
+        NOT: { status: ACCOUNT_STATUS_TERMINATED } as any,
+        OR: [
+          normalizedPhone ? { phoneNumber: normalizedPhone } : undefined,
+          normalizedEmail ? { email: normalizedEmail } : undefined,
+        ].filter(Boolean) as any,
+      },
       include: { devices: true },
       orderBy: { createdAt: 'desc' }
     });
@@ -552,9 +431,8 @@ export const registerUser = async (req: Request, res: Response) => {
         firstName: firstName.trim(),
         middleName: middleName?.trim() || null,
         lastName: lastName.trim(),
-        // Ensure stored phone remains normalized (no change if already set)
-        phoneNumber: existingUser.phoneNumber || normalizedPhone,
-        // Reactivate if previously terminated
+        phoneNumber: existingUser.phoneNumber || normalizedPhone || null,
+        email: existingUser.email || normalizedEmail || null,
         status: (existingUser.status as any) === ACCOUNT_STATUS_TERMINATED ? ACCOUNT_STATUS_ACTIVE : existingUser.status,
       }
     });
@@ -567,12 +445,8 @@ export const registerUser = async (req: Request, res: Response) => {
     return res.status(200).json({
       message: 'User registered successfully',
       token,
-      user: {
-        id: updatedUser.id,
-        firstName: updatedUser.firstName,
-        lastName: updatedUser.lastName,
-        phoneNumber: updatedUser.phoneNumber
-      }
+      requiresPinSetup: !updatedUser.pin,
+      user: publicUser(updatedUser),
     });
   } catch (error) {
     console.error('Error in registerUser:', error);
@@ -582,7 +456,7 @@ export const registerUser = async (req: Request, res: Response) => {
 
 export const loginWithPin = async (req: Request, res: Response) => {
   try {
-    const { deviceId, pin, deviceInfo, phoneNumber } = req.body;
+    const { deviceId, pin, deviceInfo, phoneNumber, email } = req.body;
 
     console.log('Login attempt:', { deviceId, deviceInfo, phoneNumber });
 
@@ -592,16 +466,20 @@ export const loginWithPin = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'PIN must be 4 digits' });
     }
 
-    if (!phoneNumber) {
-      console.log('Missing phoneNumber in request');
-      return res.status(400).json({ message: 'Phone number is required' });
+    const normalizedPhone = normalizePhone(phoneNumber);
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedPhone && !normalizedEmail) {
+      return res.status(400).json({ message: 'Email or phone number is required' });
     }
 
-    const normalizedPhone = normalizePhone(phoneNumber);
-
-    // First find the user by phone number (prefer non-TERMINATED, newest)
     let user = await prisma.user.findFirst({
-      where: { phoneNumber: normalizedPhone, NOT: { status: ACCOUNT_STATUS_TERMINATED } as any },
+      where: {
+        NOT: { status: ACCOUNT_STATUS_TERMINATED } as any,
+        OR: [
+          normalizedPhone ? { phoneNumber: normalizedPhone } : undefined,
+          normalizedEmail ? { email: normalizedEmail } : undefined,
+        ].filter(Boolean) as any,
+      },
       include: {
         devices: {
           where: {
@@ -697,53 +575,36 @@ export const loginWithPin = async (req: Request, res: Response) => {
       device = verifiedDevice as any;
     }
 
-    // Compare PIN with stored hashed PIN
+    if (!user.pin) {
+      const token = await generateToken(user.id, device.id);
+      return res.status(200).json({
+        message: 'PIN setup required',
+        token,
+        requiresPinSetup: true,
+        user: publicUser(user),
+      });
+    }
+
     const isValidPin = await bcrypt.compare(pin, user.pin);
     if (!isValidPin) {
-      console.log('Invalid PIN attempt for user:', phoneNumber);
-      return res.status(401).json({ 
-        message: 'Invalid PIN. Would you like to receive a new PIN?',
+      return res.status(401).json({
+        message: 'Invalid PIN. Verify your email or phone to set a new PIN.',
         requiresNewPin: true,
-        confirmNewPin: true
+        confirmNewPin: true,
       });
     }
 
-    // Check if there's an unused PIN_RESET OTP for this user
-    const pinResetOTP = await prisma.oTP.findFirst({
-      where: {
-        phoneNumber,
-        type: 'PIN_RESET',
-        isUsed: false,
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    try {
+      await assertDeviceLoginAllowed(user, deviceInfo || { deviceId });
+    } catch (error) {
+      if (error instanceof DeviceLoginError) {
+        return res.status(403).json({ message: error.message, code: error.code, accountDeviceLocked: error.code === 'DEVICE_LOCK_VIOLATION' });
+      }
+      throw error;
+    }
 
-    // Generate token
     const token = await generateToken(user.id, device.id);
-    console.log('Generated token for PIN login:', token);
-
-    // If there's an unused PIN_RESET OTP, force PIN reset flow
-    if (pinResetOTP) {
-      console.log('PIN_RESET OTP found for user, forcing PIN reset:', phoneNumber);
-      
-      return res.status(200).json({
-        message: 'PIN reset required',
-        token,
-        requiresPinReset: true,
-        pinResetOTPId: pinResetOTP.id,
-        user: {
-          id: user.id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          phoneNumber: user.phoneNumber,
-        },
-      });
-    }
+    await recordDeviceLogin(user.id, deviceInfo || { deviceId });
 
     // Update device last login
     await prisma.device.update({
@@ -760,12 +621,8 @@ export const loginWithPin = async (req: Request, res: Response) => {
     return res.status(200).json({
       message: 'Login successful',
       token,
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        phoneNumber: user.phoneNumber,
-      },
+      requiresPinSetup: false,
+      user: publicUser(user),
     });
   } catch (error) {
     console.error('Error in loginWithPin:', error);
@@ -864,23 +721,22 @@ export const testSMS = async (req: Request, res: Response) => {
 
 export const resendOTP = async (req: Request, res: Response) => {
   try {
-    const { phoneNumber } = req.body;
-
-    if (!phoneNumber) {
-      return res.status(400).json({ message: 'Phone number is required' });
+    const { method, email, phoneNumber, channel } = resolveAuthMethod(req.body);
+    const identifier = method === 'email' ? email : phoneNumber;
+    if (!identifier) {
+      return res.status(400).json({ message: method === 'email' ? 'Email is required' : 'Phone number is required' });
     }
 
-    console.log('Resending OTP to:', phoneNumber);
-
-    // Generate and send OTP (sending handled inside createOTP and logged)
-    await createOTP(phoneNumber, 'VERIFICATION', { context: 'resendOTP' });
-    console.log('OTP generated and sent for:', phoneNumber);
+    await createOTP(identifier, 'VERIFICATION', { channel, context: 'resendOTP' });
 
     return res.status(200).json({
       message: 'OTP sent successfully'
     });
   } catch (error) {
     console.error('Error in resendOTP:', error);
+    if (error instanceof Error && error.message.includes('Too many')) {
+      return res.status(429).json({ message: error.message });
+    }
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -908,7 +764,10 @@ export const changePin = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Verify current PIN
+    if (!user.pin) {
+      return res.status(400).json({ message: 'No PIN is set. Use set-pin instead.' });
+    }
+
     const isValidPin = await bcrypt.compare(currentPin, user.pin);
     if (!isValidPin) {
       return res.status(401).json({ message: 'Current PIN is incorrect' });
@@ -934,17 +793,22 @@ export const changePin = async (req: AuthRequest, res: Response) => {
 
 export const requestNewPin = async (req: Request, res: Response) => {
   try {
-    const { phoneNumber, deviceId, deviceInfo } = req.body;
+    const { deviceId, deviceInfo } = req.body;
+    const { method, email, phoneNumber, channel } = resolveAuthMethod(req.body);
+    const identifier = method === 'email' ? email : phoneNumber;
 
-    if (!phoneNumber || !deviceId || !deviceInfo) {
-      return res.status(400).json({ message: 'Phone number, device ID, and device info are required' });
+    if (!identifier || !deviceId || !deviceInfo) {
+      return res.status(400).json({ message: 'Identifier, device ID, and device info are required' });
     }
 
-    console.log('Requesting new PIN for:', { phoneNumber, deviceId });
-
-    // Find user and verify device (phoneNumber is not unique; prefer newest non-terminated)
     const user = await prisma.user.findFirst({
-      where: { phoneNumber, NOT: { status: ACCOUNT_STATUS_TERMINATED } as any },
+      where: {
+        NOT: { status: ACCOUNT_STATUS_TERMINATED } as any,
+        OR: [
+          phoneNumber ? { phoneNumber } : undefined,
+          email ? { email } : undefined,
+        ].filter(Boolean) as any,
+      },
       include: {
         devices: {
           where: {
@@ -960,30 +824,27 @@ export const requestNewPin = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User or verified device not found' });
     }
 
-    // Generate new PIN
-    const device = user.devices[0]; // We know there's at least one device from the query above
-    const newPin = await createOTP(phoneNumber, 'PIN_RESET', { 
+    const device = user.devices[0];
+    await createOTP(identifier, 'VERIFICATION', {
+      channel,
       userId: user.id,
-      deviceId: device.id, 
-      deviceInfo, 
-      context: 'requestNewPin' 
+      deviceId: device.id,
+      deviceInfo,
+      context: 'requestNewPin',
     });
-    const hashedNewPin = await bcrypt.hash(newPin, 10);
-    
-    // Update user's PIN
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { pin: hashedNewPin }
-    });
-
-    // Note: createOTP already sends the PIN SMS
 
     return res.status(200).json({
-      message: 'New PIN has been sent to your phone.',
-      requiresNewPin: true
+      message: method === 'email'
+        ? 'A verification code has been sent to your email. Enter it to set a new PIN.'
+        : 'A verification code has been sent to your phone. Enter it to set a new PIN.',
+      requiresOtp: true,
+      requiresPinSetup: true,
     });
   } catch (error) {
     console.error('Error in requestNewPin:', error);
+    if (error instanceof Error && error.message.includes('Too many')) {
+      return res.status(429).json({ message: error.message });
+    }
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -1015,12 +876,11 @@ export const completePinReset = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Verify the PIN_RESET OTP exists and is unused
     const pinResetOTP = await prisma.oTP.findFirst({
       where: {
         id: pinResetOTPId,
-        phoneNumber: user.phoneNumber,
-        type: 'PIN_RESET',
+        identifier: { in: [user.phoneNumber || '', user.email || ''].filter(Boolean) },
+        type: { in: ['PIN_RESET', 'VERIFICATION'] },
         isUsed: false,
         expiresAt: {
           gt: new Date(),
@@ -1057,6 +917,64 @@ export const completePinReset = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     console.error('Error in completePinReset:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const setPin = async (req: AuthRequest, res: Response) => {
+  try {
+    const { newPin } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+    if (!newPin || !/^\d{4}$/.test(newPin)) {
+      return res.status(400).json({ message: 'PIN must be 4 digits' });
+    }
+
+    const hashedNewPin = await bcrypt.hash(newPin, 10);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { pin: hashedNewPin },
+    });
+
+    return res.status(200).json({ message: 'PIN set successfully', success: true });
+  } catch (error) {
+    console.error('Error in setPin:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const updateDeviceLock = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const deviceId = req.user?.deviceId;
+    const enabled = Boolean(req.body.enabled);
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    const device = deviceId
+      ? await prisma.device.findFirst({ where: { id: deviceId, userId } })
+      : null;
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        deviceLockEnabled: enabled,
+        lockedDeviceId: enabled ? (device?.id || undefined) : null,
+      },
+    });
+
+    return res.status(200).json({
+      message: enabled ? 'This account is now locked to this device.' : 'Device lock turned off.',
+      deviceLockEnabled: updated.deviceLockEnabled,
+      lockedDeviceId: updated.lockedDeviceId,
+    });
+  } catch (error) {
+    console.error('Error in updateDeviceLock:', error);
     return res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -1153,6 +1071,7 @@ export const loginWithPinWeb = async (req: Request, res: Response) => {
         firstName: true,
         lastName: true,
         phoneNumber: true,
+        email: true,
         pin: true,
         createdAt: true
       },
@@ -1181,7 +1100,10 @@ export const loginWithPinWeb = async (req: Request, res: Response) => {
       });
     }
 
-    // Verify PIN
+    if (!user.pin) {
+      return res.status(400).json({ message: 'PIN is not set. Complete PIN setup in the mobile app.' });
+    }
+
     const isPinValid = await bcrypt.compare(pin, user.pin);
     if (!isPinValid) {
       console.log('Invalid PIN for user:', phoneNumber);
@@ -1189,7 +1111,7 @@ export const loginWithPinWeb = async (req: Request, res: Response) => {
     }
 
     // Generate JWT token for web (no device tracking)
-    const token = generateWebToken(user.id, user.phoneNumber);
+    const token = generateWebToken(user.id, user.phoneNumber || user.email || '');
 
     console.log('Web login successful for user:', user.id);
 

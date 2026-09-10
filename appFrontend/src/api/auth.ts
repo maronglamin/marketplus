@@ -3,6 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import * as Application from 'expo-application';
+import * as SecureStore from 'expo-secure-store';
+import { getLastUserId, rememberAuthSuccess, type AuthMethod } from '../lib/authPreferences';
+import { markSkipNextAppLock } from '../lib/appLockStorage';
 
 // Cache for API instance
 let apiInstance: any = null;
@@ -15,8 +18,15 @@ export interface LoginResponse {
   user: any;
   isFirstLogin?: boolean;
   requiresPinReset?: boolean;
+  requiresPinSetup?: boolean;
   pinResetOTPId?: string;
 }
+
+export type InitiateLoginPayload = {
+  method: AuthMethod;
+  email?: string;
+  phoneNumber?: string;
+};
 
 export interface AuthError {
   message: string;
@@ -34,15 +44,29 @@ export const getDeviceInfo = async () => {
     const storedInfo = await AsyncStorage.getItem('deviceInfo');
     if (storedInfo) {
       cachedDeviceInfo = JSON.parse(storedInfo);
+      if (!cachedDeviceInfo.fingerprint) {
+        let fingerprint = await SecureStore.getItemAsync('snap_device_fingerprint');
+        if (!fingerprint) {
+          fingerprint = `${cachedDeviceInfo.deviceId || 'unknown'}-${Date.now()}`;
+          await SecureStore.setItemAsync('snap_device_fingerprint', fingerprint);
+        }
+        cachedDeviceInfo.fingerprint = fingerprint;
+        cachedDeviceInfo.hardwareId = cachedDeviceInfo.hardwareId || cachedDeviceInfo.deviceId || fingerprint;
+        await AsyncStorage.setItem('deviceInfo', JSON.stringify(cachedDeviceInfo));
+      }
       return cachedDeviceInfo;
     }
 
-    // Get device identifiers
     const deviceId = Platform.OS === 'ios' 
       ? await Application.getIosIdForVendorAsync()
       : Application.getAndroidId();
 
-    // Create new device info with proper format
+    let fingerprint = await SecureStore.getItemAsync('snap_device_fingerprint');
+    if (!fingerprint) {
+      fingerprint = `${deviceId || 'unknown'}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      await SecureStore.setItemAsync('snap_device_fingerprint', fingerprint);
+    }
+
     const deviceInfo = {
       deviceId: deviceId || Device.deviceName?.replace(/[^a-zA-Z0-9]/g, '') || 'unknown',
       deviceName: Device.deviceName || 'Unknown Device',
@@ -52,7 +76,9 @@ export const getDeviceInfo = async () => {
                  Device.deviceType === 4 ? 'tv' : 'unknown',
       osVersion: Device.osVersion || 'unknown',
       brand: Device.brand || 'unknown',
-      modelName: Device.modelName || 'unknown'
+      modelName: Device.modelName || 'unknown',
+      fingerprint,
+      hardwareId: deviceId || fingerprint,
     };
 
     console.log('Generated device info:', deviceInfo);
@@ -70,7 +96,9 @@ export const getDeviceInfo = async () => {
       deviceType: 'unknown',
       osVersion: 'unknown',
       brand: 'unknown',
-      modelName: 'unknown'
+      modelName: 'unknown',
+      fingerprint: 'unknown',
+      hardwareId: 'unknown',
     };
   }
 };
@@ -84,24 +112,31 @@ export const initializeDeviceInfo = async () => {
   }
 };
 
-export const initiateLogin = async (phoneNumber: string): Promise<{ isDeviceVerified: boolean; isRegistered: boolean }> => {
+export const initiateLogin = async (
+  payload: InitiateLoginPayload | string
+): Promise<{ isDeviceVerified: boolean; isRegistered: boolean; requiresPinSetup?: boolean; user?: any }> => {
   try {
-    console.log('Initiating login for:', phoneNumber);
-    
-    // Store phone number for later use
-    await AsyncStorage.setItem('phoneNumber', phoneNumber);
-    
-    // Get device info (cached or new)
-    const deviceInfo = await getDeviceInfo();
+    const request = typeof payload === 'string'
+      ? { method: 'phone' as AuthMethod, phoneNumber: payload }
+      : payload;
 
-    // Get or create API instance
+    if (request.phoneNumber) {
+      await AsyncStorage.setItem('phoneNumber', request.phoneNumber);
+    }
+    if (request.email) {
+      await AsyncStorage.setItem('email', request.email);
+    }
+
+    const deviceInfo = await getDeviceInfo();
+    const lastUserId = await getLastUserId();
+
     if (!apiInstance) {
       apiInstance = await getApi();
     }
 
-    // Make the request
     const response = await apiInstance.post('/auth/initiate-login', { 
-      phoneNumber,
+      ...request,
+      ...(lastUserId ? { lastUserId } : {}),
       deviceInfo
     });
     
@@ -123,11 +158,20 @@ export const initiateLogin = async (phoneNumber: string): Promise<{ isDeviceVeri
               response.data.user?.firstName.trim() !== '' &&
               response.data.user?.lastName.trim() !== ''
             );
-        return { isDeviceVerified, isRegistered };
+        return {
+          isDeviceVerified,
+          isRegistered,
+          requiresPinSetup: !!response.data.requiresPinSetup,
+          user: response.data.user,
+        };
       }
       
-      // New user - OTP sent, not registered yet
-      return { isDeviceVerified: false, isRegistered: false };
+      return {
+        isDeviceVerified: false,
+        isRegistered: false,
+        requiresPinSetup: true,
+        user: response.data.user,
+      };
     }
 
     throw new Error('Unexpected response from server');
@@ -149,7 +193,7 @@ export const initiateLogin = async (phoneNumber: string): Promise<{ isDeviceVeri
       cachedDeviceInfo = null;
       
       // Retry the login with fresh device info
-      return initiateLogin(phoneNumber);
+      return initiateLogin(payload);
     }
 
     // If server returns 500 for new user, treat it as a new user flow
@@ -166,23 +210,24 @@ export const initiateLogin = async (phoneNumber: string): Promise<{ isDeviceVeri
 };
 
 export const verifyOTP = async (
-  phoneNumber: string, 
+  identifier: { method: AuthMethod; email?: string; phoneNumber?: string } | string,
   code: string
 ): Promise<{ response: LoginResponse; isRegistered: boolean; isDeviceVerified: boolean }> => {
   try {
-    console.log('Starting OTP verification for:', phoneNumber);
-    
-    // Get device info (cached)
-    const deviceInfo = await getDeviceInfo();
-    console.log('Using device info:', deviceInfo);
+    const payload = typeof identifier === 'string'
+      ? { method: 'phone' as AuthMethod, phoneNumber: identifier }
+      : identifier;
 
-    // Get or create API instance
+    const deviceInfo = await getDeviceInfo();
+    const lastUserId = await getLastUserId();
+
     if (!apiInstance) {
       apiInstance = await getApi();
     }
 
     const response = await apiInstance.post('/auth/verify-otp', { 
-      phoneNumber, 
+      ...payload,
+      ...(lastUserId ? { lastUserId } : {}),
       code,
       deviceInfo 
     });
@@ -229,8 +274,19 @@ export const verifyOTP = async (
       throw new Error('Invalid token format received');
     }
 
-    console.log('Final token value:', token);
     await AsyncStorage.setItem('token', token);
+    try {
+      await SecureStore.setItemAsync('auth_token', token);
+    } catch {}
+    markSkipNextAppLock();
+    if (response.data.user?.id) {
+      await rememberAuthSuccess({
+        method: payload.method,
+        userId: response.data.user.id,
+        email: payload.email || response.data.user.email,
+        phoneNumber: payload.phoneNumber || response.data.user.phoneNumber,
+      });
+    }
 
     console.log('Verification status check:', {
       isRegistered,
@@ -267,10 +323,11 @@ export const verifyOTP = async (
 };
 
 export const register = async (
-  phoneNumber: string,
+  phoneNumber: string | undefined,
   firstName: string,
   lastName: string,
-  middleName?: string
+  middleName?: string,
+  email?: string
 ): Promise<LoginResponse> => {
   try {
     // Normalize phone number to E.164 with leading + and validate
@@ -295,11 +352,12 @@ export const register = async (
       }
     }
 
-    if (!isValidE164(normalizedPhone)) {
-      throw new Error('Invalid phone number. Please go back and re-enter your number.');
+    const normalizedEmail = (email || (await AsyncStorage.getItem('email')) || '').trim().toLowerCase();
+    if (!isValidE164(normalizedPhone) && !normalizedEmail) {
+      throw new Error('Invalid account details. Please go back and sign in again.');
     }
 
-    console.log('Registering user:', { phoneNumber: normalizedPhone, firstName, lastName, middleName });
+    console.log('Registering user:', { phoneNumber: normalizedPhone, email: normalizedEmail, firstName, lastName, middleName });
     
     // Validate names
     if (!firstName || firstName.trim().length < 2) {
@@ -325,7 +383,8 @@ export const register = async (
     });
 
     const response = await apiInstance.post('/auth/register', {
-      phoneNumber: normalizedPhone,
+      phoneNumber: isValidE164(normalizedPhone) ? normalizedPhone : undefined,
+      email: normalizedEmail || undefined,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       middleName: middleName?.trim() || undefined
@@ -402,10 +461,10 @@ export const loginWithPin = async (deviceId: string, pin: string): Promise<Login
     const deviceInfo = await getDeviceInfo();
     console.log('Using device info for PIN login:', deviceInfo);
 
-    // Get stored phone number
     const phoneNumber = await AsyncStorage.getItem('phoneNumber');
-    if (!phoneNumber) {
-      throw new Error('Phone number not found. Please login again.');
+    const email = await AsyncStorage.getItem('email');
+    if (!phoneNumber && !email) {
+      throw new Error('Account not found. Please login again.');
     }
 
     // Validate PIN format
@@ -422,7 +481,8 @@ export const loginWithPin = async (deviceId: string, pin: string): Promise<Login
     const response = await apiInstance.post('/auth/login', { 
       deviceId,
       pin,
-      phoneNumber,
+      phoneNumber: phoneNumber || undefined,
+      email: email || undefined,
       deviceInfo 
     });
     
@@ -435,6 +495,10 @@ export const loginWithPin = async (deviceId: string, pin: string): Promise<Login
 
     const { token } = response.data;
     await AsyncStorage.setItem('token', token);
+    try {
+      await SecureStore.setItemAsync('auth_token', token);
+    } catch {}
+    markSkipNextAppLock();
     return response.data;
   } catch (error: any) {
     console.error('PIN login error:', {
@@ -475,13 +539,16 @@ export const requestNewPin = async (deviceId: string): Promise<void> => {
 
     // Get stored phone number
     const phoneNumber = await AsyncStorage.getItem('phoneNumber');
-    if (!phoneNumber) {
-      throw new Error('Phone number not found. Please login again.');
+    const email = await AsyncStorage.getItem('email');
+    if (!phoneNumber && !email) {
+      throw new Error('Account not found. Please login again.');
     }
 
     const response = await apiInstance.post('/auth/request-new-pin', { 
       deviceId,
-      phoneNumber,
+      method: email && !phoneNumber ? 'email' : 'phone',
+      phoneNumber: phoneNumber || undefined,
+      email: email || undefined,
       deviceInfo 
     });
     
@@ -505,6 +572,21 @@ export const requestNewPin = async (deviceId: string): Promise<void> => {
       throw new Error('Failed to request new PIN. Please check your connection and try again.');
     }
   }
+};
+
+export const setPin = async (newPin: string): Promise<void> => {
+  if (!apiInstance) {
+    apiInstance = await getApi();
+  }
+  await apiInstance.post('/auth/set-pin', { newPin });
+};
+
+export const updateDeviceLock = async (enabled: boolean): Promise<{ deviceLockEnabled: boolean }> => {
+  if (!apiInstance) {
+    apiInstance = await getApi();
+  }
+  const response = await apiInstance.patch('/auth/device-lock', { enabled });
+  return response.data;
 };
 
 export const completePinReset = async (newPin: string, pinResetOTPId: string): Promise<void> => {

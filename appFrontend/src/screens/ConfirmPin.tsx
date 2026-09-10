@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 import PinInput from '../components/PinInput';
-import { completePinReset } from '../api/auth';
+import { completePinReset, setPin } from '../api/auth';
 
 interface RouteParams {
   currentPin: string;
@@ -56,8 +56,24 @@ const ConfirmPin = () => {
     setIsLoading(true);
     
     try {
-      if (isPinReset && pinResetOTPId) {
-        // PIN reset flow
+      if (isFirstTime) {
+        await setPin(newPin);
+        setHasShownSuccess(true);
+        Alert.alert(
+          'Success',
+          'Your PIN has been set.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                const root = (navigation as any)?.getParent?.()?.getParent?.() || (navigation as any)?.getParent?.();
+                root?.reset?.({ index: 0, routes: [{ name: 'Main' }] });
+              },
+            },
+          ]
+        );
+        return;
+      } else if (isPinReset && pinResetOTPId) {
         await completePinReset(newPin, pinResetOTPId);
         
         setHasShownSuccess(true);

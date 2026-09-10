@@ -72,19 +72,31 @@ model OperatorEntity {
   @@map("operator_entities")
 }
 
+enum AuthMethod {
+  EMAIL
+  PHONE
+}
+
 model User {
   id                           String                 @id @default(uuid())
   firstName                    String
   middleName                   String?
   lastName                     String
-  phoneNumber                  String
+  email                        String?                @unique
+  phoneNumber                  String?
   profileImageUrl              String?
-  pin                          String
+  pin                          String?
+  preferredAuthMethod          AuthMethod?
+  mergedIntoUserId             String?
+  deviceLockEnabled            Boolean                @default(false)
+  lockedDeviceId               String?
   status                       AccountStatus          @default(ACTIVE)
   createdAt                    DateTime               @default(now())
   updatedAt                    DateTime               @updatedAt
   deliveryAddresses            DeliveryAddress[]
   devices                      Device[]
+  lockedDevice                 Device?                @relation("LockedDevice", fields: [lockedDeviceId], references: [id], onDelete: SetNull)
+  monthlyDevices               UserMonthlyDevice[]
   customerTransactions         ExternalTransaction[]  @relation("CustomerTransactions")
   sellerTransactions           ExternalTransaction[]  @relation("SellerTransactions")
   paymentMethods               PaymentMethod[]
@@ -119,6 +131,7 @@ model User {
   providerSubscriptions        ProviderSubscription[]
 
   @@index([phoneNumber])
+  @@index([email])
   @@index([status])
   @@index([createdAt])
   @@index([updatedAt])
@@ -182,9 +195,12 @@ model Device {
   brand               String
   modelName           String
   osVersion           String
-  phoneNumber         String
+  phoneNumber         String?
+  fingerprint         String?
+  hardwareId          String?
   lastLogoutAt        DateTime?
   user                User                 @relation(fields: [userId], references: [id])
+  lockedByUsers       User[]               @relation("LockedDevice")
   sessions            Session[]
   twilioNotifications TwilioNotification[]
 
@@ -221,6 +237,8 @@ model Session {
 model OTP {
   id           String   @id @default(uuid())
   phoneNumber  String
+  identifier   String
+  channel      String
   code         String
   type         String
   expiresAt    DateTime
@@ -230,11 +248,38 @@ model OTP {
   originalCode String?
 
   @@index([phoneNumber])
+  @@index([identifier])
+  @@index([channel])
   @@index([code])
   @@index([type])
   @@index([expiresAt])
   @@index([isUsed])
   @@index([createdAt])
+}
+
+model UserMonthlyDevice {
+  id             String   @id @default(uuid())
+  userId         String
+  deviceGroupKey String
+  yearMonth      String
+  firstLoginAt   DateTime @default(now())
+  lastLoginAt    DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceGroupKey, yearMonth])
+  @@index([userId, yearMonth])
+}
+
+model DeviceMonthlyUser {
+  id             String   @id @default(uuid())
+  deviceGroupKey String
+  userId         String
+  yearMonth      String
+  firstLoginAt   DateTime @default(now())
+  lastLoginAt    DateTime @default(now())
+
+  @@unique([deviceGroupKey, userId, yearMonth])
+  @@index([deviceGroupKey, yearMonth])
 }
 
 model Product {

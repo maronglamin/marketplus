@@ -33,7 +33,12 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
         firstName: true,
         middleName: true,
         lastName: true,
+        email: true,
         phoneNumber: true,
+        preferredAuthMethod: true,
+        deviceLockEnabled: true,
+        lockedDeviceId: true,
+        pin: true,
         profileImageUrl: true,
         status: true,
         createdAt: true,
@@ -45,7 +50,11 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json(user);
+    const { pin, ...safeUser } = user;
+    res.json({
+      ...safeUser,
+      hasPin: Boolean(pin),
+    });
   } catch (error) {
     logger.error('Error fetching user:', error);
     res.status(500).json({ error: 'Internal server error' });

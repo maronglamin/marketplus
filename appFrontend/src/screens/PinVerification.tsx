@@ -29,7 +29,8 @@ export function PinVerification() {
   const [countdown, setCountdown] = useState(60)
   const navigation = useNavigation<PinVerificationNavigationProp>()
   const route = useRoute<PinVerificationRouteProp>()
-  const { phoneNumber } = route.params
+  const { phoneNumber, email, method = phoneNumber ? 'phone' : 'email', flow } = route.params
+  const destination = method === 'email' ? email : phoneNumber
   const { refreshUser } = useAuth()
 
   useEffect(() => {
@@ -60,7 +61,10 @@ export function PinVerification() {
       setLoading(true);
       console.log('Starting verification process with code:', verificationCode);
       
-      const { response, isRegistered, isDeviceVerified } = await verifyOTP(phoneNumber, verificationCode);
+      const { response, isRegistered, isDeviceVerified } = await verifyOTP(
+        { method, email, phoneNumber },
+        verificationCode
+      );
 
       console.log('Verification complete:', {
         isRegistered,
@@ -96,30 +100,23 @@ export function PinVerification() {
       let targetScreen: keyof AuthStackParamList;
       let params: any = {};
 
-      if (isRegistered) {
-        if ((response as any)?.requiresPinReset) {
-          console.log('Registered user requires PIN reset, navigating to NewPin');
-          targetScreen = 'NewPin';
-          params = {
-            currentPin: '0000',
-            isPinReset: true,
-            pinResetOTPId: (response as any)?.pinResetOTPId,
-          };
-        } else if ((response as any)?.isFirstLogin) {
-          console.log('Registered user first login, navigating to NewPin');
-          targetScreen = 'NewPin';
-          params = { currentPin: '0000', isFirstTime: true };
-        } else if (isDeviceVerified) {
-          console.log('Registered user verified, navigating to LoginPin');
-          targetScreen = 'LoginPin';
-        } else {
-          console.log('Registered user defaulting to LoginPin');
-          targetScreen = 'LoginPin';
-        }
-      } else {
-        console.log('User is not registered, going to UserRegistration');
+      if (!isRegistered) {
         targetScreen = 'UserRegistration';
-        params = { phoneNumber };
+        params = { phoneNumber, email };
+      } else if ((response as any)?.requiresPinSetup || flow === 'pin_setup' || !(response as any)?.user?.hasPin) {
+        targetScreen = 'NewPin';
+        params = { currentPin: '', isFirstTime: true };
+      } else if ((response as any)?.requiresPinReset) {
+        targetScreen = 'NewPin';
+        params = {
+          currentPin: '0000',
+          isPinReset: true,
+          pinResetOTPId: (response as any)?.pinResetOTPId,
+        };
+      } else if (isDeviceVerified) {
+        targetScreen = 'LoginPin';
+      } else {
+        targetScreen = 'LoginPin';
       }
 
       // Perform navigation with a small delay to ensure UI updates
@@ -145,7 +142,7 @@ export function PinVerification() {
   const handleResendCode = async () => {
     try {
       setResendDisabled(true)
-      await initiateLogin(phoneNumber)
+      await initiateLogin({ method, email, phoneNumber })
       Alert.alert('Success', 'A new verification code has been sent')
     } catch (error: any) {
       Alert.alert(
@@ -174,7 +171,7 @@ export function PinVerification() {
       <View style={styles.content}>
         <Text style={styles.title}>Enter Verification Code</Text>
         <Text style={styles.subtitle}>
-          We've sent a verification code to {phoneNumber}
+          We've sent a verification code to {destination}
         </Text>
 
         <View style={styles.codeContainer}>

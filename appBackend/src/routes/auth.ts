@@ -11,7 +11,9 @@ import {
   requestNewPin,
   completePinReset,
   checkUserExists,
-  loginWithPinWeb
+  loginWithPinWeb,
+  setPin,
+  updateDeviceLock,
 } from '../controllers/auth';
 import { authenticate } from '../middleware/auth';
 import {
@@ -71,5 +73,7 @@ router.post('/logout', authenticate, logout);
 router.post('/resend-otp', resendOTP);
 router.post('/change-pin', authenticate, changePin);
 router.post('/complete-pin-reset', authenticate, completePinReset);
+router.post('/set-pin', authenticate, setPin);
+router.patch('/device-lock', authenticate, updateDeviceLock);
 
 export default router; 

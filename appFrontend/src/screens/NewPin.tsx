@@ -37,7 +37,7 @@ const NewPin = () => {
       return;
     }
 
-    if (pin === currentPin) {
+    if (currentPin && pin === currentPin) {
       Alert.alert('Error', 'New PIN must be different from current PIN');
       return;
     }

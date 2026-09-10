@@ -4,11 +4,13 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 export type AuthStackParamList = {
   Login: undefined;
   PinVerification: { 
-    phoneNumber: string; 
+    method: 'email' | 'phone';
+    email?: string;
+    phoneNumber?: string; 
     isNewUser: boolean;
-    flow: 'registration' | 'device_verification';
+    flow: 'registration' | 'device_verification' | 'pin_setup';
   };
-  UserRegistration: undefined;
+  UserRegistration: { phoneNumber?: string; email?: string } | undefined;
   LoginPin: undefined;
   ChangePin: { isFirstTime?: boolean } | undefined;
   NewPin: { 

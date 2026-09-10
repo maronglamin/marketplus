@@ -34,6 +34,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       NSPhotoLibraryAddUsageDescription: 'We save images to your library only when you explicitly choose to download or save an image (for example, an export or receipt).',
       NSMicrophoneUsageDescription: 'We use the microphone for features that require audio recording. We only listen while you see “Listening…”, and do not store audio.',
       NSLocationWhenInUseUsageDescription: 'Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop‑off points, and enable real‑time ride tracking during an active trip. Location data is only accessed while you are using the app.',
+      NSFaceIDUsageDescription: 'SNAP uses Face ID to unlock the app after you sign in.',
       NSLocationAlwaysAndWhenInUseUsageDescription: 'Your location is used to find nearby drivers and rental services, calculate trip distances and fares, provide accurate pickup and drop‑off points, and enable real‑time ride tracking during an active trip. Location data is only accessed while you are using the app.',
       NSAppTransportSecurity: {
         NSExceptionDomains: {
@@ -56,7 +57,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       backgroundColor: '#00bcd4'
     },
     package: 'biz.cloudnexus.snap.app',
-    versionCode: 20,
+    versionCode: 21,
     config: {
       googleMaps: {
         apiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo'
@@ -96,6 +97,17 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     "expo-router",
     "expo-localization",
     "expo-secure-store",
+    "expo-local-authentication",
+    [
+      "expo-build-properties",
+      {
+        android: {
+          compileSdkVersion: 36,
+          targetSdkVersion: 36,
+          buildToolsVersion: "36.0.0",
+        },
+      },
+    ],
     [
       "@stripe/stripe-react-native",
       {

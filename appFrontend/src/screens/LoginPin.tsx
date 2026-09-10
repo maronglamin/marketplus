@@ -86,7 +86,7 @@ export function LoginPin() {
             }
           }],
         })
-      } else if (response.isFirstLogin) {
+      } else if (response.requiresPinSetup || response.isFirstLogin) {
         // First login: go directly to NewPin to set a new PIN (skip asking current again)
         navigation.reset({
           index: 0,
@@ -108,7 +108,7 @@ export function LoginPin() {
         // Show confirmation dialog for new PIN
         Alert.alert(
           'Invalid PIN',
-          'Would you like to receive a new PIN?',
+          'Verify your email or phone to set a new PIN. A PIN will never be sent by SMS.',
           [
             {
               text: 'Cancel',
@@ -118,28 +118,23 @@ export function LoginPin() {
               }
             },
             {
-              text: 'Get New PIN',
+              text: 'Verify to reset',
               onPress: async () => {
                 try {
                   setLoading(true)
                   const deviceInfo = await getDeviceInfo()
                   await requestNewPin(deviceInfo.deviceId)
-                  Alert.alert(
-                    'Success',
-                    'A new PIN has been sent to your phone.',
-                    [
-                      {
-                        text: 'OK',
-                        onPress: () => {
-                          setPin('')
-                        }
-                      }
-                    ]
-                  )
+                  navigation.navigate('PinVerification', {
+                    method: (await AsyncStorage.getItem('email')) && !(await AsyncStorage.getItem('phoneNumber')) ? 'email' : 'phone',
+                    email: (await AsyncStorage.getItem('email')) || undefined,
+                    phoneNumber: (await AsyncStorage.getItem('phoneNumber')) || undefined,
+                    isNewUser: false,
+                    flow: 'pin_setup',
+                  })
                 } catch (error: any) {
                   Alert.alert(
                     'Error',
-                    error.message || 'Failed to send new PIN. Please try again.'
+                    error.message || 'Failed to send verification code. Please try again.'
                   )
                 } finally {
                   setLoading(false)

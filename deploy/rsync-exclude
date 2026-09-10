@@ -4,8 +4,6 @@
 node_modules/
 **/node_modules/
 appFrontend/
-AppWebVersion/build/
-appBackend/dist/
 appBackend/uploads/
 appBackend/logs/
 appBackend/.env

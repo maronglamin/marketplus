@@ -66,7 +66,7 @@ Usage: ./deploy.sh [options]
   --api-only      Rebuild/restart the API (skip web build)
   --db-push       Run `prisma db push` after generate (shared DB — use with care)
   --remote USER@HOST
-                  Rsync this repo to the server, then run deploy.sh there
+                  Build API+web on this machine, rsync, then run deploy.sh on the server
   --dry-run       Print commands without executing them
   -h, --help      Show this help
 
@@ -97,13 +97,25 @@ swap_mb() {
   awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0
 }
 
-# Leave headroom for the OS; CRA/npm will OOM if we claim 4GB on a 1GB droplet.
+# Conservative heap for npm (stays in RAM).
 node_heap_mb() {
   local ram heap
   ram="$(mem_mb)"
-  heap=$((ram - 384))
+  heap=$((ram - 256))
   if (( heap < 384 )); then heap=384; fi
-  if (( heap > 2048 )); then heap=2048; fi
+  if (( heap > 1024 )); then heap=1024; fi
+  echo "$heap"
+}
+
+# tsc / webpack need ~1GB. On a 512MB droplet this is allowed to spill into swap.
+compile_heap_mb() {
+  local ram swap total heap
+  ram="$(mem_mb)"
+  swap="$(swap_mb)"
+  total=$((ram + swap))
+  heap=$((total - 256))
+  if (( heap < 768 )); then heap=768; fi
+  if (( heap > 1536 )); then heap=1536; fi
   echo "$heap"
 }
 
@@ -114,7 +126,7 @@ ensure_swap() {
   ram="$(mem_mb)"
   swap="$(swap_mb)"
   log "Memory: ${ram}MB RAM, ${swap}MB swap"
-  if (( ram + swap >= 2048 )); then
+  if (( swap >= 1024 || ram + swap >= 1800 )); then
     return 0
   fi
 
@@ -135,7 +147,7 @@ ensure_swap() {
   if [[ -f /swapfile ]]; then
     swapon /swapfile 2>/dev/null || true
     swap="$(swap_mb)"
-    if (( ram + swap >= 2048 )); then
+    if (( swap >= 1024 || ram + swap >= 1800 )); then
       ok "Existing /swapfile is active (${swap}MB)"
       return 0
     fi
@@ -166,7 +178,6 @@ npm_install_in() {
       npm_config_audit=false \
       npm_config_fund=false \
       npm_config_maxsockets=1 && \
-    rm -rf node_modules && \
     if [ -f package-lock.json ]; then
       npm ci --no-audit --no-fund --maxsockets=1
       rc=\$?
@@ -250,9 +261,51 @@ PUBLIC_ROOT="$REPO_ROOT/appBackend/public"
 # ---------------------------------------------------------------------------
 # Remote path: rsync then ssh
 # ---------------------------------------------------------------------------
+prebuild_local() {
+  $SKIP_BUILD && return 0
+  need_cmd node || die "node is required on this machine to pre-build before --remote"
+  log "Pre-building on this machine so the 512MB droplet does not run tsc/webpack"
+
+  if ! $WEB_ONLY; then
+    [[ -d "$REPO_ROOT/appBackend/node_modules" ]] || \
+      die "appBackend/node_modules missing. Run: cd appBackend && npm ci"
+    log "Compiling API locally (tsc, no source maps; type errors ignored)"
+    set +e
+    (cd "$REPO_ROOT/appBackend" && npx tsc --pretty false --sourceMap false --incremental false --noEmitOnError false)
+    local tsc_rc=$?
+    set -e
+    if [[ $tsc_rc -ne 0 ]]; then
+      warn "tsc exited $tsc_rc (type errors ignored; JS is still emitted)"
+    fi
+    [[ -f "$REPO_ROOT/appBackend/dist/index.js" ]] || die "Local API build did not produce dist/index.js"
+    ok "API dist ready"
+  fi
+
+  if ! $API_ONLY; then
+    [[ -d "$REPO_ROOT/AppWebVersion/node_modules" ]] || \
+      die "AppWebVersion/node_modules missing. Run: cd AppWebVersion && npm ci"
+    local api_url="${REACT_APP_API_URL:-https://${WEB_DOMAIN}/api}"
+    local image_host="${REACT_APP_IMAGE_HOST:-https://${WEB_DOMAIN}}"
+    log "Building web app locally (API=$api_url)"
+    (
+      cd "$REPO_ROOT/AppWebVersion"
+      GENERATE_SOURCEMAP=false \
+        REACT_APP_API_URL="$api_url" \
+        REACT_APP_IMAGE_HOST="$image_host" \
+        npm run build
+    )
+    [[ -f "$REPO_ROOT/AppWebVersion/build/index.html" ]] || die "Local web build did not produce build/index.html"
+    ok "Web build ready"
+  fi
+}
+
 deploy_remote() {
   need_cmd rsync || die "rsync is required for --remote"
   need_cmd ssh || die "ssh is required for --remote"
+
+  if ! $DRY_RUN; then
+    prebuild_local
+  fi
 
   log "Syncing repo to ${REMOTE}:${REMOTE_DIR}"
   if ! $DRY_RUN; then
@@ -433,15 +486,34 @@ build_api() {
   run "mkdir -p $UPLOADS_ROOT $PUBLIC_ROOT $REPO_ROOT/appBackend/logs"
 
   log "Generating Prisma client"
-  as_app "cd $(printf '%q' "$REPO_ROOT/appBackend") && npx prisma generate"
+  as_app "cd $(printf '%q' "$REPO_ROOT/appBackend") && \
+    NODE_OPTIONS=--max-old-space-size=$(compile_heap_mb) npx prisma generate"
 
   if $DB_PUSH; then
     warn "Running prisma db push against the configured database"
     as_app "cd $(printf '%q' "$REPO_ROOT/appBackend") && npx prisma db push"
   fi
 
-  log "Compiling API (tsc)"
-  as_app "cd $(printf '%q' "$REPO_ROOT/appBackend") && npx tsc"
+  if [[ -f "$REPO_ROOT/appBackend/dist/index.js" ]]; then
+    ok "Using prebuilt API dist (skipping tsc on this host)"
+  else
+    local heap
+    heap="$(compile_heap_mb)"
+    log "Compiling API (tsc, heap=${heap}MB, no source maps)"
+    set +e
+    as_app "cd $(printf '%q' "$REPO_ROOT/appBackend") && \
+      NODE_OPTIONS=--max-old-space-size=${heap} \
+      npx tsc --pretty false --sourceMap false --incremental false --noEmitOnError false"
+    local rc=$?
+    set -e
+    if [[ $rc -eq 137 || $rc -eq 143 || $rc -eq 134 ]]; then
+      die "tsc ran out of memory. Re-run from your laptop: ./deploy.sh --remote USER@HOST --skip-deps
+That compiles on the Mac and copies dist/ to the server."
+    fi
+    if [[ $rc -ne 0 ]]; then
+      warn "tsc exited $rc (type errors ignored; JS is still emitted)"
+    fi
+  fi
   [[ -f "$REPO_ROOT/appBackend/dist/index.js" ]] || $DRY_RUN || die "API build did not produce dist/index.js"
   ok "API build complete"
 }
@@ -454,21 +526,26 @@ build_web() {
   local image_host="${REACT_APP_IMAGE_HOST:-https://${WEB_DOMAIN}}"
 
   local heap
-  heap="$(node_heap_mb)"
-  log "Building web app (API=$api_url, heap=${heap}MB, no sourcemaps)"
-  set +e
-  as_app "cd $(printf '%q' "$REPO_ROOT/AppWebVersion") && \
-    NODE_OPTIONS=--max-old-space-size=${heap} \
-    GENERATE_SOURCEMAP=false \
-    REACT_APP_API_URL=$(printf '%q' "$api_url") \
-    REACT_APP_IMAGE_HOST=$(printf '%q' "$image_host") \
-    npm run build"
-  local rc=$?
-  set -e
-  if [[ $rc -eq 137 || $rc -eq 143 ]]; then
-    die "Web build was killed (out of memory). Check free -h; re-run sudo ./deploy.sh --setup to create swap."
+  heap="$(compile_heap_mb)"
+
+  if [[ -f "$REPO_ROOT/AppWebVersion/build/index.html" ]]; then
+    ok "Using prebuilt web app (skipping webpack on this host)"
+  else
+    log "Building web app (API=$api_url, heap=${heap}MB, no sourcemaps)"
+    set +e
+    as_app "cd $(printf '%q' "$REPO_ROOT/AppWebVersion") && \
+      NODE_OPTIONS=--max-old-space-size=${heap} \
+      GENERATE_SOURCEMAP=false \
+      REACT_APP_API_URL=$(printf '%q' "$api_url") \
+      REACT_APP_IMAGE_HOST=$(printf '%q' "$image_host") \
+      npm run build"
+    local rc=$?
+    set -e
+    if [[ $rc -eq 137 || $rc -eq 143 || $rc -eq 134 ]]; then
+      die "Web build ran out of memory. Re-run from your laptop: ./deploy.sh --remote USER@HOST --skip-deps"
+    fi
+    [[ $rc -eq 0 ]] || die "Web build failed (exit $rc)"
   fi
-  [[ $rc -eq 0 ]] || die "Web build failed (exit $rc)"
 
   [[ -f "$REPO_ROOT/AppWebVersion/build/index.html" ]] || $DRY_RUN || die "Web build did not produce build/index.html"
 
