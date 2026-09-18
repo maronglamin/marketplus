@@ -2602,16 +2602,17 @@ export function OrderDetails() {
                           <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Phone Number</Text>
                             <TextInput
-                              style={[styles.textInput, styles.disabledInput]}
+                              style={styles.textInput}
                               value={paymentMethodForms.mobileWallets.phoneNumber}
                               onChangeText={(text) => handlePaymentFormUpdate('mobileWallets', 'phoneNumber', text)}
-                              placeholder="Phone number from registration"
+                              placeholder="Enter wallet phone number"
                               placeholderTextColor="#9CA3AF"
                               keyboardType="phone-pad"
-                              editable={false}
                             />
                             <Text style={styles.inputHelperText}>
-                              Using your registered phone number: {user?.phoneNumber}
+                              {user?.phoneNumber
+                                ? 'Pre-filled from your account — you can change it if needed.'
+                                : 'Enter the mobile wallet number for this payment method.'}
                             </Text>
                           </View>
                           <View style={styles.inputGroup}>

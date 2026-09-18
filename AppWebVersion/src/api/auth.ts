@@ -5,15 +5,20 @@ export interface LoginResponse {
   user: any;
   isFirstLogin?: boolean;
   requiresPinReset?: boolean;
+  requiresPinSetup?: boolean;
+  requiresRegistration?: boolean;
   pinResetOTPId?: string;
 }
+
+export type AuthMethod = 'email' | 'phone';
 
 export interface AuthError {
   message: string;
   errors?: { [key: string]: string[] };
 }
 
-// Normalize various backend token/user response shapes
+const DEVICE_ID_KEY = 'snap_web_device_id';
+
 const extractAuthPayload = (data: any): { token?: string; user?: any } => {
   if (!data) return {};
   const token =
@@ -29,157 +34,249 @@ const extractAuthPayload = (data: any): { token?: string; user?: any } => {
   return { token, user };
 };
 
-// Check if user exists by phone number
-export const checkUserExists = async (phoneNumber: string): Promise<{ exists: boolean; isRegistered: boolean; user?: any }> => {
+export const getWebDeviceInfo = () => {
+  let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+  if (!deviceId) {
+    deviceId =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+  }
+
+  return {
+    deviceId,
+    deviceName: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : 'Web Browser',
+    deviceType: 'desktop',
+    brand: 'web',
+    modelName: 'browser',
+    osVersion: typeof navigator !== 'undefined' ? navigator.platform || 'unknown' : 'unknown',
+    fingerprint: deviceId,
+    hardwareId: deviceId,
+  };
+};
+
+const throwAuthError = (error: any, fallback: string): never => {
+  if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
+    throw new Error('Cannot connect to server. Please make sure the backend is running.');
+  }
+  if (error.response?.data?.message) {
+    throw new Error(error.response.data.message);
+  }
+  if (Array.isArray(error.response?.data?.errors) && error.response.data.errors[0]?.msg) {
+    throw new Error(error.response.data.errors[0].msg);
+  }
+  throw new Error(fallback);
+};
+
+export const checkUserExists = async (
+  phoneNumber: string
+): Promise<{ exists: boolean; isRegistered: boolean; user?: any }> => {
   try {
-    console.log('Checking if user exists for:', phoneNumber);
-    // API base URL will be logged by the API config at startup
-    
     const api = getApi();
-    console.log('Making request to:', `${api.defaults.baseURL}/auth/check-user`);
-    
     const response = await api.post('/auth/check-user', { phoneNumber });
-    
-    console.log('User check response:', response.data);
-    
-    // If backend returns user with a terminated/deactivated status,
-    // treat as non-existent so web flow prompts to register via mobile app.
+
     const statusText = String(response?.data?.user?.status || '').toLowerCase();
-    if (statusText && (statusText.includes('terminated') || statusText.includes('deactivated') || statusText === 'deleted')) {
-      try { localStorage.setItem('accountTerminated', '1'); } catch {}
+    if (
+      statusText &&
+      (statusText.includes('terminated') ||
+        statusText.includes('deactivated') ||
+        statusText === 'deleted')
+    ) {
+      try {
+        localStorage.setItem('accountTerminated', '1');
+      } catch {}
       return { exists: false, isRegistered: false };
     }
-    
+
     return {
       exists: response.data.exists,
       isRegistered: response.data.isRegistered,
-      user: response.data.user
+      user: response.data.user,
     };
   } catch (error: any) {
-    console.error('User check error details:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-      code: error.code,
-      config: {
-        url: error.config?.url,
-        baseURL: error.config?.baseURL,
-        method: error.config?.method
-      }
-    });
-    
-    if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-      throw new Error('Cannot connect to server. Please make sure the backend is running on port 3000.');
-    }
-    
-    // Handle terminated account signals at this endpoint by treating as non-existent
     const status = error.response?.status;
     const message: string = String(error.response?.data?.message || '').toLowerCase();
     const terminatedSignal =
-      status === 410 || status === 423 || status === 403 || message.includes('terminated') || message.includes('deactivated');
+      status === 410 ||
+      status === 423 ||
+      status === 403 ||
+      message.includes('terminated') ||
+      message.includes('deactivated');
     if (terminatedSignal) {
-      try { localStorage.setItem('accountTerminated', '1'); } catch {}
+      try {
+        localStorage.setItem('accountTerminated', '1');
+      } catch {}
       return { exists: false, isRegistered: false };
     }
-    
+
     if (error.response?.status === 404) {
-      // User not found
       return { exists: false, isRegistered: false };
     }
-    
-    if (error.response?.data?.message) {
-      throw new Error(error.response.data.message);
-    } else {
-      throw new Error('Failed to check user. Please try again.');
-    }
+
+    return throwAuthError(error, 'Failed to check user. Please try again.');
   }
 };
 
-// Login with PIN
-export const loginWithPin = async (phoneNumber: string, pin: string): Promise<LoginResponse> => {
+export const initiateLogin = async (params: {
+  method: AuthMethod;
+  email?: string;
+  phoneNumber?: string;
+}): Promise<{
+  requiresPin: boolean;
+  requiresPinSetup?: boolean;
+  isRegistered: boolean;
+  isNewUser?: boolean;
+  user?: any;
+}> => {
   try {
-    console.log('Logging in with PIN for:', phoneNumber);
-    
     const api = getApi();
-    const response = await api.post('/auth/login-web', { 
-      phoneNumber,
-      pin,
-      platform: 'web'
+    const deviceInfo = getWebDeviceInfo();
+    const lastUserId = localStorage.getItem('lastUserId') || undefined;
+    const response = await api.post('/auth/initiate-login', {
+      ...params,
+      ...(lastUserId ? { lastUserId } : {}),
+      deviceInfo,
     });
-    
-    console.log('PIN login response:', response.data);
-    
-    // Validate response (accept multiple token field names)
+
+    if (params.email) localStorage.setItem('email', params.email);
+    if (params.phoneNumber) localStorage.setItem('phoneNumber', params.phoneNumber);
+
+    return {
+      requiresPin: !!response.data.requiresPin,
+      requiresPinSetup: !!response.data.requiresPinSetup,
+      isRegistered: !!response.data.isRegistered,
+      isNewUser: !!response.data.isNewUser,
+      user: response.data.user,
+    };
+  } catch (error: any) {
+    return throwAuthError(error, 'Failed to start sign-in. Please try again.');
+  }
+};
+
+export const verifyOtp = async (params: {
+  method: AuthMethod;
+  email?: string;
+  phoneNumber?: string;
+  code: string;
+}): Promise<LoginResponse> => {
+  try {
+    const api = getApi();
+    const deviceInfo = getWebDeviceInfo();
+    const lastUserId = localStorage.getItem('lastUserId') || undefined;
+    const response = await api.post('/auth/verify-otp', {
+      ...params,
+      ...(lastUserId ? { lastUserId } : {}),
+      code: params.code,
+      deviceInfo,
+    });
+
+    const { token, user } = extractAuthPayload(response.data);
+    if (token) {
+      localStorage.setItem('token', token);
+    }
+    if (user?.id) {
+      localStorage.setItem('lastUserId', user.id);
+      localStorage.setItem('lastAuthMethod', params.method);
+    }
+    if (params.email) localStorage.setItem('email', params.email);
+    if (params.phoneNumber) localStorage.setItem('phoneNumber', params.phoneNumber);
+
+    return {
+      ...response.data,
+      token,
+      user,
+    };
+  } catch (error: any) {
+    return throwAuthError(error, 'Invalid or expired verification code.');
+  }
+};
+
+export const setPin = async (newPin: string): Promise<void> => {
+  try {
+    const api = getApi();
+    await api.post('/auth/set-pin', { newPin });
+  } catch (error: any) {
+    return throwAuthError(error, 'Failed to set PIN. Please try again.');
+  }
+};
+
+export const loginWithPin = async (
+  identifier: { phoneNumber?: string; email?: string } | string,
+  pin: string
+): Promise<LoginResponse> => {
+  const phoneNumber =
+    typeof identifier === 'string' ? identifier : identifier.phoneNumber;
+  const email = typeof identifier === 'string' ? undefined : identifier.email;
+
+  try {
+    const api = getApi();
+    const response = await api.post('/auth/login-web', {
+      phoneNumber,
+      email,
+      pin,
+      platform: 'web',
+    });
+
     const { token, user } = extractAuthPayload(response.data);
     if (!token) {
       throw new Error('Invalid PIN');
     }
 
-    // Do not allow login for terminated/deactivated accounts
     const statusText = String(user?.status || '').toLowerCase();
-    if (statusText && (statusText.includes('terminated') || statusText.includes('deactivated') || statusText === 'deleted')) {
-      try { localStorage.setItem('accountTerminated', '1'); } catch {}
-      throw new Error('Your account has been terminated. Please contact support if you believe this is a mistake.');
+    if (
+      statusText &&
+      (statusText.includes('terminated') ||
+        statusText.includes('deactivated') ||
+        statusText === 'deleted')
+    ) {
+      try {
+        localStorage.setItem('accountTerminated', '1');
+      } catch {}
+      throw new Error(
+        'Your account has been terminated. Please contact support if you believe this is a mistake.'
+      );
     }
 
     localStorage.setItem('token', token);
-    localStorage.setItem('phoneNumber', phoneNumber);
-    
+    if (phoneNumber) localStorage.setItem('phoneNumber', phoneNumber);
+    if (email) localStorage.setItem('email', email);
+
     return response.data;
   } catch (error: any) {
-    console.error('PIN login error:', error);
-    
-    // Terminated signals
     const status = error.response?.status;
     const messageRaw: string = String(error.response?.data?.message || '');
     const message: string = messageRaw.toLowerCase();
     const terminatedSignal =
-      status === 410 || status === 423 || status === 403 || message.includes('terminated') || message.includes('deactivated');
+      status === 410 ||
+      status === 423 ||
+      status === 403 ||
+      message.includes('terminated') ||
+      message.includes('deactivated');
     if (terminatedSignal) {
-      try { localStorage.setItem('accountTerminated', '1'); } catch {}
-      throw new Error('Your account has been terminated. Please contact support if you believe this is a mistake.');
+      try {
+        localStorage.setItem('accountTerminated', '1');
+      } catch {}
+      throw new Error(
+        'Your account has been terminated. Please contact support if you believe this is a mistake.'
+      );
     }
 
-    // Map unauthorized/blocked-style errors similar to mobile
     if (/(blocked|unauthorized|forbidden)/i.test(messageRaw)) {
       throw new Error('Unauthorized access. Please try again or contact support.');
     }
 
-    // Defensive fallback: if server returns 500, re-check user existence.
-    // If the user is now treated as non-existent (e.g., terminated), guide to mobile app.
-    if (status === 500) {
+    if (status === 500 && phoneNumber) {
       try {
         const recheck = await checkUserExists(phoneNumber);
         if (!recheck.exists) {
-          try { localStorage.setItem('accountTerminated', '1'); } catch {}
+          try {
+            localStorage.setItem('accountTerminated', '1');
+          } catch {}
           throw new Error('Please register using the mobile app to continue.');
         }
-        // Try alternative PIN login endpoint aligned with mobile backend
-        try {
-          const api = getApi();
-          const alt = await api.post('/auth/login', {
-            phoneNumber,
-            pin,
-            platform: 'web'
-          });
-          const { token, user } = extractAuthPayload(alt?.data);
-          if (token) {
-            // Guard against terminated status on alt path as well
-            const statusText = String(user?.status || '').toLowerCase();
-            if (statusText && (statusText.includes('terminated') || statusText.includes('deactivated') || statusText === 'deleted')) {
-              try { localStorage.setItem('accountTerminated', '1'); } catch {}
-              throw new Error('Your account does not exist. Please contact support if you believe this is a mistake.');
-            }
-            localStorage.setItem('token', token);
-            localStorage.setItem('phoneNumber', phoneNumber);
-            return alt.data;
-          }
-        } catch (altErr) {
-          // fall through to default handling below
-          console.error('Alternate /auth/login attempt failed:', altErr);
-        }
       } catch {
-        // Ignore recheck errors and fall through to default handling
+        // fall through
       }
     }
 
@@ -188,44 +285,28 @@ export const loginWithPin = async (phoneNumber: string, pin: string): Promise<Lo
     } else if (status === 404) {
       throw new Error('User not found. Please register using the mobile app first.');
     } else if (status === 500) {
-      throw new Error('Something went wrong. Please try again. If the issue persists, use the mobile app to continue.');
-    } else if (error.response?.data?.message) {
-      throw new Error(error.response.data.message);
-    } else {
-      throw new Error('Failed to login. Please check your connection and try again.');
+      throw new Error(
+        'Something went wrong. Please try again. If the issue persists, use the mobile app to continue.'
+      );
     }
+
+    return throwAuthError(error, 'Failed to login. Please check your connection and try again.');
   }
 };
 
-// Logout
 export const logout = async (): Promise<void> => {
   try {
-    console.log('Logging out user');
-    
     const api = getApi();
     await api.post('/auth/logout');
-    
-    // Clear local storage
-    localStorage.removeItem('token');
-    localStorage.removeItem('phoneNumber');
-    
-    console.log('Logout successful');
   } catch (error: any) {
     console.error('Logout error:', error);
-    
-    // Clear local storage even if logout fails
+  } finally {
     localStorage.removeItem('token');
     localStorage.removeItem('phoneNumber');
-    
-    if (error.response?.data?.message) {
-      throw new Error(error.response.data.message);
-    } else {
-      throw new Error('Failed to logout. Please try again.');
-    }
+    localStorage.removeItem('email');
   }
 };
 
-// Get auth token
 export const getAuthToken = (): string | null => {
   try {
     return localStorage.getItem('token');
@@ -235,8 +316,6 @@ export const getAuthToken = (): string | null => {
   }
 };
 
-// Check if user is authenticated
 export const isAuthenticated = (): boolean => {
-  const token = getAuthToken();
-  return !!token;
+  return !!getAuthToken();
 };

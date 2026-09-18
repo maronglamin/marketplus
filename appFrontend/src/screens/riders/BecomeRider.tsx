@@ -1003,7 +1003,7 @@ export function BecomeRider() {
             <View style={styles.infoNote}>
               <Ionicons name="information-circle-outline" size={16} color="#1E40AF" />
               <Text style={styles.infoNoteText}>
-                Your profile information has been pre-filled. Name and phone number cannot be edited. Email is optional.
+                Your profile information has been pre-filled. Name cannot be edited. Add or confirm your phone number if it is missing. Email is optional.
               </Text>
             </View>
             
@@ -1072,7 +1072,6 @@ export function BecomeRider() {
               <TextInput
                 style={[
                   styles.textInput,
-                  styles.disabledInput,
                   touchedFields.phone && errors.phone && styles.textInputError
                 ]}
                 value={formData.phone}
@@ -1081,7 +1080,6 @@ export function BecomeRider() {
                 placeholder="Enter your phone number"
                 placeholderTextColor="#9CA3AF"
                 keyboardType="phone-pad"
-                editable={false}
               />
               {touchedFields.phone && errors.phone && (
                 <Text style={styles.errorText}>{errors.phone}</Text>

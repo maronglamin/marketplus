@@ -8,61 +8,63 @@ interface PinInputProps {
   error?: string;
   title?: string;
   subtitle?: string;
+  length?: 4 | 6;
+  secure?: boolean;
+  helpText?: React.ReactNode;
 }
 
-export function PinInput({ 
-  onComplete, 
-  onBack, 
-  loading = false, 
+export function PinInput({
+  onComplete,
+  onBack,
+  loading = false,
   error,
-  title = "Enter PIN",
-  subtitle = "Enter your 4-digit PIN to continue"
+  title = 'Enter PIN',
+  subtitle = 'Enter your 4-digit PIN to continue',
+  length = 4,
+  secure = true,
+  helpText,
 }: PinInputProps) {
-  const [pin, setPin] = useState(['', '', '', '']);
+  const [pin, setPin] = useState<string[]>(Array(length).fill(''));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    // Focus first input on mount
+    setPin(Array(length).fill(''));
     inputRefs.current[0]?.focus();
-  }, []);
+  }, [length]);
 
   const handleChange = (index: number, value: string) => {
-    if (value.length > 1) return; // Prevent multiple characters
-    
+    if (value.length > 1) return;
+
     const newPin = [...pin];
-    newPin[index] = value;
+    newPin[index] = value.replace(/\D/g, '');
     setPin(newPin);
 
-    // Auto-focus next input
-    if (value && index < 3) {
+    if (value && index < length - 1) {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Check if all digits are entered
-    if (newPin.every(digit => digit !== '') && newPin.length === 4) {
+    if (newPin.every((digit) => digit !== '') && newPin.length === length) {
       onComplete(newPin.join(''));
     }
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
     if (e.key === 'Backspace' && !pin[index] && index > 0) {
-      // Move to previous input on backspace
       inputRefs.current[index - 1]?.focus();
     }
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
-    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
-    const newPin = pastedData.split('').concat(Array(4 - pastedData.length).fill(''));
+    const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, length);
+    const newPin = pastedData.split('').concat(Array(length - pastedData.length).fill(''));
     setPin(newPin);
-    
-    if (pastedData.length === 4) {
+
+    if (pastedData.length === length) {
       onComplete(pastedData);
     } else {
-      // Focus the next empty input
       const nextIndex = pastedData.length;
-      if (nextIndex < 4) {
+      if (nextIndex < length) {
         inputRefs.current[nextIndex]?.focus();
       }
     }
@@ -71,9 +73,9 @@ export function PinInput({
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        {/* Header */}
         <div className="flex items-center mb-8">
           <button
+            type="button"
             onClick={onBack}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
@@ -86,24 +88,27 @@ export function PinInput({
           <p className="mt-2 text-gray-600">{subtitle}</p>
         </div>
 
-        {/* PIN Input */}
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          <div className="flex justify-center space-x-4 mb-8">
+          <div className={`flex justify-center mb-8 ${length === 6 ? 'space-x-2' : 'space-x-4'}`}>
             {pin.map((digit, index) => (
               <input
                 key={index}
-                ref={(el) => (inputRefs.current[index] = el)}
-                type="password"
+                ref={(el) => {
+                  inputRefs.current[index] = el;
+                }}
+                type={secure ? 'password' : 'text'}
                 inputMode="numeric"
                 maxLength={1}
                 value={digit}
                 onChange={(e) => handleChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
                 onPaste={handlePaste}
-                className="w-12 h-12 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className={`${
+                  length === 6 ? 'w-10 h-12 text-xl' : 'w-12 h-12 text-2xl'
+                } text-center font-bold border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200`}
                 disabled={loading}
                 style={{ caretColor: 'transparent' }}
-                autoComplete="off"
+                autoComplete="one-time-code"
               />
             ))}
           </div>
@@ -116,20 +121,12 @@ export function PinInput({
 
           {loading && (
             <div className="flex justify-center">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
             </div>
           )}
         </div>
 
-        {/* Help Text */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-500">
-            Forgot your PIN?{' '}
-            <button className="text-blue-600 hover:text-blue-500 font-medium">
-              Reset PIN
-            </button>
-          </p>
-        </div>
+        {helpText ? <div className="mt-6 text-center">{helpText}</div> : null}
       </div>
     </div>
   );

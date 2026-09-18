@@ -65,7 +65,7 @@ export function Header() {
             <p className="text-sm font-medium text-gray-900">
               {user?.firstName} {user?.lastName}
             </p>
-            <p className="text-xs text-gray-500">{user?.phoneNumber}</p>
+            <p className="text-xs text-gray-500">{user?.email || user?.phoneNumber}</p>
           </div>
           <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
             <User className="w-5 h-5 text-blue-600" />

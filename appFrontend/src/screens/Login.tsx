@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Modal,
   StatusBar,
   Platform,
@@ -19,6 +18,7 @@ import {
   AppState,
   AppStateStatus,
 } from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ArrowLeft, Globe, X, Search, MapPin, Flag, Route, Camera as CameraIcon, ShieldCheck, Upload, Mail } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -40,6 +40,7 @@ type Country = { name: string; code: string; dial_code: string; flag: string };
 
 export function Login() {
   const navigation = useNavigation<LoginNavigationProp>()
+  const insets = useSafeAreaInsets()
   const [phoneInput, setPhoneInput] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null); // {name, code, dial_code, flag}
   const [countrySheetOpen, setCountrySheetOpen] = useState(false);
@@ -492,11 +493,11 @@ export function Login() {
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <StatusBar
           barStyle="dark-content"
           backgroundColor="#FFFFFF"
-          translucent
+          translucent={false}
         />
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -661,7 +662,7 @@ export function Login() {
                 <Text style={styles.permFootnote}>You can change this later in your device settings.</Text>
               </View>
             </View>
-            <View style={styles.permFooter}>
+            <View style={[styles.permFooter, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
               <TouchableOpacity
                 onPress={handleLocationContinue}
                 style={[styles.button, styles.buttonWide, styles.buttonFull, styles.buttonPill]}
@@ -722,7 +723,7 @@ export function Login() {
                 <Text style={styles.permFootnote}>You can change this later in your device settings.</Text>
               </View>
             </View>
-            <View style={styles.permFooter}>
+            <View style={[styles.permFooter, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
               <TouchableOpacity
                 onPress={handleCameraContinue}
                 style={[styles.button, styles.buttonWide, styles.buttonFull, styles.buttonPill]}
@@ -733,7 +734,7 @@ export function Login() {
           </SafeAreaView>
         </Modal>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) + 12 }]}>
           <TouchableOpacity
             style={[styles.button, styles.buttonWide, (authMethod === 'email' ? !emailInput : !phoneInput) && styles.buttonDisabled]}
             onPress={authMethod === 'email' ? handleEmailLogin : handleLogin}
@@ -820,7 +821,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   container: {
     flex: 1,
@@ -902,7 +902,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   footer: {
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 16,
   },
   button: {
     backgroundColor: '#2563EB',
@@ -1041,7 +1042,6 @@ const styles = StyleSheet.create({
     maxWidth: 460,
     alignSelf: 'center',
     gap: 12,
-    paddingBottom: 28,
     paddingHorizontal: 16,
   },
   buttonSettings: {

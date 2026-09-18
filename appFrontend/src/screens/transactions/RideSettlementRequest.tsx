@@ -683,11 +683,12 @@ export function RideSettlementRequest() {
                     <View style={styles.inputGroup}>
                       <Text style={styles.inputLabel}>Wallet Number (Phone) *</Text>
                       <TextInput
-                        style={[styles.textInput, styles.disabledInput]}
+                        style={styles.textInput}
                         value={walletForm.account}
-                        editable={false}
-                        placeholder="Your phone number"
+                        onChangeText={(v) => handleWalletFormChange('account', v)}
+                        placeholder="Enter wallet phone number"
                         placeholderTextColor="#9CA3AF"
+                        keyboardType="phone-pad"
                       />
                     </View>
                     <View style={styles.inputGroup}>

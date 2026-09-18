@@ -879,12 +879,13 @@ export function SettlementRequest() {
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Wallet Number (Phone) *</label>
                           <input
-                            type="text"
-                            className="w-full p-3 border border-gray-300 rounded-lg bg-gray-100"
+                            type="tel"
+                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                             value={walletForm.account}
-                            readOnly
+                            onChange={(e) => setWalletForm(prev => ({ ...prev, account: e.target.value }))}
+                            placeholder="Enter wallet phone number"
                           />
-                          <p className="text-xs text-gray-500 mt-1">Wallet number is automatically set to your phone number</p>
+                          <p className="text-xs text-gray-500 mt-1">Prefills from your account when available — you can change it.</p>
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Wallet Address *</label>

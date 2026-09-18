@@ -45,13 +45,15 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading: authLoading } = useAuth()
   const [isUnlocked, setIsUnlocked] = useState(false)
   const [biometricMethod, setBiometricMethod] = useState<BiometricMethod>('none')
-  const [appLockEnabled, setAppLockEnabledState] = useState(true)
-  const [biometricEnabled, setBiometricEnabledState] = useState(true)
+  const [appLockEnabled, setAppLockEnabledState] = useState(false)
+  const [biometricEnabled, setBiometricEnabledState] = useState(false)
   const backgroundSince = useRef<number | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
 
   const biometricsAvailable = biometricMethod !== 'none'
-  const lockRequired = Boolean(user) && !authLoading && appLockEnabled
+  // Only enforce lock when the user can actually unlock (has a PIN and/or biometrics).
+  const canUnlock = Boolean(user?.hasPin) || (biometricsAvailable && biometricEnabled)
+  const lockRequired = Boolean(user) && !authLoading && appLockEnabled && canUnlock && sessionReady
 
   const lock = useCallback(() => {
     setIsUnlocked(false)
@@ -59,15 +61,23 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     void (async () => {
-      const [lockOn, bioOn, method] = await Promise.all([
-        getAppLockEnabled(),
-        getBiometricEnabled(),
-        resolveBiometricMethod(),
-      ])
-      setAppLockEnabledState(lockOn)
-      setBiometricEnabledState(bioOn)
-      setBiometricMethod(method)
-      setSessionReady(true)
+      try {
+        const [lockOn, bioOn, method] = await Promise.all([
+          getAppLockEnabled(),
+          getBiometricEnabled(),
+          resolveBiometricMethod(),
+        ])
+        setAppLockEnabledState(lockOn)
+        setBiometricEnabledState(bioOn)
+        setBiometricMethod(method)
+      } catch {
+        // Fail open: never block app launch if lock prefs/biometrics blow up.
+        setAppLockEnabledState(false)
+        setBiometricEnabledState(false)
+        setBiometricMethod('none')
+      } finally {
+        setSessionReady(true)
+      }
     })()
   }, [])
 
@@ -77,9 +87,8 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
       return
     }
     if (!sessionReady) return
-    void consumeSkipNextAppLock().then((skip) => {
-      setIsUnlocked(skip)
-    })
+    const skip = consumeSkipNextAppLock()
+    setIsUnlocked(skip)
   }, [user, sessionReady])
 
   const setAppLockEnabled = useCallback(async (enabled: boolean) => {
@@ -87,10 +96,10 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     setAppLockEnabledState(enabled)
     if (!enabled) {
       setIsUnlocked(true)
-    } else if (user) {
+    } else if (user && (Boolean(user.hasPin) || (biometricsAvailable && biometricEnabled))) {
       lock()
     }
-  }, [user, lock])
+  }, [user, lock, biometricsAvailable, biometricEnabled])
 
   const setBiometricEnabled = useCallback(async (enabled: boolean) => {
     await persistBiometricEnabled(enabled)

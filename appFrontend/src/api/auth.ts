@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import * as Application from 'expo-application';
 import * as SecureStore from 'expo-secure-store';
 import { getLastUserId, rememberAuthSuccess, type AuthMethod } from '../lib/authPreferences';
-import { markSkipNextAppLock } from '../lib/appLockStorage';
+import { markSkipNextAppLock, markPendingCredentialPrompt } from '../lib/appLockStorage';
 
 // Cache for API instance
 let apiInstance: any = null;
@@ -279,6 +279,7 @@ export const verifyOTP = async (
       await SecureStore.setItemAsync('auth_token', token);
     } catch {}
     markSkipNextAppLock();
+    markPendingCredentialPrompt();
     if (response.data.user?.id) {
       await rememberAuthSuccess({
         method: payload.method,

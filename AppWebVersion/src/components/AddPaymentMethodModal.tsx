@@ -39,6 +39,7 @@ export function AddPaymentMethodModal({ isOpen, onClose, onPaymentMethodAdded, u
     accountId: '',
     isDefault: false
   });
+  const [walletPhone, setWalletPhone] = useState(userPhoneNumber || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileWalletProviders, setMobileWalletProviders] = useState<PaymentGatewayServiceProvider[]>([]);
@@ -70,10 +71,11 @@ export function AddPaymentMethodModal({ isOpen, onClose, onPaymentMethodAdded, u
       });
       setSelectedType('');
       setSelectedProvider('');
+      setWalletPhone(userPhoneNumber || '');
       setError(null);
       fetchMobileWalletProviders();
     }
-  }, [isOpen]);
+  }, [isOpen, userPhoneNumber]);
 
   const handleTypeSelect = (type: string) => {
     setSelectedType(type);
@@ -117,7 +119,7 @@ export function AddPaymentMethodModal({ isOpen, onClose, onPaymentMethodAdded, u
         return;
       }
 
-      if (formData.type === 'MOBILE_WALLET' && (!userPhoneNumber || !formData.provider)) {
+      if (formData.type === 'MOBILE_WALLET' && (!walletPhone.trim() || !formData.provider)) {
         setError('Phone number and provider are required for mobile wallet');
         return;
       }
@@ -127,7 +129,7 @@ export function AddPaymentMethodModal({ isOpen, onClose, onPaymentMethodAdded, u
         type: formData.type === 'CARD' ? 'CREDIT_CARD' : 'MOBILE_MONEY',
         provider: formData.provider,
         accountName: formData.type === 'CARD' ? formData.accountName : 'Mobile Wallet',
-        accountId: formData.type === 'CARD' ? formData.accountId : (userPhoneNumber || ''),
+        accountId: formData.type === 'CARD' ? formData.accountId : walletPhone.trim(),
         isDefault: formData.isDefault || false
       };
 
@@ -279,17 +281,19 @@ export function AddPaymentMethodModal({ isOpen, onClose, onPaymentMethodAdded, u
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number
+                Phone Number *
               </label>
               <input
                 type="tel"
-                value={userPhoneNumber || ''}
-                disabled
-                placeholder="Using your registered phone number"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
+                value={walletPhone}
+                onChange={(e) => setWalletPhone(e.target.value)}
+                placeholder="Enter mobile wallet number"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               <p className="text-xs text-gray-500 mt-1">
-                This will use your registered phone number from your account
+                {userPhoneNumber
+                  ? 'Pre-filled from your account — you can change it if needed.'
+                  : 'Required for mobile money. Email accounts can enter any wallet number.'}
               </p>
             </div>
           </>

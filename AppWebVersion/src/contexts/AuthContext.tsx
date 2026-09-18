@@ -5,7 +5,8 @@ interface User {
   id: string;
   firstName: string;
   lastName: string;
-  phoneNumber: string;
+  phoneNumber?: string;
+  email?: string;
 }
 
 interface AuthContextType {
@@ -68,6 +69,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('phoneNumber');
+        localStorage.removeItem('email');
       } catch {}
     };
     window.addEventListener('auth:terminated', handleTerminated as EventListener);
@@ -79,6 +81,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = (userData: User) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
+    if (userData.email) localStorage.setItem('email', userData.email);
+    if (userData.phoneNumber) localStorage.setItem('phoneNumber', userData.phoneNumber);
   };
 
   const logout = () => {
@@ -86,6 +90,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('phoneNumber');
+    localStorage.removeItem('email');
   };
 
   const value: AuthContextType = {

@@ -689,9 +689,12 @@ export function PaymentMethods() {
                   <View style={styles.formGroup}>
                     <Text style={styles.formLabel}>Mobile Number</Text>
                     <TextInput
-                      style={[styles.textInput, { backgroundColor: '#F3F4F6', color: '#111827', fontWeight: '500' }]}
-                      value={(mobileNumber || user?.phoneNumber || '').toString()}
-                      editable={false}
+                      style={styles.textInput}
+                      value={mobileNumber}
+                      onChangeText={setMobileNumber}
+                      placeholder="e.g. 2207123456"
+                      keyboardType="phone-pad"
+                      autoCapitalize="none"
                     />
                   </View>
                 </>

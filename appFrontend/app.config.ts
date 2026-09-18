@@ -9,7 +9,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   ...baseConfig,
   name: 'SNAP',
   slug: 'snap',
-  version: '1.0.6',
+  version: '1.0.8',
   jsEngine: 'jsc',
   orientation: 'portrait',
   icon: './assets/adaptive-icon-foreground.png',
@@ -57,7 +57,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       backgroundColor: '#00bcd4'
     },
     package: 'biz.cloudnexus.snap.app',
-    versionCode: 21,
+    versionCode: 25,
     config: {
       googleMaps: {
         apiKey: 'AIzaSyB9jq9xYp3R1NXHZEdQdaPI3TF3H0xRfxo'

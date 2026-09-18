@@ -1045,27 +1045,28 @@ export const checkUserExists = async (req: Request, res: Response) => {
 // Login with PIN for web app (no device info required)
 export const loginWithPinWeb = async (req: Request, res: Response) => {
   try {
-    const { phoneNumber, pin } = req.body;
+    const { phoneNumber, email, pin } = req.body;
+    const normalizedPhone = normalizePhone(phoneNumber);
+    const normalizedEmail = normalizeEmail(email);
 
-    console.log('Web PIN login attempt:', { phoneNumber });
+    console.log('Web PIN login attempt:', { phoneNumber: normalizedPhone, email: normalizedEmail });
 
-    // Validate PIN format
     if (!pin || !/^\d{4}$/.test(pin)) {
-      console.log('Invalid PIN format:', pin);
       return res.status(400).json({ message: 'PIN must be 4 digits' });
     }
 
-    if (!phoneNumber) {
-      console.log('Missing phoneNumber in request');
-      return res.status(400).json({ message: 'Phone number is required' });
+    if (!normalizedPhone && !normalizedEmail) {
+      return res.status(400).json({ message: 'Email or phone number is required' });
     }
 
-    // Normalize phone number for consistent lookup (align with mobile flow)
-    const normalizedPhone = normalizePhone(phoneNumber);
-
-    // Find the user by phone number (prefer the most recent record if duplicates exist)
     const user = await prisma.user.findFirst({
-      where: { phoneNumber: normalizedPhone },
+      where: {
+        NOT: { status: ACCOUNT_STATUS_TERMINATED } as any,
+        OR: [
+          normalizedPhone ? { phoneNumber: normalizedPhone } : undefined,
+          normalizedEmail ? { email: normalizedEmail } : undefined,
+        ].filter(Boolean) as any,
+      },
       select: {
         id: true,
         firstName: true,
@@ -1079,13 +1080,11 @@ export const loginWithPinWeb = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      console.log('User not found for phone number:', normalizedPhone);
       return res.status(404).json({ 
         message: 'User not found. Please register using the mobile app first.' 
       });
     }
 
-    // Check if user has completed registration
     const isRegistered = Boolean(
       user.firstName && 
       user.lastName && 
@@ -1094,26 +1093,21 @@ export const loginWithPinWeb = async (req: Request, res: Response) => {
     );
 
     if (!isRegistered) {
-      console.log('User not fully registered:', phoneNumber);
       return res.status(400).json({ 
         message: 'Please complete your registration using the mobile app first.' 
       });
     }
 
     if (!user.pin) {
-      return res.status(400).json({ message: 'PIN is not set. Complete PIN setup in the mobile app.' });
+      return res.status(400).json({ message: 'PIN is not set. Complete PIN setup first.' });
     }
 
     const isPinValid = await bcrypt.compare(pin, user.pin);
     if (!isPinValid) {
-      console.log('Invalid PIN for user:', phoneNumber);
       return res.status(401).json({ message: 'Invalid PIN' });
     }
 
-    // Generate JWT token for web (no device tracking)
     const token = generateWebToken(user.id, user.phoneNumber || user.email || '');
-
-    console.log('Web login successful for user:', user.id);
 
     return res.status(200).json({
       message: 'Login successful',
@@ -1122,7 +1116,9 @@ export const loginWithPinWeb = async (req: Request, res: Response) => {
         id: user.id,
         firstName: user.firstName,
         lastName: user.lastName,
-        phoneNumber: user.phoneNumber
+        phoneNumber: user.phoneNumber,
+        email: user.email,
+        hasPin: true,
       }
     });
   } catch (error) {

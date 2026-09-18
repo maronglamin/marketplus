@@ -1105,14 +1105,15 @@ export function SettlementRequest() {
                       <View style={styles.inputGroup}>
                         <Text style={styles.inputLabel}>Wallet Number (Phone) *</Text>
                         <TextInput
-                          style={[styles.textInput, styles.disabledInput]}
+                          style={styles.textInput}
                           value={walletForm.account}
-                          editable={false}
-                          placeholder="Your phone number"
+                          onChangeText={(value) => handleWalletFormChange('account', value)}
+                          placeholder="Enter wallet phone number"
                           placeholderTextColor="#9CA3AF"
+                          keyboardType="phone-pad"
                         />
                         <Text style={styles.inputNote}>
-                          Wallet number is automatically set to your phone number
+                          Prefills from your account when available — you can change it.
                         </Text>
                       </View>
 

@@ -85,8 +85,8 @@ const YonnaForexPaymentForm: React.FC<YonnaForexPaymentFormProps> = ({
       return;
     }
 
-    if (!user.phoneNumber) {
-      Alert.alert('Error', 'Phone number not found in your profile. Please update your profile first.');
+    if (!userPhoneNumber.trim()) {
+      Alert.alert('Error', 'Please enter the phone number linked to your Yonna wallet.');
       return;
     }
 
@@ -99,10 +99,11 @@ const YonnaForexPaymentForm: React.FC<YonnaForexPaymentFormProps> = ({
         currency: selectedCurrency,
         description: description.trim() || `Payment for ${paymentService.formatAmount(normalizedAmount, selectedCurrency)}`,
         transactionId: paymentService.generateTransactionId(),
+        phoneNumber: userPhoneNumber.trim(),
       };
 
       console.log('Payment data:', paymentData);
-      console.log('User phone number:', user.phoneNumber);
+      console.log('User phone number:', userPhoneNumber);
 
       const result = await paymentService.processPayment(paymentData);
       console.log('Payment result:', result);
@@ -131,6 +132,10 @@ const YonnaForexPaymentForm: React.FC<YonnaForexPaymentFormProps> = ({
   };
 
   const handleProceedToPayment = () => {
+    if (!userPhoneNumber.trim()) {
+      Alert.alert('Error', 'Please enter the phone number linked to your Yonna wallet.');
+      return;
+    }
     setShowPaymentSummary(true);
   };
 
@@ -156,18 +161,6 @@ const YonnaForexPaymentForm: React.FC<YonnaForexPaymentFormProps> = ({
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.errorText}>Please log in to make a payment</Text>
-        <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-          <Text style={styles.cancelButtonText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  if (!user.phoneNumber) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.errorText}>Phone number not found in your profile</Text>
-        <Text style={styles.errorSubText}>Please update your profile with a phone number first</Text>
         <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
           <Text style={styles.cancelButtonText}>Go Back</Text>
         </TouchableOpacity>
@@ -211,6 +204,19 @@ const YonnaForexPaymentForm: React.FC<YonnaForexPaymentFormProps> = ({
           </View>
         </View>
 
+        {/* Phone Number */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Phone Number *</Text>
+          <TextInput
+            style={styles.input}
+            value={userPhoneNumber}
+            onChangeText={setUserPhoneNumber}
+            placeholder="Enter mobile wallet number"
+            keyboardType="phone-pad"
+            autoCapitalize="none"
+          />
+        </View>
+
         {/* Payment Summary */}
         <View style={styles.paymentSummary}>
           <Text style={styles.summaryTitle}>Payment Summary</Text>
@@ -228,7 +234,7 @@ const YonnaForexPaymentForm: React.FC<YonnaForexPaymentFormProps> = ({
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Phone Number:</Text>
-            <Text style={styles.summaryValue}>{userPhoneNumber}</Text>
+            <Text style={styles.summaryValue}>{userPhoneNumber || '—'}</Text>
           </View>
           {description && (
             <View style={styles.summaryItem}>

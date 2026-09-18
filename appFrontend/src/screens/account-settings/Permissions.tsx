@@ -40,9 +40,29 @@ const Permissions = () => {
     biometricMethod,
     appLockEnabled,
     setAppLockEnabled,
+    lock,
   } = useAppLock();
   const [deviceLockEnabled, setDeviceLockEnabled] = useState(Boolean(user?.deviceLockEnabled));
   const [locationSharing, setLocationSharing] = useState(false);
+
+  const openPinSetup = () => {
+    navigation.navigate('NewPin', { currentPin: '', isFirstTime: true });
+  };
+
+  const handleAppLockToggle = async (value: boolean) => {
+    if (value && !user?.hasPin && !(biometricsAvailable && biometricEnabled)) {
+      Alert.alert(
+        'Set a PIN first',
+        'App lock needs a PIN (or biometrics) so you can unlock SNAP.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Set PIN', onPress: openPinSetup },
+        ]
+      );
+      return;
+    }
+    await setAppLockEnabled(value);
+  };
 
   useEffect(() => {
     setDeviceLockEnabled(Boolean(user?.deviceLockEnabled));
@@ -245,8 +265,24 @@ const Permissions = () => {
           onPress: () => {},
           isToggle: true,
           toggleValue: appLockEnabled,
-          onToggleChange: (value: boolean) => { void setAppLockEnabled(value); },
+          onToggleChange: (value: boolean) => { void handleAppLockToggle(value); },
           subtitle: 'Lock SNAP when you leave the app',
+        },
+        {
+          id: 'unlock-pin',
+          title: user?.hasPin ? 'Change unlock PIN' : 'Set unlock PIN',
+          icon: <Key size={20} color="#2563EB" />,
+          onPress: () => {
+            if (user?.hasPin) {
+              navigation.navigate('ChangePin');
+            } else {
+              openPinSetup();
+            }
+          },
+          showChevron: true,
+          subtitle: user?.hasPin
+            ? 'Used when biometrics are unavailable'
+            : 'Required to unlock SNAP without signing in again',
         },
         {
           id: 'biometric',
@@ -266,6 +302,27 @@ const Permissions = () => {
             ? `Use ${getBiometricLabel(biometricMethod)} to unlock`
             : 'Use fingerprint or face ID',
         },
+        ...(appLockEnabled
+          ? [
+              {
+                id: 'lock-now',
+                title: 'Lock now',
+                icon: <Smartphone size={20} color="#2563EB" />,
+                onPress: () => {
+                  if (!user?.hasPin && !(biometricsAvailable && biometricEnabled)) {
+                    Alert.alert('Set a PIN first', 'You need a PIN or biometrics before locking.', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Set PIN', onPress: openPinSetup },
+                    ]);
+                    return;
+                  }
+                  lock();
+                },
+                showChevron: true,
+                subtitle: 'Lock SNAP immediately',
+              },
+            ]
+          : []),
         {
           id: 'device-lock',
           title: 'Lock to this device',

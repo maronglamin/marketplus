@@ -20,27 +20,32 @@ export async function waitForAppActive(): Promise<void> {
 }
 
 export async function resolveBiometricMethod(): Promise<BiometricMethod> {
-  const [hasHardware, isEnrolled, types] = await Promise.all([
-    LocalAuthentication.hasHardwareAsync(),
-    LocalAuthentication.isEnrolledAsync(),
-    LocalAuthentication.supportedAuthenticationTypesAsync(),
-  ])
+  try {
+    const [hasHardware, isEnrolled, types] = await Promise.all([
+      LocalAuthentication.hasHardwareAsync(),
+      LocalAuthentication.isEnrolledAsync(),
+      LocalAuthentication.supportedAuthenticationTypesAsync(),
+    ])
 
-  if (!hasHardware || !isEnrolled) {
+    if (!hasHardware || !isEnrolled) {
+      return 'none'
+    }
+
+    if (Platform.OS === 'ios') {
+      if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+        return 'faceId'
+      }
+      if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+        return 'touchId'
+      }
+      return hasHardware && isEnrolled ? 'faceId' : 'none'
+    }
+
+    return hasHardware && isEnrolled ? 'androidBiometric' : 'none'
+  } catch {
+    // Missing native module / OEM biometric failures must never crash startup.
     return 'none'
   }
-
-  if (Platform.OS === 'ios') {
-    if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-      return 'faceId'
-    }
-    if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-      return 'touchId'
-    }
-    return hasHardware && isEnrolled ? 'faceId' : 'none'
-  }
-
-  return hasHardware && isEnrolled ? 'androidBiometric' : 'none'
 }
 
 export function getBiometricLabel(method: BiometricMethod): string {
@@ -70,18 +75,24 @@ function getPromptMessage(method: BiometricMethod): string {
 export async function authenticateWithBiometrics(
   method: BiometricMethod
 ): Promise<LocalAuthentication.LocalAuthenticationResult> {
-  await waitForAppActive()
-  if (Platform.OS === 'ios') {
-    return LocalAuthentication.authenticateAsync({
+  try {
+    await waitForAppActive()
+    if (Platform.OS === 'ios') {
+      return await LocalAuthentication.authenticateAsync({
+        promptMessage: getPromptMessage(method),
+        disableDeviceFallback: true,
+        fallbackLabel: '',
+      })
+    }
+    return await LocalAuthentication.authenticateAsync({
       promptMessage: getPromptMessage(method),
       disableDeviceFallback: true,
-      fallbackLabel: '',
+      // Prefer weak+strong so more Android devices can unlock; "strong" alone
+      // fails on some OEM fingerprint setups and strands users on the lock screen.
+      biometricsSecurityLevel: 'weak',
+      cancelLabel: 'Use PIN',
     })
+  } catch {
+    return { success: false, error: 'unknown', warning: undefined }
   }
-  return LocalAuthentication.authenticateAsync({
-    promptMessage: getPromptMessage(method),
-    disableDeviceFallback: true,
-    biometricsSecurityLevel: 'strong',
-    cancelLabel: 'Use PIN',
-  })
 }

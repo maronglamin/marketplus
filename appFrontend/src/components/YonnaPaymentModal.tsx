@@ -257,9 +257,21 @@ const YonnaPaymentModal: React.FC<YonnaPaymentModalProps> = ({
 
       {/* Phone Number */}
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Phone Number</Text>
-        <Text style={styles.phoneDisplay}>{userPhoneNumber}</Text>
-        <Text style={styles.phoneNote}>Using phone number from your profile</Text>
+        <Text style={styles.label}>Phone Number *</Text>
+        <TextInput
+          style={styles.phoneInput}
+          value={userPhoneNumber}
+          onChangeText={setUserPhoneNumber}
+          placeholder="Enter mobile wallet number"
+          placeholderTextColor="#9CA3AF"
+          keyboardType="phone-pad"
+          autoCapitalize="none"
+        />
+        <Text style={styles.phoneNote}>
+          {user?.phoneNumber
+            ? 'Pre-filled from your profile — you can change it if needed.'
+            : 'Enter the phone number linked to your Yonna wallet.'}
+        </Text>
       </View>
 
       {/* Description */}
@@ -600,6 +612,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     marginTop: 4,
+  },
+  phoneInput: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#111827',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   phoneDisplay: {
     fontSize: 16,
