@@ -10,10 +10,10 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   Modal,
   InteractionManager,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomSheetModal, BottomSheetView } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { rideService, type SuggestionItem } from '../services/rideService';
@@ -69,7 +69,7 @@ const getUserIdFromToken = async (): Promise<string | null> => {
 };
 
 export default function ScheduleRideModal({ isVisible, onClose, onSave }: ScheduleRideModalProps) {
-
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
 
   // Form state
@@ -513,7 +513,7 @@ export default function ScheduleRideModal({ isVisible, onClose, onSave }: Schedu
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerContent}>
@@ -832,7 +832,7 @@ export default function ScheduleRideModal({ isVisible, onClose, onSave }: Schedu
         </KeyboardAvoidingView>
 
         {/* Save Button */}
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <TouchableOpacity
             style={[
               styles.saveButton, 

@@ -1,5 +1,6 @@
 import React from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, StatusBar, Platform, ScrollView, RefreshControl, Alert, Modal, TextInput, TouchableWithoutFeedback, Keyboard, ActivityIndicator, Dimensions } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Platform, ScrollView, RefreshControl, Alert, Modal, TextInput, TouchableWithoutFeedback, Keyboard, ActivityIndicator, Dimensions } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { deliveryAddressService, type DeliveryAddress } from '../../services/deliveryAddressService'
 import { useNavigation } from '@react-navigation/native'
@@ -233,7 +234,7 @@ export default function Delivery() {
   }, [])
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>

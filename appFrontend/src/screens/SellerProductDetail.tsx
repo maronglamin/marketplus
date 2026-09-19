@@ -13,7 +13,7 @@ import {
   Dimensions,
 } from 'react-native';
 import type { ScrollView as ScrollViewType } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -31,6 +31,7 @@ type SellerProductDetailNavigationProp = NativeStackNavigationProp<AppStackParam
 type SellerProductDetailRouteProp = RouteProp<AppStackParamList, 'SellerProductDetail'>;
 
 export function SellerProductDetail() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<SellerProductDetailNavigationProp>();
   const route = useRoute<SellerProductDetailRouteProp>();
   const [product, setProduct] = useState<Product | null>(null);
@@ -170,7 +171,7 @@ export function SellerProductDetail() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
           <Text style={styles.loadingText}>Loading product details...</Text>
@@ -199,7 +200,7 @@ export function SellerProductDetail() {
   const primaryImage = product.images.find(img => img.isPrimary) || product.images[0];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
@@ -423,7 +424,7 @@ export function SellerProductDetail() {
         </ScrollView>
 
         {/* Footer */}
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <TouchableOpacity
             style={styles.footerButton}
             onPress={() => navigation.navigate('UpdateStock', { productId: product.id })}

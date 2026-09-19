@@ -8,11 +8,11 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   Dimensions,
   FlatList,
   InteractionManager,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { rentalApi } from '../services/rentalApi';
@@ -46,6 +46,7 @@ const getUserIdFromToken = async (): Promise<string | null> => {
 };
 
 export default function VehicleDetailsScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute<VehicleDetailsRouteProp>();
   const { driver, selectedService, scheduleData } = route.params;
@@ -274,7 +275,7 @@ export default function VehicleDetailsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -411,7 +412,7 @@ export default function VehicleDetailsScreen() {
       </ScrollView>
 
       {/* Book Button */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity
           style={[
             styles.bookButton,

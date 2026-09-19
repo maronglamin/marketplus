@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import type { ScrollView as ScrollViewType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Header } from '../../../components/Header';
 import { Button } from '../../../components/Button';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -36,6 +36,7 @@ type ProductDetailScreenNavigationProp = NativeStackNavigationProp<RootStackPara
 type ProductDetailScreenRouteProp = RouteProp<RootStackParamList, 'ProductDetail'>;
 
 export function ProductDetail() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<ProductDetailScreenNavigationProp>();
   const route = useRoute<ProductDetailScreenRouteProp>();
   const { productId } = route.params;
@@ -227,7 +228,7 @@ export function ProductDetail() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top']}>
         <Header
           title="Product Details"
           showBack
@@ -260,7 +261,7 @@ export function ProductDetail() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <Header
         title="Product Details"
         showBack
@@ -545,7 +546,7 @@ export function ProductDetail() {
         </View>
       </Modal>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           label="Show Interest"
           variant="outline"

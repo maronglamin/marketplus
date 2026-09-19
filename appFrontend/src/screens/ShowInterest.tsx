@@ -15,7 +15,7 @@ import {
   KeyboardAvoidingView,
   Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../navigation/AppNavigator';
@@ -45,6 +45,7 @@ type ShowInterestNavigationProp = NativeStackNavigationProp<AppStackParamList, '
 type ShowInterestRouteProp = RouteProp<AppStackParamList, 'ShowInterest'>;
 
 export function ShowInterest() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<ShowInterestNavigationProp>();
   const route = useRoute<ShowInterestRouteProp>();
   const { productId } = route.params;
@@ -619,7 +620,7 @@ export function ShowInterest() {
 
   if (authLoading || loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <StatusBar
           barStyle="dark-content"
           backgroundColor="#FFFFFF"
@@ -728,7 +729,7 @@ export function ShowInterest() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
@@ -958,7 +959,7 @@ export function ShowInterest() {
           </View>
         )}
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           {!interestExists ? (
           <TouchableOpacity
             style={[styles.submitButton, submitting && styles.submitButtonDisabled]}

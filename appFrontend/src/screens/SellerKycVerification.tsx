@@ -14,7 +14,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -32,6 +32,7 @@ type SellerKycVerificationNavigationProp = NativeStackNavigationProp<AppStackPar
 type SellerKycVerificationRouteProp = RouteProp<AppStackParamList, 'SellerKycVerification'>;
 
 export function SellerKycVerification() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<SellerKycVerificationNavigationProp>();
   const route = useRoute<SellerKycVerificationRouteProp>();
   const { businessData, addressData, existingData } = route.params;
@@ -366,7 +367,7 @@ export function SellerKycVerification() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
@@ -582,7 +583,7 @@ export function SellerKycVerification() {
           </Modal>
         )}
 
-        <View style={styles.buttonContainer}>
+        <View style={[styles.buttonContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <Button
             label={isUploading ? "Uploading..." : "Save & Continue"}
             onPress={handleSave}
@@ -750,7 +751,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   buttonContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',

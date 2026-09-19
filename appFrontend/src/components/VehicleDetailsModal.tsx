@@ -12,10 +12,10 @@ import {
   Dimensions,
   FlatList,
   Platform,
-  SafeAreaView,
   StatusBar,
   InteractionManager,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { rentalApi } from '../services/rentalApi';
@@ -54,6 +54,7 @@ export default function VehicleDetailsModal({
   selectedService, 
   scheduleData 
 }: VehicleDetailsModalProps) {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { user, refreshUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -298,7 +299,7 @@ export default function VehicleDetailsModal({
       onRequestClose={onClose}
       statusBarTranslucent={true}
     >
-      <SafeAreaView style={[
+      <SafeAreaView edges={['top']} style={[
         styles.container,
         Platform.OS === 'android' ? { paddingTop: StatusBar.currentHeight || 0 } : null
       ]}>
@@ -439,7 +440,7 @@ export default function VehicleDetailsModal({
 
         {/* Book Button */}
         <View
-          style={styles.footer}
+          style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}
           onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
         >
           <TouchableOpacity

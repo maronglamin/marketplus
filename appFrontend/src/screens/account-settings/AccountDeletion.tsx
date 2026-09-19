@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Platform,
   Alert,
@@ -14,6 +13,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
 } from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -33,6 +33,7 @@ type RootStackParamList = {
 type AccountDeletionNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AccountDeletion'>
 
 export function AccountDeletion() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<AccountDeletionNavigationProp>()
   const { forceClearAuth } = useAuth()
 
@@ -128,7 +129,7 @@ export function AccountDeletion() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
       <View style={styles.container}>
         {/* Header */}

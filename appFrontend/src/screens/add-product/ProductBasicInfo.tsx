@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Platform,
   TouchableOpacity,
@@ -14,6 +13,7 @@ import {
   Vibration,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -46,6 +46,8 @@ interface ProductBasicInfoProps {
 }
 
 export function ProductBasicInfo({ onNext, initialTitle = '', initialCategory = '' }: ProductBasicInfoProps) {
+
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<ProductBasicInfoNavigationProp>();
   const [title, setTitle] = useState(initialTitle);
   const [category, setCategory] = useState(initialCategory);
@@ -93,7 +95,7 @@ export function ProductBasicInfo({ onNext, initialTitle = '', initialCategory = 
   }));
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#F9FAFB"
@@ -193,7 +195,7 @@ export function ProductBasicInfo({ onNext, initialTitle = '', initialCategory = 
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <Button
             label="Next"
             onPress={handleNext}
@@ -299,7 +301,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   footer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',

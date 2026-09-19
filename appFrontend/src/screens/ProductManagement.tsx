@@ -7,13 +7,13 @@ import {
   TouchableOpacity,
   Image,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Platform,
   KeyboardAvoidingView,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { getImageUrl } from '../config/env'
 import { Camera, Image as ImageIcon, X } from 'lucide-react-native'
 import { useNavigation } from '@react-navigation/native'
@@ -32,6 +32,7 @@ type RootStackParamList = {
 type ProductManagementNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ProductManagement'>
 
 export function ProductManagement() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<ProductManagementNavigationProp>()
   const [images, setImages] = useState<string[]>([])
   const [category, setCategory] = useState('')
@@ -72,7 +73,7 @@ export function ProductManagement() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#F9FAFB"
@@ -202,7 +203,7 @@ export function ProductManagement() {
           </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
 
-        <View style={[styles.footer, keyboardVisible && { opacity: 0.001 }]}> 
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }, keyboardVisible && { opacity: 0.001 }]}> 
           <TouchableOpacity style={styles.saveButton} disabled={keyboardVisible}>
             <Text style={styles.saveButtonText}>Save Product</Text>
           </TouchableOpacity>

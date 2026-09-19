@@ -8,7 +8,7 @@ import {
   StatusBar,
   ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -21,6 +21,7 @@ type SellerKycFormNavigationProp = NativeStackNavigationProp<AppStackParamList, 
 type SellerKycFormRouteProp = RouteProp<AppStackParamList, 'SellerKycForm'>;
 
 export function SellerKycForm() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<SellerKycFormNavigationProp>();
   const route = useRoute<SellerKycFormRouteProp>();
   const [rejectionReason, setRejectionReason] = useState<string | null>(null);
@@ -66,7 +67,7 @@ export function SellerKycForm() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.container}>
           <Text>Loading...</Text>
         </View>
@@ -75,7 +76,7 @@ export function SellerKycForm() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
@@ -159,7 +160,7 @@ export function SellerKycForm() {
           )}
         </ScrollView>
 
-        <View style={styles.buttonContainer}>
+        <View style={[styles.buttonContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <Button
             label={existingKycData ? "Update Verification" : "Start Verification"}
             onPress={handleStartKyc}
@@ -257,7 +258,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   buttonContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',

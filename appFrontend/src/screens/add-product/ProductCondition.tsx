@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Platform,
   TouchableOpacity,
@@ -12,6 +11,7 @@ import {
   ScrollView,
   Vibration,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +42,8 @@ const CONDITIONS = [
 ];
 
 export function ProductCondition({ onNext, initialCondition }: ProductConditionProps) {
+
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<ProductConditionNavigationProp>();
   const [condition, setCondition] = useState(initialCondition || '');
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +60,7 @@ export function ProductCondition({ onNext, initialCondition }: ProductConditionP
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#F9FAFB"
@@ -136,7 +138,7 @@ export function ProductCondition({ onNext, initialCondition }: ProductConditionP
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <Button
             label="Next"
             onPress={handleNext}
@@ -261,7 +263,8 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   footer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',

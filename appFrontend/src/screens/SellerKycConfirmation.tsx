@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -24,6 +24,7 @@ type SellerKycConfirmationNavigationProp = NativeStackNavigationProp<AppStackPar
 type SellerKycConfirmationRouteProp = RouteProp<AppStackParamList, 'SellerKycConfirmation'>;
 
 export function SellerKycConfirmation() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<SellerKycConfirmationNavigationProp>();
   const route = useRoute<SellerKycConfirmationRouteProp>();
   const { businessData, addressData, verificationData } = route.params;
@@ -105,7 +106,7 @@ export function SellerKycConfirmation() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
@@ -248,7 +249,7 @@ export function SellerKycConfirmation() {
           </View>
         </ScrollView>
 
-        <View style={styles.buttonContainer}>
+        <View style={[styles.buttonContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <Button
             label={isSubmitting ? "Submitting..." : "Submit KYC Information"}
             onPress={handleSubmit}
@@ -410,7 +411,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   buttonContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',

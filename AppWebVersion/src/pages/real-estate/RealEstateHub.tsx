@@ -29,7 +29,7 @@ export function RealEstateHub() {
   const [checkingAgent, setCheckingAgent] = useState(false);
 
   const title =
-    section === 'stay' ? 'Stay & Accommodation' : section === 'realestate' ? 'Real Estate' : 'Stay & Real Estate';
+    section === 'stay' ? 'Stays & Accommodation' : section === 'realestate' ? 'Real Estate' : 'Stays & Real Estate';
   const subtitle =
     section === 'stay'
       ? 'Hotels, rentals, lodges & trips'
@@ -93,7 +93,7 @@ export function RealEstateHub() {
 
         {showStay && (
           <>
-            <h2 className="text-base font-semibold text-gray-900 pt-2">Stay & Accommodation</h2>
+            <h2 className="text-base font-semibold text-gray-900 pt-2">Stays & Accommodation</h2>
             <div className="grid grid-cols-2 gap-3">
               {STAY_TYPES.map((item) => (
                 <button

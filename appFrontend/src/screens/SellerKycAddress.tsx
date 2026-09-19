@@ -12,7 +12,7 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -34,6 +34,7 @@ type AddressData = {
 };
 
 export function SellerKycAddress() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<SellerKycAddressNavigationProp>();
   const route = useRoute<SellerKycAddressRouteProp>();
   const { businessData, existingData } = route.params;
@@ -113,7 +114,7 @@ export function SellerKycAddress() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
@@ -296,7 +297,7 @@ export function SellerKycAddress() {
 
       </KeyboardAvoidingView>
 
-      <View style={styles.buttonContainer}>
+      <View style={[styles.buttonContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Button
           label="Next"
           onPress={handleNext}
@@ -394,7 +395,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   buttonContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',

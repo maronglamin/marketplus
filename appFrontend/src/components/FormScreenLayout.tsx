@@ -8,7 +8,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface FormScreenLayoutProps {
   header: React.ReactNode;
@@ -28,6 +28,8 @@ export function FormScreenLayout({
   scrollStyle,
   keyboardVerticalOffset = 0,
 }: FormScreenLayoutProps) {
+  const insets = useSafeAreaInsets();
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <KeyboardAvoidingView
@@ -49,7 +51,11 @@ export function FormScreenLayout({
         >
           {children}
         </ScrollView>
-        {footer ? <View style={styles.footer}>{footer}</View> : null}
+        {footer ? (
+          <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 0) }]}>
+            {footer}
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

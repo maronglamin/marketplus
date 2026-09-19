@@ -28,7 +28,7 @@ const hubCards = [
   {
     to: '/real-estate?section=stay',
     image: 'hotel-and-apartment-booking.jpeg',
-    title: 'Stay & Accommodation',
+    title: 'Stays & Accommodation',
     subtitle: 'Hotels, rentals, lodges & trips',
   },
   {

@@ -9,7 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -36,6 +36,7 @@ const formatPrice = (price: number, currency: string) => {
 };
 
 export function PropertyBookingForm() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const {
@@ -147,7 +148,7 @@ export function PropertyBookingForm() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#374151" />
@@ -249,7 +250,7 @@ export function PropertyBookingForm() {
           )}
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <TouchableOpacity
             style={[styles.submitButton, (submitting || !selectedRoom) && styles.submitDisabled]}
             onPress={handleSubmit}
@@ -297,7 +298,8 @@ const styles = StyleSheet.create({
   totalRow: { marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#DDD6FE', marginBottom: 0 },
   totalLabel: { fontSize: 16, fontWeight: '600', color: '#1F2937' },
   totalValue: { fontSize: 18, fontWeight: '700', color: ACCENT },
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  footer: { paddingHorizontal: 16,
+    paddingTop: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
   submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: ACCENT, borderRadius: 12, paddingVertical: 14 },
   submitDisabled: { opacity: 0.7 },
   submitText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },

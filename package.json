@@ -14,7 +14,7 @@
     "metro-source-map": "^0.82.4"
   },
   "name": "marketplace",
-  "version": "1.0.0",
+  "version": "1.0.10",
   "scripts": {
     "android": "expo run:android",
     "ios": "expo run:ios"

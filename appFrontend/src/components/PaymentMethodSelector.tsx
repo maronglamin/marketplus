@@ -7,6 +7,7 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import YonnaForexPaymentForm from './YonnaForexPaymentForm';
 
 export type PaymentMethod = 'stripe' | 'yonna-forex' | 'cash' | 'bank-transfer';
@@ -34,6 +35,7 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
   onPaymentError,
   onCancel,
 }) => {
+  const insets = useSafeAreaInsets();
   const [showYonnaForexForm, setShowYonnaForexForm] = useState(false);
 
   const paymentMethods: PaymentMethodOption[] = [
@@ -130,7 +132,7 @@ const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
         ))}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
           <Text style={styles.cancelButtonText}>Cancel</Text>
         </TouchableOpacity>
@@ -240,7 +242,8 @@ const styles = StyleSheet.create({
     fontWeight: '300',
   },
   footer: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#E9ECEF',
   },

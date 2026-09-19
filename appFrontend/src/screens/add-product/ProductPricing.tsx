@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Platform,
   TouchableOpacity,
@@ -14,6 +13,7 @@ import {
   Keyboard,
   Vibration,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,6 +40,8 @@ interface ProductPricingProps {
 }
 
 export function ProductPricing({ onNext, initialPrice, initialCurrency, initialQuantity }: ProductPricingProps) {
+
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<ProductPricingNavigationProp>();
   const [price, setPrice] = useState(initialPrice?.toString() || '');
   const [currency, setCurrency] = useState(initialCurrency || '');
@@ -73,7 +75,7 @@ export function ProductPricing({ onNext, initialPrice, initialCurrency, initialQ
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#F9FAFB"
@@ -183,7 +185,7 @@ export function ProductPricing({ onNext, initialPrice, initialCurrency, initialQ
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <Button
             label="Next"
             onPress={handleNext}
@@ -298,7 +300,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   footer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',

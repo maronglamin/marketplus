@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -27,6 +27,7 @@ type Nav = NativeStackNavigationProp<RealEstateStackParamList, 'PropertyInquiryF
 type Route = RouteProp<RealEstateStackParamList, 'PropertyInquiryForm'>;
 
 export function PropertyInquiryForm() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { listingId } = route.params;
@@ -81,7 +82,7 @@ export function PropertyInquiryForm() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#374151" />
@@ -130,7 +131,7 @@ export function PropertyInquiryForm() {
           )}
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <TouchableOpacity
             style={[styles.submitButton, submitting && styles.submitDisabled]}
             onPress={handleSubmit}
@@ -189,7 +190,8 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   dateText: { flex: 1, fontSize: 15, color: '#1F2937' },
-  footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  footer: { paddingHorizontal: 16,
+    paddingTop: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',

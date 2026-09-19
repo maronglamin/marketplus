@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Platform,
   TouchableOpacity,
@@ -13,6 +12,7 @@ import {
   ScrollView,
   Vibration,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,6 +37,8 @@ interface ProductImagesProps {
 }
 
 export function ProductImages({ onNext, initialImages }: ProductImagesProps) {
+
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<ProductImagesNavigationProp>();
   const [images, setImages] = useState<Array<{ uri: string; isPrimary: boolean }>>(
     initialImages || []
@@ -113,7 +115,7 @@ export function ProductImages({ onNext, initialImages }: ProductImagesProps) {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#F9FAFB"
@@ -207,7 +209,7 @@ export function ProductImages({ onNext, initialImages }: ProductImagesProps) {
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <Button
             label="Next"
             onPress={handleNext}
@@ -379,7 +381,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   footer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',

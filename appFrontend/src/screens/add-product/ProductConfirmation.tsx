@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Platform,
   TouchableOpacity,
@@ -15,6 +14,7 @@ import {
   Dimensions,
   useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -130,6 +130,8 @@ const getConditionLabel = (condition: string) => {
 };
 
 export function ProductConfirmation({ onSubmit, product }: ProductConfirmationProps) {
+
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<ProductConfirmationNavigationProp>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -331,7 +333,7 @@ export function ProductConfirmation({ onSubmit, product }: ProductConfirmationPr
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#F9FAFB"
@@ -421,7 +423,7 @@ export function ProductConfirmation({ onSubmit, product }: ProductConfirmationPr
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <Button
             label={isSubmitting ? getLoadingText() : "Submit"}
             onPress={handleSubmit}
@@ -569,7 +571,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   footer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',

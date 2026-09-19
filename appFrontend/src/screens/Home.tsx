@@ -727,7 +727,7 @@ export function Home() {
       badgeIcon: 'bed-outline' as const,
       badgeText: 'Stay',
       badgeColor: 'rgba(124, 58, 237, 0.9)',
-      title: 'Stay & Accommodation',
+      title: 'Stays & Accommodation',
       subtitle: 'Hotels, apartments, lodges & trips',
       actionText: 'Explore Stays',
       actionColor: '#7C3AED',

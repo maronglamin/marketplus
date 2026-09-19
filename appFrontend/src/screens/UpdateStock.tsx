@@ -10,7 +10,7 @@ import {
   StatusBar,
   KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -23,6 +23,7 @@ type UpdateStockNavigationProp = NativeStackNavigationProp<AppStackParamList, 'U
 type UpdateStockRouteProp = RouteProp<AppStackParamList, 'UpdateStock'>;
 
 export function UpdateStock() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<UpdateStockNavigationProp>();
   const route = useRoute<UpdateStockRouteProp>();
   const [currentQuantity, setCurrentQuantity] = useState<number>(0);
@@ -93,7 +94,7 @@ export function UpdateStock() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <StatusBar
         barStyle="dark-content"
         backgroundColor="#FFFFFF"
@@ -150,7 +151,7 @@ export function UpdateStock() {
           </View>
         </View>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <TouchableOpacity
             style={[styles.updateButton, (loading || additionalQuantity === 0) && styles.disabledButton]}
             onPress={handleUpdateStock}

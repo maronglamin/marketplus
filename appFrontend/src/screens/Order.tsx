@@ -15,7 +15,7 @@ import {
   Keyboard,
   Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Header } from '../components/Header';
@@ -40,6 +40,7 @@ type OrderScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, '
 type OrderScreenRouteProp = RouteProp<RootStackParamList, 'Order'>;
 
 export function Order() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<OrderScreenNavigationProp>();
   const route = useRoute<OrderScreenRouteProp>();
   const { productId } = route.params;
@@ -431,7 +432,7 @@ export function Order() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <Header
         title="Place Order"
         showBack
@@ -583,8 +584,8 @@ export function Order() {
       </ScrollView>
 
       {/* Footer */}
-      <SafeAreaView style={styles.footerContainer}>
-        <View style={styles.footer}>
+      <View style={styles.footerContainer}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <Button
             label={submitting ? "Placing Order..." : "Place Order"}
             icon={submitting ? undefined : <Ionicons name="checkmark" size={20} color="#FFFFFF" />}
@@ -593,7 +594,7 @@ export function Order() {
             onPress={handlePlaceOrder}
           />
         </View>
-      </SafeAreaView>
+      </View>
 
       {/* Delivery Address Selection Modal */}
       <Modal

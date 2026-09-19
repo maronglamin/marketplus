@@ -43,7 +43,7 @@ export function RealEstateHub() {
   const showRealEstate = section === 'realestate' || section === 'all';
 
   const headerTitle =
-    section === 'stay' ? 'Stay & Accommodation' : section === 'realestate' ? 'Real Estate' : 'Stay & Real Estate';
+    section === 'stay' ? 'Stays & Accommodation' : section === 'realestate' ? 'Real Estate' : 'Stays & Real Estate';
   const headerSubtitle =
     section === 'stay'
       ? 'Hotels, apartments, lodges & trips'
@@ -94,7 +94,7 @@ export function RealEstateHub() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => exitSection(navigation)}>
             <Ionicons name="arrow-back" size={24} color="#374151" />
@@ -136,7 +136,7 @@ export function RealEstateHub() {
 
           {showStay && (
             <>
-              <Text style={styles.sectionTitle}>Stay & Accommodation</Text>
+              <Text style={styles.sectionTitle}>Stays & Accommodation</Text>
               {renderTypeGrid(STAY_TYPES)}
             </>
           )}
